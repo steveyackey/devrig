@@ -69,8 +69,15 @@ export async function execute(config: PipelineConfig, milestoneIndex: number): P
 	];
 
 	if (stepsTxt) {
+		const steps = JSON.parse(stepsTxt);
+		const stepsWithValidation = steps
+			.map(
+				(s: { id: number; name: string; description: string; validation: string; files: string[] }) =>
+					`### Step ${s.id}: ${s.name}\n${s.description}\n\n**Files:** ${s.files.join(", ")}\n**Validation (MUST pass before next step):** \`${s.validation}\``,
+			)
+			.join("\n\n---\n\n");
 		promptParts.push(
-			`## Implementation Steps\n\n${stepsTxt}\n\nFollow these steps in order. For each step:\n1. Implement the code changes\n2. Run the step's validation command\n3. Fix any issues before moving to the next step`,
+			`## Implementation Steps\n\n${stepsWithValidation}\n\n## CRITICAL: Step Validation Protocol\n\nAfter completing each step, you MUST:\n1. Run the step's validation command\n2. If it fails, fix the issue immediately\n3. Re-run validation until it passes\n4. Only then proceed to the next step\n\nDo NOT batch steps. Do NOT skip validation. Each step's validation command is a gate.`,
 		);
 	}
 

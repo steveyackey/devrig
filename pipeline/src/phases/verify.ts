@@ -13,6 +13,18 @@ export async function verify(config: PipelineConfig, milestoneIndex: number): Pr
 		validationMd = await readMilestone(config.workDir, milestoneIndex, "validation.md");
 	}
 
+	let stepValidations = "";
+	if (await existsMilestone(config.workDir, milestoneIndex, "steps.json")) {
+		const stepsTxt = await readMilestone(config.workDir, milestoneIndex, "steps.json");
+		const steps = JSON.parse(stepsTxt);
+		stepValidations = steps
+			.map(
+				(s: { id: number; name: string; validation: string }) =>
+					`- **Step ${s.id} (${s.name}):** \`${s.validation}\``,
+			)
+			.join("\n");
+	}
+
 	const prompt = `You are a verification agent for milestone ${milestone.version} — "${milestone.name}" of the devrig project.
 
 Run ALL verification checks and produce two output files:
@@ -32,6 +44,8 @@ Run each of these commands and record the exit code and output:
 2. \`cargo clippy -- -D warnings\` — Linting
 3. \`cargo build\` — Compilation
 4. \`cargo test\` — Unit tests
+
+${stepValidations ? `## Per-Step Validation Commands\n\nRun each of these and verify they pass:\n${stepValidations}` : ""}
 
 ## Milestone-Specific Checks
 ${validationMd || "No additional validation criteria specified."}

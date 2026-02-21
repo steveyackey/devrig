@@ -234,6 +234,9 @@ impl Orchestrator {
             config_path: self.config_path.to_string_lossy().to_string(),
             services: service_states,
             started_at: Utc::now(),
+            infra: BTreeMap::new(),
+            compose_services: BTreeMap::new(),
+            network_name: None,
         };
         project_state
             .save(&self.state_dir)
@@ -281,7 +284,7 @@ impl Orchestrator {
             }
         }
 
-        // --- Graceful shutdown ---
+        // --- Graceful shutdown (stop, not delete) ---
         self.cancel.cancel();
         self.tracker.close();
         match tokio::time::timeout(std::time::Duration::from_secs(10), self.tracker.wait()).await {
@@ -289,25 +292,14 @@ impl Orchestrator {
             Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
         }
 
-        // --- Clean up state ---
-        if let Err(e) = ProjectState::remove(&self.state_dir) {
-            warn!(error = %e, "failed to remove project state");
-        }
-
-        // Unregister from global registry if we were running everything.
-        if service_filter.is_empty() {
-            let mut registry = InstanceRegistry::load();
-            registry.unregister(&self.identity.slug);
-            if let Err(e) = registry.save() {
-                warn!(error = %e, "failed to save instance registry after unregister");
-            }
-        }
+        // State and registry are preserved on stop (Ctrl+C).
+        // Only `devrig delete` removes state and unregisters.
 
         Ok(())
     }
 
-    /// Stop a running project by loading its state, cancelling all tasks,
-    /// and cleaning up.
+    /// Stop a running project by cancelling all tasks.
+    /// Preserves state and registry so `devrig ps` still sees it.
     pub async fn stop(&self) -> Result<()> {
         let _state = ProjectState::load(&self.state_dir)
             .context("no running project state found -- is the project running?")?;
@@ -319,27 +311,33 @@ impl Orchestrator {
             Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
         }
 
-        ProjectState::remove(&self.state_dir).context("removing project state")?;
-
-        let mut registry = InstanceRegistry::load();
-        registry.unregister(&self.identity.slug);
-        if let Err(e) = registry.save() {
-            warn!(error = %e, "failed to save instance registry after unregister");
-        }
+        // State and registry are preserved on stop.
 
         Ok(())
     }
 
-    /// Stop the project and remove the entire .devrig state directory.
+    /// Stop the project, remove state, and unregister from the global registry.
     pub async fn delete(&self) -> Result<()> {
         // Stop first (ignore errors if nothing is running).
         let _ = self.stop().await;
+
+        // Remove project state file.
+        if let Err(e) = ProjectState::remove(&self.state_dir) {
+            warn!(error = %e, "failed to remove project state");
+        }
 
         // Remove the state directory entirely.
         if self.state_dir.exists() {
             std::fs::remove_dir_all(&self.state_dir).with_context(|| {
                 format!("removing state directory {}", self.state_dir.display())
             })?;
+        }
+
+        // Unregister from global registry.
+        let mut registry = InstanceRegistry::load();
+        registry.unregister(&self.identity.slug);
+        if let Err(e) = registry.save() {
+            warn!(error = %e, "failed to save instance registry after unregister");
         }
 
         Ok(())
