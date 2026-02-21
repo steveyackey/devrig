@@ -194,6 +194,25 @@ export async function runPipeline(config: PipelineConfig): Promise<void> {
 			cost: milestoneCost,
 		});
 
+		// Commit and push on success
+		if (passed) {
+			log("git_commit_start", { milestone: i, version: milestone.version });
+			const commitMsg = `feat(${milestone.version}): ${milestone.name}`;
+			const proc = Bun.spawn(["bash", "-c", `cd ${config.repoRoot} && git add -A && git commit -m "${commitMsg}" && git push`], {
+				stdout: "pipe",
+				stderr: "pipe",
+			});
+			const exitCode = await proc.exited;
+			if (exitCode === 0) {
+				log("git_commit_complete", { milestone: i, version: milestone.version });
+				await notify(`devrig-pipeline: ${milestone.version} committed and pushed`);
+			} else {
+				const stderr = await new Response(proc.stderr).text();
+				log("git_commit_failed", { milestone: i, version: milestone.version, exitCode, stderr });
+				await notify(`devrig-pipeline: ⚠ ${milestone.version} git commit/push failed (exit ${exitCode})`);
+			}
+		}
+
 		// Stop pipeline on failure
 		if (!passed) {
 			await notify(`devrig-pipeline: BLOCKED — ${milestone.version} failed after all retries`);
