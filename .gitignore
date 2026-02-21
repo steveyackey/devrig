@@ -6,3 +6,8 @@ pipeline/agent-data/
 pipeline/node_modules/
 pipeline/dist/
 pipeline/bun.lock
+
+
+# Added by cargo
+
+/target
