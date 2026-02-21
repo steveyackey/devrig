@@ -1,0 +1,8 @@
+# Runtime state
+.devrig/
+
+# Pipeline runtime artifacts
+pipeline/agent-data/
+pipeline/node_modules/
+pipeline/dist/
+pipeline/bun.lock

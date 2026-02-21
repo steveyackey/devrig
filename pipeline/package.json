@@ -1,0 +1,22 @@
+{
+	"name": "devrig-pipeline",
+	"version": "0.1.0",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"start": "bun run src/index.ts",
+		"build": "bun build src/index.ts --outdir dist --target bun",
+		"typecheck": "tsc --noEmit",
+		"lint": "biome check .",
+		"lint:fix": "biome check --write .",
+		"validate": "bun run lint:fix && bun run typecheck && bun run build"
+	},
+	"dependencies": {
+		"@anthropic-ai/claude-agent-sdk": "latest"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "latest",
+		"@types/bun": "latest",
+		"typescript": "^5.7.2"
+	}
+}
