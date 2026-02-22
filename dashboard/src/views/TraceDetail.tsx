@@ -176,7 +176,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
   return (
     <div class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-7 py-5 border-b border-border flex items-center gap-4">
+      <div class="px-6 py-4 border-b border-border flex items-center gap-4">
         <a
           href="#/traces"
           class="text-text-muted hover:text-text-primary text-sm flex items-center gap-1"
@@ -211,7 +211,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
       {/* Loading / Error states */}
       <Show when={loading()}>
-        <div class="flex-1 p-7 space-y-3">
+        <div class="flex-1 p-6 space-y-3">
           <Skeleton class="h-8 w-48" />
           <For each={[1, 2, 3, 4]}>
             {() => <Skeleton class="h-10 w-full" />}
@@ -255,7 +255,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
               <TabsContent value="spans">
                 <div class="px-2 py-2">
                   <For each={flattenedSpans()} fallback={
-                    <div class="px-7 py-8 text-center text-text-secondary text-sm">No spans found.</div>
+                    <div class="p-6 text-center text-text-muted text-sm">No spans found.</div>
                   }>
                     {(node) => {
                       const bounds = timelineBounds();
@@ -319,7 +319,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
               <TabsContent value="logs">
                 <div class="overflow-auto">
                   <Show when={related()?.logs.length === 0}>
-                    <div class="px-7 py-8 text-center text-text-secondary text-sm">
+                    <div class="p-6 text-center text-text-muted text-sm">
                       No related logs found for this trace.
                     </div>
                   </Show>
@@ -362,7 +362,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
               <TabsContent value="metrics">
                 <div class="overflow-auto">
                   <Show when={related()?.metrics.length === 0}>
-                    <div class="px-7 py-8 text-center text-text-secondary text-sm">
+                    <div class="p-6 text-center text-text-muted text-sm">
                       No related metrics found for this trace.
                     </div>
                   </Show>

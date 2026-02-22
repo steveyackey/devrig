@@ -90,12 +90,12 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
   return (
     <div data-testid="logs-view" class="flex flex-col h-full">
-      <div class="px-7 py-6 border-b border-border">
-        <h2 class="text-xl font-semibold text-text-primary">Logs</h2>
-        <p class="text-sm text-text-secondary mt-0.5">Application log records</p>
+      <div class="px-6 py-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-text-primary">Logs</h2>
+        <p class="text-sm text-text-muted mt-0.5">Application log records</p>
       </div>
 
-      <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
           <Select
@@ -158,14 +158,14 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
-          <div class="px-7 py-8 text-center">
+          <div class="p-6 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => { setLoading(true); loadLogs(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && logs().length === 0}>
-          <div class="px-7 py-4 space-y-2">
+          <div class="p-6 space-y-2">
             <For each={[1, 2, 3, 4, 5]}>{() => <Skeleton class="h-10 w-full" />}</For>
           </div>
         </Show>
@@ -183,7 +183,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
             </TableHeader>
             <tbody>
               <Show when={!loading() && !error() && logs().length === 0}>
-                <tr><td colspan="5" class="px-5 py-12 text-center text-text-secondary text-sm">No logs found. Adjust filters or wait for new data.</td></tr>
+                <tr><td colspan="5" class="text-center text-text-muted text-sm">No logs found. Adjust filters or wait for new data.</td></tr>
               </Show>
               <For each={logs()}>
                 {(log) => (

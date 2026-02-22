@@ -34,7 +34,7 @@ const StatusBar: Component = () => {
   });
 
   return (
-    <footer data-testid="status-bar" class="h-10 bg-surface-1 border-t border-border flex items-center px-5 text-xs text-text-muted gap-6 shrink-0">
+    <footer data-testid="status-bar" class="h-9 bg-surface-1 border-t border-border flex items-center px-4 text-xs text-text-muted gap-6 shrink-0">
       <div class="flex items-center gap-1.5">
         <span
           data-testid="status-bar-ws-indicator"

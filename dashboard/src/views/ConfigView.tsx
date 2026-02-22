@@ -223,10 +223,10 @@ const ConfigView: Component = () => {
 
   return (
     <div class="flex flex-col h-full">
-      <div class="px-7 py-6 border-b border-border flex items-center justify-between">
+      <div class="px-6 py-4 border-b border-border flex items-center justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-text-primary">Configuration</h2>
-          <p class="text-sm text-text-secondary mt-0.5">Edit devrig.toml</p>
+          <h2 class="text-lg font-semibold text-text-primary">Configuration</h2>
+          <p class="text-sm text-text-muted mt-0.5">Edit devrig.toml</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={statusText()}>
@@ -249,7 +249,7 @@ const ConfigView: Component = () => {
 
       <div class="flex-1 overflow-hidden">
         <Show when={error()}>
-          <div class="m-6 bg-error/10 border border-error/20 rounded-lg p-4 text-center">
+          <div class="m-6 bg-error/10 border border-error/20 rounded-lg p-6 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => loadConfig()} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>

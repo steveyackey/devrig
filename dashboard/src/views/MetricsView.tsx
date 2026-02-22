@@ -204,13 +204,13 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
   return (
     <div data-testid="metrics-view" class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-7 py-6 border-b border-border">
-        <h2 class="text-xl font-semibold text-text-primary">Metrics</h2>
-        <p class="text-sm text-text-secondary mt-0.5">Telemetry metric data points</p>
+      <div class="px-6 py-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-text-primary">Metrics</h2>
+        <p class="text-sm text-text-muted mt-0.5">Telemetry metric data points</p>
       </div>
 
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Metric Name</label>
           <Input
@@ -258,14 +258,14 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
 
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
-          <div class="px-7 py-8 text-center">
+          <div class="p-6 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => { setLoading(true); loadMetrics(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && metrics().length === 0}>
-          <div class="px-7 py-6 space-y-4">
+          <div class="p-6 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               <For each={[1, 2, 3]}>{() => <Skeleton class="h-28 rounded-lg" />}</For>
             </div>
@@ -273,7 +273,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
         </Show>
 
         <Show when={!loading() || metrics().length > 0}>
-          <div class="p-7 space-y-6 animate-fade-in">
+          <div class="p-6 space-y-6 animate-fade-in">
             {/* Metric Cards Grid */}
             <Show when={metricCards().length > 0}>
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -386,7 +386,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
                   </TableHeader>
                   <tbody>
                     <Show when={!loading() && !error() && metrics().length === 0}>
-                      <tr><td colspan="6" class="px-5 py-12 text-center text-text-secondary text-sm">No metrics found. Adjust filters or wait for new data.</td></tr>
+                      <tr><td colspan="6" class="text-center text-text-muted text-sm">No metrics found. Adjust filters or wait for new data.</td></tr>
                     </Show>
                     <For each={metrics()}>
                       {(metric) => (

@@ -87,13 +87,13 @@ const TracesView: Component<TracesViewProps> = (props) => {
   return (
     <div data-testid="traces-view" class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-7 py-6 border-b border-border">
-        <h2 class="text-xl font-semibold text-text-primary">Traces</h2>
-        <p class="text-sm text-text-secondary mt-0.5">Distributed trace overview</p>
+      <div class="px-6 py-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-text-primary">Traces</h2>
+        <p class="text-sm text-text-muted mt-0.5">Distributed trace overview</p>
       </div>
 
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
           <Select
@@ -156,7 +156,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
       {/* Table */}
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
-          <div class="px-7 py-8 text-center">
+          <div class="p-6 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button
               onClick={() => { setLoading(true); loadTraces(); }}
@@ -168,7 +168,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </Show>
 
         <Show when={loading() && traces().length === 0}>
-          <div class="px-7 py-4 space-y-2">
+          <div class="p-6 space-y-2">
             <For each={[1, 2, 3, 4, 5]}>
               {() => <Skeleton class="h-12 w-full" />}
             </For>
@@ -190,7 +190,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
             </TableHeader>
             <tbody>
               <Show when={!loading() && !error() && traces().length === 0}>
-                <tr><td colspan="7" class="px-5 py-12 text-center text-text-secondary text-sm">No traces found. Waiting for telemetry data...</td></tr>
+                <tr><td colspan="7" class="text-center text-text-muted text-sm">No traces found. Waiting for telemetry data...</td></tr>
               </Show>
               <For each={traces()}>
                 {(trace) => (

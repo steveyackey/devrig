@@ -34,10 +34,10 @@ const StatusView: Component = () => {
 
   return (
     <div data-testid="status-view" class="flex flex-col h-full">
-      <div class="px-7 py-6 border-b border-border flex items-center justify-between">
+      <div class="px-6 py-4 border-b border-border flex items-center justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-text-primary">System Status</h2>
-          <p class="text-sm text-text-secondary mt-0.5">Telemetry pipeline overview</p>
+          <h2 class="text-lg font-semibold text-text-primary">System Status</h2>
+          <p class="text-sm text-text-muted mt-0.5">Telemetry pipeline overview</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={lastRefresh()}>
@@ -49,7 +49,7 @@ const StatusView: Component = () => {
         </div>
       </div>
 
-      <div class="flex-1 overflow-auto p-7">
+      <div class="flex-1 overflow-auto p-6">
         <Show when={error()}>
           <div class="mb-6 bg-error/10 border border-error/20 rounded-lg p-4 text-center">
             <p class="text-error text-sm">{error()}</p>
@@ -117,7 +117,7 @@ const StatusView: Component = () => {
                 </div>
 
                 <Show when={serviceList().length === 0 && data().services.length === 0}>
-                  <div class="px-5 py-8 text-center text-text-secondary text-sm">
+                  <div class="p-6 text-center text-text-muted text-sm">
                     No services reporting yet.
                   </div>
                 </Show>
@@ -211,7 +211,7 @@ const StatCard: Component<{
 }> = (props) => {
   const Icon = props.icon;
   return (
-    <div data-testid="stat-card" class={`rounded-lg border p-7 bg-gradient-to-br ${props.gradient} ${props.borderColor}`}>
+    <div data-testid="stat-card" class={`rounded-lg border p-6 bg-gradient-to-br ${props.gradient} ${props.borderColor}`}>
       <div class="flex items-center justify-between mb-3">
         <span data-testid="stat-card-label" class="text-xs text-text-secondary uppercase tracking-wider font-medium">{props.label}</span>
         <Icon size={20} class={props.iconColor} />
