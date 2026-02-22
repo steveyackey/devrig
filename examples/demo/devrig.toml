@@ -1,0 +1,34 @@
+[project]
+name = "demo"
+
+[dashboard]
+
+[infra.postgres]
+image = "postgres:16-alpine"
+port = 5432
+volumes = ["pgdata:/var/lib/postgresql/data"]
+ready_check = { type = "pg_isready" }
+init = [
+  "CREATE TABLE IF NOT EXISTS todos (id SERIAL PRIMARY KEY, title TEXT NOT NULL, completed BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW())",
+]
+
+[infra.postgres.env]
+POSTGRES_USER = "demo"
+POSTGRES_PASSWORD = "demo"
+POSTGRES_DB = "demo"
+
+[services.api]
+command = "bun run index.ts"
+path = "./api"
+port = 3001
+depends_on = ["postgres"]
+
+[services.web]
+command = "bun run index.ts"
+path = "./web"
+port = 3000
+
+[services.loadgen]
+command = "bun run index.ts"
+path = "./loadgen"
+depends_on = ["api"]

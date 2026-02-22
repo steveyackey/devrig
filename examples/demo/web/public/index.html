@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demo Todo App</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 20px;
+      color: #1a1a1a;
+      background: #fafafa;
+    }
+    h1 { margin-bottom: 24px; font-size: 24px; font-weight: 600; }
+    .add-form {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+    .add-form input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+    }
+    .add-form input:focus { border-color: #4f46e5; }
+    .add-form button {
+      padding: 8px 16px;
+      background: #4f46e5;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .add-form button:hover { background: #4338ca; }
+    .todo-list { list-style: none; }
+    .todo-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+    .todo-item:last-child { border-bottom: none; }
+    .todo-item input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #4f46e5;
+    }
+    .todo-item .title {
+      flex: 1;
+      font-size: 14px;
+    }
+    .todo-item .title.completed {
+      text-decoration: line-through;
+      color: #9ca3af;
+    }
+    .todo-item .delete {
+      background: none;
+      border: none;
+      color: #9ca3af;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    .todo-item .delete:hover { color: #ef4444; }
+    .empty {
+      text-align: center;
+      color: #9ca3af;
+      padding: 40px 0;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Todos</h1>
+  <form class="add-form" onsubmit="addTodo(event)">
+    <input type="text" id="title" placeholder="What needs to be done?" required>
+    <button type="submit">Add</button>
+  </form>
+  <ul class="todo-list" id="list"></ul>
+
+  <script>
+    const list = document.getElementById("list");
+    const titleInput = document.getElementById("title");
+
+    async function loadTodos() {
+      const res = await fetch("/api/todos");
+      const todos = await res.json();
+      if (todos.length === 0) {
+        list.innerHTML = '<li class="empty">No todos yet</li>';
+        return;
+      }
+      list.innerHTML = todos.map(t => `
+        <li class="todo-item">
+          <input type="checkbox" ${t.completed ? "checked" : ""}
+            onchange="toggleTodo(${t.id})">
+          <span class="title ${t.completed ? "completed" : ""}">${esc(t.title)}</span>
+          <button class="delete" onclick="deleteTodo(${t.id})">&times;</button>
+        </li>
+      `).join("");
+    }
+
+    async function addTodo(e) {
+      e.preventDefault();
+      const title = titleInput.value.trim();
+      if (!title) return;
+      await fetch("/api/todos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      titleInput.value = "";
+      loadTodos();
+    }
+
+    async function toggleTodo(id) {
+      await fetch(`/api/todos/${id}`, { method: "PATCH" });
+      loadTodos();
+    }
+
+    async function deleteTodo(id) {
+      await fetch(`/api/todos/${id}`, { method: "DELETE" });
+      loadTodos();
+    }
+
+    function esc(s) {
+      const d = document.createElement("div");
+      d.textContent = s;
+      return d.innerHTML;
+    }
+
+    loadTodos();
+  </script>
+</body>
+</html>

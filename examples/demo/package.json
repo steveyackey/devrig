@@ -1,0 +1,11 @@
+{
+  "name": "devrig-demo",
+  "private": true,
+  "dependencies": {
+    "@opentelemetry/api": "^1.9",
+    "@opentelemetry/sdk-node": "^0.57",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.57",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.57",
+    "@opentelemetry/semantic-conventions": "^1.28"
+  }
+}
