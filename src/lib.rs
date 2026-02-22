@@ -9,5 +9,6 @@ pub mod identity;
 pub mod infra;
 pub mod orchestrator;
 pub mod otel;
+pub mod platform;
 pub mod query;
 pub mod ui;

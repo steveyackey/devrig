@@ -17,8 +17,10 @@ pub struct InstanceRegistry {
 
 impl InstanceRegistry {
     fn registry_path() -> PathBuf {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        PathBuf::from(home).join(".devrig").join("instances.json")
+        crate::platform::home_dir()
+            .unwrap_or_else(|| PathBuf::from("/tmp"))
+            .join(".devrig")
+            .join("instances.json")
     }
 
     pub fn load() -> Self {

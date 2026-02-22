@@ -5,8 +5,9 @@ const SKILL_MD: &str = include_str!("../../skill/claude-code/SKILL.md");
 
 pub async fn run_install(global: bool, config_file: Option<&Path>) -> Result<()> {
     let target = if global {
-        let home = std::env::var("HOME").context("HOME environment variable not set")?;
-        std::path::PathBuf::from(home).join(".claude/skills/devrig")
+        crate::platform::home_dir()
+            .context("could not determine home directory")?
+            .join(".claude/skills/devrig")
     } else {
         // Find the config directory: use config_file's parent, or walk up from CWD
         let config_dir = if let Some(cf) = config_file {

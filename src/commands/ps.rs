@@ -154,16 +154,5 @@ fn run_all() -> Result<()> {
 }
 
 fn is_process_alive(pid: u32) -> bool {
-    // Check if process is alive via kill(0) on Unix
-    #[cfg(unix)]
-    {
-        use nix::sys::signal::kill;
-        use nix::unistd::Pid;
-        kill(Pid::from_raw(pid as i32), None).is_ok()
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = pid;
-        false
-    }
+    crate::platform::is_process_alive(pid)
 }

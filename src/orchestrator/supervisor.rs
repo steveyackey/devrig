@@ -5,18 +5,13 @@ use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
 use crate::config::model::RestartConfig;
+use crate::platform;
 use crate::ui::logs::LogLine;
-
-#[cfg(unix)]
-use nix::sys::signal::{killpg, Signal};
-#[cfg(unix)]
-use nix::unistd::Pid;
 
 // ---------------------------------------------------------------------------
 // ServicePhase — explicit state tracking for supervisor lifecycle
@@ -157,12 +152,12 @@ impl ServiceSupervisor {
             info!(
                 service = %self.name,
                 attempt = restart_count + 1,
-                "spawning: sh -c {:?}",
+                "spawning: {} {:?}",
+                platform::shell_name(),
                 self.command,
             );
 
-            let mut cmd = Command::new("sh");
-            cmd.arg("-c").arg(&self.command);
+            let mut cmd = platform::shell_command(&self.command);
 
             if let Some(ref dir) = self.working_dir {
                 cmd.current_dir(dir);
@@ -173,10 +168,7 @@ impl ServiceSupervisor {
             cmd.stderr(std::process::Stdio::piped());
             cmd.kill_on_drop(true);
 
-            // On Unix we run in a new process group so we can signal the
-            // entire tree with killpg.
-            #[cfg(unix)]
-            cmd.process_group(0);
+            platform::configure_process_group(&mut cmd);
 
             let spawn_time = Instant::now();
 
@@ -185,6 +177,7 @@ impl ServiceSupervisor {
                 .with_context(|| format!("failed to spawn service {}", self.name))?;
 
             let child_pid = child.id();
+            let group_handle = platform::post_spawn_setup(child_pid);
             debug!(service = %self.name, pid = ?child_pid, "child spawned");
 
             // -----------------------------------------------------------
@@ -205,7 +198,7 @@ impl ServiceSupervisor {
                             match reader.read_line(&mut line).await {
                                 Ok(0) => break, // EOF
                                 Ok(_) => {
-                                    let text = line.trim_end_matches('\n').to_string();
+                                    let text = line.trim_end_matches(['\r', '\n']).to_string();
                                     let level = crate::ui::logs::detect_log_level(&text);
                                     let _ = tx.send(LogLine {
                                         timestamp: chrono::Utc::now(),
@@ -237,7 +230,7 @@ impl ServiceSupervisor {
                             match reader.read_line(&mut line).await {
                                 Ok(0) => break, // EOF
                                 Ok(_) => {
-                                    let text = line.trim_end_matches('\n').to_string();
+                                    let text = line.trim_end_matches(['\r', '\n']).to_string();
                                     let level = crate::ui::logs::detect_log_level(&text);
                                     let _ = tx.send(LogLine {
                                         timestamp: chrono::Utc::now(),
@@ -272,8 +265,8 @@ impl ServiceSupervisor {
                 }
                 _ = self.cancel.cancelled() => {
                     _phase = ServicePhase::Stopped;
-                    info!(service = %self.name, "cancellation requested, sending SIGTERM to process group");
-                    Self::terminate_child(&mut child, child_pid).await;
+                    info!(service = %self.name, "cancellation requested, terminating process group");
+                    platform::terminate_child(&mut child, child_pid, group_handle.as_ref()).await;
                     // Drain the IO tasks.
                     let _ = stdout_handle.await;
                     let _ = stderr_handle.await;
@@ -435,55 +428,6 @@ impl ServiceSupervisor {
         Duration::from_millis((half + jitter) as u64)
     }
 
-    /// Attempts to gracefully terminate the child by sending SIGTERM to its
-    /// process group, waiting up to 5 seconds, then falling back to
-    /// `child.kill()`.
-    async fn terminate_child(child: &mut tokio::process::Child, child_pid: Option<u32>) {
-        #[cfg(unix)]
-        {
-            if let Some(pid) = child_pid {
-                let pgid = Pid::from_raw(pid as i32);
-                match killpg(pgid, Signal::SIGTERM) {
-                    Ok(()) => {
-                        debug!(pid, "sent SIGTERM to process group");
-                    }
-                    Err(nix::errno::Errno::ESRCH) => {
-                        // Process (group) already gone -- nothing to do.
-                        debug!(pid, "process group already exited");
-                        return;
-                    }
-                    Err(e) => {
-                        warn!(pid, error = %e, "killpg(SIGTERM) failed, falling back to kill");
-                        let _ = child.kill().await;
-                        return;
-                    }
-                }
-
-                // Give the group up to 5 seconds to exit.
-                let grace = tokio::time::timeout(Duration::from_secs(5), child.wait()).await;
-                match grace {
-                    Ok(Ok(_status)) => {
-                        debug!(pid, "child exited after SIGTERM");
-                    }
-                    _ => {
-                        warn!(pid, "child did not exit within 5s, sending SIGKILL");
-                        let _ = child.kill().await;
-                        let _ = child.wait().await;
-                    }
-                }
-            } else {
-                // No PID means spawn likely failed; just kill.
-                let _ = child.kill().await;
-            }
-        }
-
-        #[cfg(not(unix))]
-        {
-            let _ = child_pid;
-            let _ = child.kill().await;
-            let _ = child.wait().await;
-        }
-    }
 }
 
 #[cfg(test)]
@@ -545,7 +489,7 @@ mod tests {
 
         let supervisor = ServiceSupervisor::new(
             "test-echo".into(),
-            "echo hello && echo world".into(),
+            platform::test_commands::echo_two_lines().into(),
             None,
             BTreeMap::new(),
             RestartPolicy {
@@ -566,12 +510,12 @@ mod tests {
         }
 
         assert!(
-            lines.iter().any(|l| l.text == "hello"),
+            lines.iter().any(|l| l.text.trim() == "hello"),
             "expected 'hello' in logs, got: {:?}",
             lines,
         );
         assert!(
-            lines.iter().any(|l| l.text == "world"),
+            lines.iter().any(|l| l.text.trim() == "world"),
             "expected 'world' in logs, got: {:?}",
             lines,
         );
@@ -586,7 +530,7 @@ mod tests {
 
         let supervisor = ServiceSupervisor::new(
             "test-stderr".into(),
-            "echo err >&2".into(),
+            platform::test_commands::echo_stderr().into(),
             None,
             BTreeMap::new(),
             RestartPolicy {
@@ -606,7 +550,7 @@ mod tests {
         }
 
         assert!(
-            lines.iter().any(|l| l.text == "err" && l.is_stderr),
+            lines.iter().any(|l| l.text.trim() == "err" && l.is_stderr),
             "expected stderr line 'err', got: {:?}",
             lines,
         );
@@ -619,7 +563,7 @@ mod tests {
 
         let supervisor = ServiceSupervisor::new(
             "test-cancel".into(),
-            "sleep 60".into(),
+            platform::test_commands::sleep_long().into(),
             None,
             BTreeMap::new(),
             RestartPolicy::default(),
@@ -653,7 +597,7 @@ mod tests {
 
         let supervisor = ServiceSupervisor::new(
             "test-clean-exit".into(),
-            "exit 0".into(),
+            platform::test_commands::exit_success().into(),
             None,
             BTreeMap::new(),
             RestartPolicy {
@@ -677,7 +621,7 @@ mod tests {
 
         let supervisor = ServiceSupervisor::new(
             "test-never".into(),
-            "exit 1".into(),
+            platform::test_commands::exit_failure().into(),
             None,
             BTreeMap::new(),
             RestartPolicy {

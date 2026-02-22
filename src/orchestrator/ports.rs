@@ -86,67 +86,8 @@ pub fn resolve_port(
 }
 
 /// Identify which process owns a given port.
-#[cfg(target_os = "linux")]
 pub fn identify_port_owner(port: u16) -> Option<String> {
-    let tcp_content = std::fs::read_to_string("/proc/net/tcp").ok()?;
-    let port_hex = format!("{:04X}", port);
-
-    let mut target_inode: Option<String> = None;
-    for line in tcp_content.lines().skip(1) {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        if fields.len() < 10 {
-            continue;
-        }
-        let local_addr = fields[1];
-        if let Some(addr_port) = local_addr.split(':').nth(1) {
-            if addr_port == port_hex {
-                target_inode = Some(fields[9].to_string());
-                break;
-            }
-        }
-    }
-
-    let inode = target_inode?;
-    if inode == "0" {
-        return None;
-    }
-
-    let proc_dir = std::fs::read_dir("/proc").ok()?;
-    for entry in proc_dir.flatten() {
-        let pid_str = entry.file_name().to_string_lossy().to_string();
-        if !pid_str.chars().all(|c| c.is_ascii_digit()) {
-            continue;
-        }
-        let fd_dir = format!("/proc/{}/fd", pid_str);
-        if let Ok(fds) = std::fs::read_dir(&fd_dir) {
-            for fd_entry in fds.flatten() {
-                if let Ok(link) = std::fs::read_link(fd_entry.path()) {
-                    let link_str = link.to_string_lossy();
-                    if link_str.contains(&format!("socket:[{}]", inode)) {
-                        let cmdline_path = format!("/proc/{}/cmdline", pid_str);
-                        if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
-                            let cmd = cmdline.replace('\0', " ").trim().to_string();
-                            if cmd.is_empty() {
-                                return Some(format!("PID {}", pid_str));
-                            }
-                            if cmd.len() > 60 {
-                                return Some(format!("{}... (PID {})", &cmd[..57], pid_str));
-                            }
-                            return Some(format!("{} (PID {})", cmd, pid_str));
-                        }
-                        return Some(format!("PID {}", pid_str));
-                    }
-                }
-            }
-        }
-    }
-
-    None
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn identify_port_owner(_port: u16) -> Option<String> {
-    None
+    crate::platform::identify_port_owner(port)
 }
 
 /// Check all fixed ports (services + infra) for conflicts with already-bound
