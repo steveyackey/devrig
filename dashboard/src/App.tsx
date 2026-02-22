@@ -20,7 +20,7 @@ const App: Component = () => {
   // Hash-based routing
   function getHashRoute(): string {
     const hash = window.location.hash;
-    if (!hash || hash === '#' || hash === '#/') return '/traces';
+    if (!hash || hash === '#' || hash === '#/') return '/status';
     return hash.slice(1); // remove leading #
   }
 
@@ -36,7 +36,7 @@ const App: Component = () => {
   // Ensure there is a hash on first load
   createEffect(() => {
     if (!window.location.hash || window.location.hash === '#' || window.location.hash === '#/') {
-      window.location.hash = '#/traces';
+      window.location.hash = '#/status';
     }
   });
 
@@ -63,12 +63,12 @@ const App: Component = () => {
   const routeSegment = () => {
     const r = route();
     if (r.startsWith('/traces/')) return 'trace-detail';
-    if (r === '/traces' || r === '/') return 'traces';
+    if (r === '/status' || r === '/') return 'status';
+    if (r === '/traces') return 'traces';
     if (r === '/logs') return 'logs';
     if (r === '/metrics') return 'metrics';
-    if (r === '/status') return 'status';
     if (r === '/config') return 'config';
-    return 'traces'; // fallback
+    return 'status'; // fallback
   };
 
   const traceDetailId = () => {
@@ -89,7 +89,7 @@ const App: Component = () => {
         <div class="flex flex-col flex-1 min-w-0">
           {/* View content */}
           <main data-testid="main-content" class="flex-1 overflow-hidden bg-surface-0">
-            <Switch fallback={<TracesView onEvent={latestEvent()} />}>
+            <Switch fallback={<StatusView />}>
               <Match when={routeSegment() === 'traces'}>
                 <TracesView onEvent={latestEvent()} />
               </Match>

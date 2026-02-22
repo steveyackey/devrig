@@ -15,10 +15,16 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   {
+    label: 'Status',
+    icon: CircleDot,
+    route: '#/status',
+    match: (r) => r === '' || r === '/' || r.startsWith('/status'),
+  },
+  {
     label: 'Traces',
     icon: Activity,
     route: '#/traces',
-    match: (r) => r === '' || r === '/' || r.startsWith('/traces'),
+    match: (r) => r.startsWith('/traces'),
   },
   {
     label: 'Logs',
@@ -31,12 +37,6 @@ const navItems: NavItem[] = [
     icon: BarChart3,
     route: '#/metrics',
     match: (r) => r.startsWith('/metrics'),
-  },
-  {
-    label: 'Status',
-    icon: CircleDot,
-    route: '#/status',
-    match: (r) => r.startsWith('/status'),
   },
   {
     label: 'Config',
