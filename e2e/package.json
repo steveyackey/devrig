@@ -9,7 +9,7 @@
     "test:debug": "playwright test --debug",
     "test:ui": "playwright test --ui",
     "report": "playwright show-report",
-    "screenshots": "SCREENSHOTS=1 bunx playwright test --grep @screenshots"
+    "screenshots": "SCREENSHOTS=1 bunx playwright test --grep @screenshots && bun run update-readme-hashes.ts"
   },
   "dependencies": {
     "@playwright/test": "^1.50.0"
