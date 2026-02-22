@@ -101,11 +101,11 @@ test.describe('Logs View', () => {
     await page.getByRole('button', { name: 'Search' }).click();
     await responsePromise;
 
-    // All visible severity badges should be Error (or no results)
+    // All visible severity badges should be Error or above (or no results)
     const badges = page.locator('[data-testid="log-severity-badge"]');
     const count = await badges.count();
     for (let i = 0; i < count; i++) {
-      await expect(badges.nth(i)).toHaveText('Error');
+      await expect(badges.nth(i)).toHaveText(/Error|Fatal/);
     }
   });
 

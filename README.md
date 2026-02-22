@@ -2,7 +2,20 @@
 
 Local development orchestrator.
 
-<!-- TODO: asciinema demo -->
+## Dashboard
+
+devrig includes a built-in observability dashboard that receives OpenTelemetry
+data from your services in real time.
+
+![Traces View](docs/images/dashboard-traces.png)
+
+Drill into any trace to see the full span waterfall across services:
+
+![Trace Detail](docs/images/dashboard-trace-detail.png)
+
+The status overview shows all reporting services and telemetry counts at a glance:
+
+![Status Overview](docs/images/dashboard-status.png)
 
 ## What is devrig?
 
@@ -122,6 +135,9 @@ setup and PR guidelines.
 - **sha2** for project identity hashing
 - **nix** for Unix signal handling
 - **miette** / **thiserror** / **anyhow** for error reporting
+- **SolidJS** + **Vite** + **Tailwind v4** for the dashboard
+- **Kobalte** for accessible UI primitives
+- **Lucide** for icons
 
 ## License
 
