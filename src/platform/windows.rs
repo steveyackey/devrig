@@ -1,3 +1,4 @@
+use std::ffi::c_void;
 use std::time::Duration;
 use tokio::process::Command;
 use tracing::{debug, warn};
@@ -18,7 +19,7 @@ const STILL_ACTIVE: u32 = 259;
 
 /// Holds a Windows Job Object handle for process group management.
 pub struct ProcessGroupHandle {
-    job: isize,
+    job: *mut c_void,
 }
 
 impl Drop for ProcessGroupHandle {
@@ -47,13 +48,13 @@ pub fn post_spawn_setup(child_pid: Option<u32>) -> Option<ProcessGroupHandle> {
     let pid = child_pid?;
     unsafe {
         let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
-        if job == 0 {
+        if job.is_null() {
             warn!("CreateJobObjectW failed");
             return None;
         }
 
         let proc_handle = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
-        if proc_handle == 0 {
+        if proc_handle.is_null() {
             warn!(pid, "OpenProcess failed for job assignment");
             CloseHandle(job);
             return None;
@@ -111,7 +112,7 @@ pub async fn terminate_child(
 pub fn is_process_alive(pid: u32) -> bool {
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle == 0 {
+        if handle.is_null() {
             return false;
         }
         let mut exit_code: u32 = 0;
