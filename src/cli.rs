@@ -25,6 +25,11 @@ pub enum Commands {
     Start {
         /// Specific services to start (start all if empty)
         services: Vec<String>,
+
+        /// Start Vite dev server for dashboard hot-reload
+        #[cfg(debug_assertions)]
+        #[arg(long, hide = true)]
+        dev: bool,
     },
     /// Stop all services
     Stop {

@@ -19,7 +19,14 @@ async fn main() {
     let cli = Cli::parse();
 
     let result = match cli.command {
-        Commands::Start { services } => run_start(cli.global.config_file, services).await,
+        Commands::Start {
+            services,
+            #[cfg(debug_assertions)]
+            dev,
+        } => {
+            let dev_mode = { #[cfg(debug_assertions)] { dev } #[cfg(not(debug_assertions))] { false } };
+            run_start(cli.global.config_file, services, dev_mode).await
+        }
         Commands::Stop { .. } => run_stop(cli.global.config_file).await,
         Commands::Delete => run_delete(cli.global.config_file).await,
         Commands::Ps { all } => commands::ps::run(cli.global.config_file.as_deref(), all),
@@ -163,10 +170,11 @@ async fn main() {
 async fn run_start(
     config_file: Option<std::path::PathBuf>,
     services: Vec<String>,
+    dev_mode: bool,
 ) -> anyhow::Result<()> {
     let config_path = resolve_config(config_file.as_deref())?;
     let mut orchestrator = Orchestrator::from_config(config_path)?;
-    orchestrator.start(services).await
+    orchestrator.start(services, dev_mode).await
 }
 
 async fn run_stop(config_file: Option<std::path::PathBuf>) -> anyhow::Result<()> {

@@ -2,12 +2,27 @@
 
 Local development orchestrator. Rust CLI + SolidJS dashboard.
 
-## Build & Run
+## Dev Workflow (Hot Reload)
+
+```bash
+cargo watch -w src -w Cargo.toml -s 'cargo run -- start --dev -f devrig.run.toml'
+open localhost:5173   # hot-reloaded frontend, proxied API
+```
+
+- Edit `dashboard/src/**` → instant HMR via Vite on `:5173`
+- Edit `src/**` → cargo watch rebuilds + restarts the API (~5s)
+- Vite dev server on `:5173` proxies `/api` and `/ws` to the Rust server on `:4000`
+- `--dev` spawns Vite automatically (debug builds only, hidden from help)
+
+Screenshot tests auto-detect Vite on `:5173` and use it as the base URL,
+so `bun run screenshots` captures live source changes without a build step.
+
+## Production Build
 
 ```bash
 cd dashboard && bun run build    # build dashboard frontend
 touch src/dashboard/static_files.rs && cargo build  # re-embed frontend into binary
-cargo run -- start               # start from devrig.toml
+cargo run -- start -f devrig.run.toml  # start with minimal config
 ```
 
 Frontend assets are embedded at compile time via `rust_embed`. After changing

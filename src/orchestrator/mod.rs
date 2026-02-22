@@ -102,7 +102,7 @@ impl Orchestrator {
     ///
     /// If `service_filter` is non-empty, only the named services (plus their
     /// transitive dependencies including infra/compose) are started.
-    pub async fn start(&mut self, service_filter: Vec<String>) -> Result<()> {
+    pub async fn start(&mut self, service_filter: Vec<String>, dev_mode: bool) -> Result<()> {
         // ================================================================
         // Phase 0: Parse, validate, resolve dependencies, load prev state
         // ================================================================
@@ -166,7 +166,13 @@ impl Orchestrator {
                 .collect()
         };
 
-        if launch_order.is_empty() {
+        let dashboard_enabled = self
+            .config
+            .dashboard
+            .as_ref()
+            .is_some_and(|d| d.enabled.unwrap_or(true));
+
+        if launch_order.is_empty() && !dashboard_enabled {
             bail!("no resources to start");
         }
 
@@ -504,12 +510,6 @@ impl Orchestrator {
         let mut dashboard_state: Option<state::DashboardState> = None;
         let mut _otel_collector: Option<crate::otel::OtelCollector> = None;
 
-        let dashboard_enabled = self
-            .config
-            .dashboard
-            .as_ref()
-            .is_some_and(|d| d.enabled.unwrap_or(true));
-
         if dashboard_enabled {
             let dash_config = self.config.dashboard.as_ref().unwrap();
             let otel_config = dash_config.otel.clone().unwrap_or_default();
@@ -554,6 +554,54 @@ impl Orchestrator {
                 http_port: otel_config.http_port,
             });
             _otel_collector = Some(collector);
+        }
+
+        // ================================================================
+        // Phase 4.6: Vite dev server (--dev mode)
+        // ================================================================
+        let mut vite_port: Option<u16> = None;
+
+        if dev_mode {
+            let dashboard_dir = self
+                .config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .join("dashboard");
+
+            if !dashboard_dir.join("package.json").exists() {
+                bail!(
+                    "--dev requires dashboard/ directory with package.json (at {})",
+                    dashboard_dir.display()
+                );
+            }
+
+            let cancel = self.cancel.clone();
+            self.tracker.spawn(async move {
+                let mut child = tokio::process::Command::new("bun")
+                    .args(["run", "dev"])
+                    .current_dir(&dashboard_dir)
+                    .stdout(std::process::Stdio::null())
+                    .stderr(std::process::Stdio::null())
+                    .kill_on_drop(true)
+                    .spawn()
+                    .expect("failed to spawn Vite dev server (is bun installed?)");
+
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        let _ = child.kill().await;
+                    }
+                    status = child.wait() => {
+                        if let Ok(s) = status {
+                            if !s.success() {
+                                warn!(code = ?s.code(), "Vite dev server exited");
+                            }
+                        }
+                    }
+                }
+            });
+
+            vite_port = Some(5173);
+            info!(port = 5173, "Vite dev server started");
         }
 
         // ================================================================
@@ -833,6 +881,17 @@ impl Orchestrator {
                 RunningService {
                     port,
                     port_auto,
+                    status: "running".to_string(),
+                },
+            );
+        }
+
+        if let Some(port) = vite_port {
+            summary_services.insert(
+                "[vite]".to_string(),
+                RunningService {
+                    port: Some(port),
+                    port_auto: false,
                     status: "running".to_string(),
                 },
             );

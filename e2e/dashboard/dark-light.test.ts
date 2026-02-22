@@ -68,12 +68,18 @@ test.describe('Dark / Light Theme Toggle', () => {
       const body = page.locator('body');
       await expect(body).not.toHaveClass(/dark/);
 
-      // Reload the page
-      await page.reload();
-      await page.waitForURL(/\/#\//);
+      // Verify the preference was persisted to localStorage
+      const stored = await page.evaluate(() => localStorage.getItem('devrig-theme'));
+      expect(stored).toBe('light');
 
-      // Theme should still be light after reload
-      await expect(page.locator('body')).not.toHaveClass(/dark/);
+      // Open a fresh page in the same browser context (shares localStorage)
+      const freshPage = await page.context().newPage();
+      await freshPage.goto('/', { waitUntil: 'domcontentloaded' });
+      await freshPage.locator('[data-testid="theme-toggle"]').waitFor();
+
+      // Fresh page should load in light mode from stored preference
+      await expect(freshPage.locator('body')).not.toHaveClass(/dark/);
+      await freshPage.close();
     }
   });
 
