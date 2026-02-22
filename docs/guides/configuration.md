@@ -262,6 +262,82 @@ volumes = ["pgdata:/var/lib/postgresql/data"]
 
 Volumes persist across `devrig stop` but are removed by `devrig delete`.
 
+## `[cluster]` section
+
+The optional `[cluster]` section defines a local Kubernetes cluster managed
+by k3d. When present, `devrig cluster create` provisions the cluster,
+builds images, and deploys services.
+
+### Minimal cluster
+
+```toml
+[cluster]
+```
+
+This creates a cluster with the default name `devrig-{slug}`, one agent
+node, and a local container registry.
+
+### Full cluster
+
+```toml
+[cluster]
+name = "myapp-dev"
+agents = 2
+ports = ["8080:80", "8443:443"]
+registry = true
+```
+
+### Cluster fields
+
+| Field      | Type            | Required | Default         | Description                                       |
+|------------|-----------------|----------|-----------------|---------------------------------------------------|
+| `name`     | string          | No       | `devrig-{slug}` | k3d cluster name.                                 |
+| `agents`   | integer         | No       | `1`             | Number of k3d agent nodes.                        |
+| `ports`    | list of strings | No       | `[]`            | Port mappings from host to cluster load balancer.  |
+| `registry` | boolean         | No       | `true`          | Whether to create a local container registry.      |
+
+Port mappings use the format `"hostPort:containerPort"`. The host port is
+bound on `localhost` and forwarded through the k3d load balancer.
+
+## `[cluster.deploy.*]` section
+
+Each `[cluster.deploy.<name>]` block defines a containerized service to
+build and deploy into the cluster.
+
+### Minimal deploy
+
+```toml
+[cluster.deploy.api]
+context = "./services/api"
+manifests = ["k8s/deployment.yaml", "k8s/service.yaml"]
+```
+
+### Full deploy
+
+```toml
+[cluster.deploy.api]
+context = "./services/api"
+dockerfile = "Dockerfile"
+manifests = ["k8s/deployment.yaml", "k8s/service.yaml"]
+watch = true
+depends_on = ["postgres"]
+```
+
+### Deploy fields
+
+| Field        | Type            | Required | Default      | Description                                            |
+|--------------|-----------------|----------|--------------|--------------------------------------------------------|
+| `context`    | string          | Yes      | --           | Docker build context directory, relative to config.    |
+| `dockerfile` | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
+| `manifests`  | list of strings | Yes      | --           | Kubernetes manifest files to apply, relative to config.|
+| `watch`      | boolean         | No       | `false`      | Enable file watching for automatic rebuild/redeploy.   |
+| `depends_on` | list of strings | No       | `[]`         | Infra or other deploy services to start before this.   |
+
+When `watch = true`, devrig monitors the build context directory for changes,
+debounces with a 500ms window, rebuilds the Docker image, pushes it to the
+local registry, and triggers a rollout restart. The directories `.git`,
+`node_modules`, `target`, `__pycache__`, and `.devrig` are ignored.
+
 ## `[compose]` section
 
 The `[compose]` section delegates infrastructure to an existing
@@ -344,6 +420,15 @@ APP_NAME = "{{ project.name }}"
 | `infra.<name>.port`            | `5432`        |
 | `infra.<name>.ports.<portname>`| `1025`        |
 | `compose.<name>.port`          | `6379`        |
+| `cluster.name`                 | `myapp-dev`   |
+
+The `cluster.name` variable is available when a `[cluster]` section is
+defined. It resolves to the cluster name and is useful in Kubernetes
+manifests for referencing images in the local registry:
+
+```yaml
+image: k3d-{{ cluster.name }}-reg:5000/api:latest
+```
 
 Templates are resolved after all ports are assigned (Phase 4 of startup).
 Unresolved references produce an error before any services are started.
@@ -439,9 +524,48 @@ Execute a command inside an infra container.
 Clear the init-completed flag for an infra service. Init scripts will
 re-run on the next `devrig start`.
 
+### `devrig cluster create`
+
+Create the k3d cluster, local registry, build all deploy images, and apply
+all Kubernetes manifests. If file watchers are configured (`watch = true`),
+they start automatically.
+
+```bash
+devrig cluster create
+```
+
+### `devrig cluster delete`
+
+Tear down the k3d cluster, registry, and remove the local kubeconfig.
+
+```bash
+devrig cluster delete
+```
+
+### `devrig cluster kubeconfig`
+
+Print the absolute path to the project-local kubeconfig file. Useful for
+exporting:
+
+```bash
+export KUBECONFIG=$(devrig cluster kubeconfig)
+```
+
+### `devrig kubectl` / `devrig k`
+
+Run kubectl commands against the devrig cluster with the correct kubeconfig
+set automatically. `devrig k` is a short alias.
+
+```bash
+devrig kubectl get pods
+devrig k logs -f deployment/api
+devrig k exec -it deployment/api -- sh
+```
+
 ### `devrig doctor`
 
-Check that required tools (Docker, etc.) are installed and running.
+Check that required tools (Docker, k3d, kubectl, etc.) are installed and
+running.
 
 ### `devrig init`
 
@@ -489,6 +613,48 @@ command = "npm run dev"
 port = "auto"
 depends_on = ["api"]
 ```
+
+## Complete example with cluster
+
+This example shows a project that runs Postgres as local infra and deploys
+an API service into a local Kubernetes cluster:
+
+```toml
+[project]
+name = "myapp"
+
+[infra.postgres]
+image = "postgres:16-alpine"
+port = 5432
+volumes = ["pgdata:/var/lib/postgresql/data"]
+init = ["CREATE DATABASE myapp;"]
+[infra.postgres.env]
+POSTGRES_USER = "devrig"
+POSTGRES_PASSWORD = "devrig"
+[infra.postgres.ready_check]
+type = "pg_isready"
+
+[cluster]
+name = "myapp-dev"
+agents = 1
+ports = ["8080:80"]
+
+[cluster.deploy.api]
+context = "./services/api"
+dockerfile = "Dockerfile"
+manifests = ["k8s/deployment.yaml", "k8s/service.yaml"]
+watch = true
+depends_on = ["postgres"]
+```
+
+With this configuration:
+
+- `devrig start` launches Postgres as a Docker container.
+- `devrig cluster create` creates the k3d cluster, builds the API image,
+  pushes it to the local registry, applies the manifests, and watches for
+  file changes.
+- Pods connect to Postgres via the Docker container name on the shared network.
+- The API is accessible from the host at `http://localhost:8080`.
 
 ## Validation rules
 

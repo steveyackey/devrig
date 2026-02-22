@@ -1,3 +1,4 @@
+pub mod cluster;
 pub mod doctor;
 pub mod env;
 pub mod exec;

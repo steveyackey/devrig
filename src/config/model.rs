@@ -1,4 +1,4 @@
-use serde::{de, Deserialize, Deserializer};
+use serde::{de, Deserialize, Deserializer, Serialize};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Deserialize)]
@@ -10,6 +10,8 @@ pub struct DevrigConfig {
     pub infra: BTreeMap<String, InfraConfig>,
     #[serde(default)]
     pub compose: Option<ComposeConfig>,
+    #[serde(default)]
+    pub cluster: Option<ClusterConfig>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     #[serde(default)]
@@ -90,6 +92,40 @@ pub struct ComposeConfig {
 pub struct NetworkConfig {
     #[serde(default)]
     pub name: Option<String>,
+}
+
+fn default_agents() -> u32 {
+    1
+}
+
+fn default_dockerfile() -> String {
+    "Dockerfile".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClusterConfig {
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default = "default_agents")]
+    pub agents: u32,
+    #[serde(default)]
+    pub ports: Vec<String>,
+    #[serde(default)]
+    pub registry: bool,
+    #[serde(default)]
+    pub deploy: BTreeMap<String, ClusterDeployConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClusterDeployConfig {
+    pub context: String,
+    #[serde(default = "default_dockerfile")]
+    pub dockerfile: String,
+    pub manifests: String,
+    #[serde(default)]
+    pub watch: bool,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -652,5 +688,156 @@ mod tests {
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         let net = config.network.unwrap();
         assert_eq!(net.name.as_deref(), Some("custom-net"));
+    }
+
+    // --- v0.3 Cluster config tests ---
+
+    #[test]
+    fn parse_cluster_with_registry_and_deploy() {
+        let toml = r#"
+            [project]
+            name = "myapp"
+
+            [cluster]
+            registry = true
+            agents = 2
+            ports = ["8080:80@loadbalancer"]
+
+            [cluster.deploy.api]
+            context = "./api"
+            manifests = "./k8s/api"
+            watch = true
+            depends_on = ["postgres"]
+
+            [cluster.deploy.worker]
+            context = "./worker"
+            dockerfile = "Dockerfile.worker"
+            manifests = "./k8s/worker"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert!(cluster.registry);
+        assert_eq!(cluster.agents, 2);
+        assert_eq!(cluster.ports, vec!["8080:80@loadbalancer"]);
+        assert_eq!(cluster.deploy.len(), 2);
+
+        let api = &cluster.deploy["api"];
+        assert_eq!(api.context, "./api");
+        assert_eq!(api.manifests, "./k8s/api");
+        assert!(api.watch);
+        assert_eq!(api.depends_on, vec!["postgres"]);
+        assert_eq!(api.dockerfile, "Dockerfile");
+
+        let worker = &cluster.deploy["worker"];
+        assert_eq!(worker.context, "./worker");
+        assert_eq!(worker.dockerfile, "Dockerfile.worker");
+        assert_eq!(worker.manifests, "./k8s/worker");
+        assert!(!worker.watch);
+        assert!(worker.depends_on.is_empty());
+    }
+
+    #[test]
+    fn parse_minimal_cluster_block() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert!(cluster.name.is_none());
+        assert_eq!(cluster.agents, 1);
+        assert!(cluster.ports.is_empty());
+        assert!(!cluster.registry);
+        assert!(cluster.deploy.is_empty());
+    }
+
+    #[test]
+    fn parse_cluster_deploy_with_all_fields() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            name = "my-cluster"
+            registry = true
+
+            [cluster.deploy.svc]
+            context = "./src"
+            dockerfile = "Dockerfile.prod"
+            manifests = "./deploy"
+            watch = true
+            depends_on = ["redis", "postgres"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert_eq!(cluster.name.as_deref(), Some("my-cluster"));
+
+        let svc = &cluster.deploy["svc"];
+        assert_eq!(svc.context, "./src");
+        assert_eq!(svc.dockerfile, "Dockerfile.prod");
+        assert_eq!(svc.manifests, "./deploy");
+        assert!(svc.watch);
+        assert_eq!(svc.depends_on, vec!["redis", "postgres"]);
+    }
+
+    #[test]
+    fn parse_cluster_deploy_with_defaults() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [cluster.deploy.api]
+            context = "./api"
+            manifests = "./k8s"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        let api = &cluster.deploy["api"];
+        assert_eq!(api.dockerfile, "Dockerfile");
+        assert!(!api.watch);
+        assert!(api.depends_on.is_empty());
+    }
+
+    #[test]
+    fn parse_config_with_cluster_infra_and_services() {
+        let toml = r#"
+            [project]
+            name = "fullstack"
+
+            [infra.postgres]
+            image = "postgres:16-alpine"
+            port = 5432
+
+            [cluster]
+            registry = true
+
+            [cluster.deploy.api]
+            context = "./api"
+            manifests = "./k8s/api"
+            depends_on = ["postgres"]
+
+            [services.web]
+            command = "npm run dev"
+            port = 3000
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.infra.len(), 1);
+        assert!(config.cluster.is_some());
+        assert_eq!(config.cluster.as_ref().unwrap().deploy.len(), 1);
+        assert_eq!(config.services.len(), 1);
+    }
+
+    #[test]
+    fn parse_minimal_config_without_cluster_still_works() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [services.api]
+            command = "echo hi"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(config.cluster.is_none());
     }
 }

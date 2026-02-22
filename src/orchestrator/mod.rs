@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{error, info, warn};
 
+use crate::cluster::K3dManager;
 use crate::compose;
 use crate::config;
 use crate::config::interpolate::{build_template_vars, resolve_config_templates};
@@ -28,7 +29,9 @@ use crate::ui::summary::{print_startup_summary, RunningService};
 use graph::{DependencyResolver, ResourceKind};
 use ports::{check_all_ports_unified, format_port_conflicts, resolve_port};
 use registry::{InstanceEntry, InstanceRegistry};
-use state::{ComposeServiceState, InfraState, ProjectState, ServiceState};
+use state::{
+    ClusterDeployState, ClusterState, ComposeServiceState, InfraState, ProjectState, ServiceState,
+};
 use supervisor::{RestartPolicy, ServiceSupervisor};
 
 /// Central orchestrator that loads configuration, resolves dependencies,
@@ -37,9 +40,10 @@ use supervisor::{RestartPolicy, ServiceSupervisor};
 ///
 /// Multi-phase startup order:
 ///   Phase 0 — Parse config, validate, load previous state
-///   Phase 1 — Create Docker network (if infra/compose present)
+///   Phase 1 — Create Docker network (if infra/compose/cluster present)
 ///   Phase 2 — Compose up, bridge to network, ready checks
 ///   Phase 3 — Start infra containers in dependency order
+///   Phase 3.5 — Create k3d cluster, deploy to cluster, start watchers
 ///   Phase 4 — Resolve ports, templates, DEVRIG_* env vars
 ///   Phase 5 — Spawn service supervisors with injected env
 pub struct Orchestrator {
@@ -136,6 +140,15 @@ impl Orchestrator {
                             }
                         }
                     }
+                    if let Some(cluster) = &self.config.cluster {
+                        if let Some(deploy) = cluster.deploy.get(name) {
+                            for dep in &deploy.depends_on {
+                                if needed.insert(dep.clone()) {
+                                    changed = true;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -159,9 +172,12 @@ impl Orchestrator {
         std::fs::create_dir_all(&self.state_dir)
             .with_context(|| format!("creating state dir {}", self.state_dir.display()))?;
 
-        let has_docker = launch_order
-            .iter()
-            .any(|(_, k)| matches!(k, ResourceKind::Infra | ResourceKind::Compose));
+        let has_docker = launch_order.iter().any(|(_, k)| {
+            matches!(
+                k,
+                ResourceKind::Infra | ResourceKind::Compose | ResourceKind::ClusterDeploy
+            )
+        }) || self.config.cluster.is_some();
 
         // ================================================================
         // Phase 1: Docker network
@@ -273,6 +289,112 @@ impl Orchestrator {
                 .with_context(|| format!("starting infra service '{}'", name))?;
 
             infra_states.insert(name.clone(), state);
+        }
+
+        // ================================================================
+        // Phase 3.5: k3d Cluster
+        // ================================================================
+        let mut cluster_state: Option<ClusterState> = None;
+
+        if let Some(cluster_config) = &self.config.cluster {
+            let network = network_name
+                .as_deref()
+                .expect("network must exist when cluster is configured");
+
+            let k3d_mgr = K3dManager::new(
+                &self.identity.slug,
+                cluster_config,
+                &self.state_dir,
+                network,
+            );
+
+            info!(cluster = %k3d_mgr.cluster_name(), "creating k3d cluster");
+            k3d_mgr
+                .create_cluster()
+                .await
+                .context("creating k3d cluster")?;
+            k3d_mgr
+                .write_kubeconfig()
+                .await
+                .context("writing kubeconfig")?;
+            info!(
+                kubeconfig = %k3d_mgr.kubeconfig_path().display(),
+                "kubeconfig written"
+            );
+
+            // Discover registry port if registry is enabled
+            let registry_port = if cluster_config.registry {
+                let port = crate::cluster::registry::get_registry_port(&self.identity.slug)
+                    .await
+                    .context("discovering registry port")?;
+                crate::cluster::registry::wait_for_registry(port)
+                    .await
+                    .context("waiting for registry")?;
+                info!(port = port, "local registry ready");
+                Some(port)
+            } else {
+                None
+            };
+
+            // Deploy cluster services in dependency order
+            let config_dir = self
+                .config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."))
+                .to_path_buf();
+
+            let mut deployed: BTreeMap<String, ClusterDeployState> = BTreeMap::new();
+
+            for (name, kind) in &launch_order {
+                if *kind != ResourceKind::ClusterDeploy {
+                    continue;
+                }
+
+                let deploy_config = cluster_config
+                    .deploy
+                    .get(name)
+                    .ok_or_else(|| anyhow::anyhow!("cluster deploy '{}' not in config", name))?;
+
+                info!(deploy = %name, "deploying to cluster");
+                let state = crate::cluster::deploy::run_deploy(
+                    name,
+                    deploy_config,
+                    registry_port,
+                    k3d_mgr.kubeconfig_path(),
+                    &config_dir,
+                    &self.cancel,
+                )
+                .await
+                .with_context(|| format!("deploying '{}' to cluster", name))?;
+
+                deployed.insert(name.clone(), state);
+            }
+
+            // Start file watchers for watch=true deploys
+            crate::cluster::watcher::start_watchers(
+                &cluster_config.deploy,
+                registry_port,
+                k3d_mgr.kubeconfig_path().to_path_buf(),
+                config_dir,
+                self.cancel.clone(),
+                &self.tracker,
+            )
+            .await
+            .context("starting file watchers")?;
+
+            let registry_name = if cluster_config.registry {
+                Some(format!("k3d-devrig-{}-reg", self.identity.slug))
+            } else {
+                None
+            };
+
+            cluster_state = Some(ClusterState {
+                cluster_name: k3d_mgr.cluster_name().to_string(),
+                kubeconfig_path: k3d_mgr.kubeconfig_path().to_string_lossy().to_string(),
+                registry_name,
+                registry_port,
+                deployed_services: deployed,
+            });
         }
 
         // ================================================================
@@ -444,6 +566,7 @@ impl Orchestrator {
             infra: infra_states.clone(),
             compose_services: compose_states.clone(),
             network_name: network_name.clone(),
+            cluster: cluster_state.clone(),
         };
         project_state
             .save(&self.state_dir)
@@ -485,6 +608,31 @@ impl Orchestrator {
                     status: "running".to_string(),
                 },
             );
+        }
+
+        if let Some(cs) = &cluster_state {
+            for (name, deploy_state) in &cs.deployed_services {
+                let watch_tag = self
+                    .config
+                    .cluster
+                    .as_ref()
+                    .and_then(|c| c.deploy.get(name))
+                    .map(|d| d.watch)
+                    .unwrap_or(false);
+                let status = if watch_tag {
+                    "deployed (watching)".to_string()
+                } else {
+                    "deployed".to_string()
+                };
+                summary_services.insert(
+                    format!("[cluster] {}", name),
+                    RunningService {
+                        port: None,
+                        port_auto: false,
+                        status: format!("{} [{}]", status, deploy_state.image_tag),
+                    },
+                );
+            }
         }
 
         for name in &service_names {
@@ -583,8 +731,28 @@ impl Orchestrator {
         // Stop first (ignore errors if nothing is running)
         let _ = self.stop().await;
 
-        // Clean up Docker resources (containers, volumes, networks)
+        // Delete k3d cluster if it exists
         let state = ProjectState::load(&self.state_dir);
+        if let Some(cs) = state.as_ref().and_then(|s| s.cluster.as_ref()) {
+            if let Some(cluster_config) = &self.config.cluster {
+                let network = state
+                    .as_ref()
+                    .and_then(|s| s.network_name.as_deref())
+                    .unwrap_or("devrig-net");
+                let k3d_mgr = K3dManager::new(
+                    &self.identity.slug,
+                    cluster_config,
+                    &self.state_dir,
+                    network,
+                );
+                info!(cluster = %cs.cluster_name, "deleting k3d cluster");
+                if let Err(e) = k3d_mgr.delete_cluster().await {
+                    warn!(error = %e, "failed to delete k3d cluster");
+                }
+            }
+        }
+
+        // Clean up Docker resources (containers, volumes, networks)
         if state
             .as_ref()
             .is_some_and(|s| !s.infra.is_empty() || s.network_name.is_some())

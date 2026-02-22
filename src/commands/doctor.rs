@@ -37,6 +37,25 @@ pub fn run() -> Result<()> {
                     version.to_string()
                 };
                 println!("  [ok] {:<20} {}", display_name, version);
+
+                // k3d version compatibility check
+                if *name == "k3d" {
+                    let is_v5 = version.lines().any(|line| {
+                        let lower = line.to_lowercase();
+                        if let Some(pos) = lower.find("k3d version") {
+                            let after = lower[pos + "k3d version".len()..].trim();
+                            after.starts_with("v5.") || after.starts_with("5.")
+                        } else {
+                            lower.starts_with("v5.") || lower.starts_with("5.")
+                        }
+                    });
+                    if !is_v5 {
+                        println!(
+                            "        {:<20} WARNING: k3d v5.x is required for cluster support",
+                            ""
+                        );
+                    }
+                }
             }
             _ => {
                 println!("  [!!] {:<20} not found", display_name);

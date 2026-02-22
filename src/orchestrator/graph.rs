@@ -10,6 +10,7 @@ pub enum ResourceKind {
     Service,
     Infra,
     Compose,
+    ClusterDeploy,
 }
 
 /// A node in the unified dependency graph.
@@ -62,6 +63,19 @@ impl DependencyResolver {
             }
         }
 
+        // Add cluster deploy nodes
+        if let Some(cluster) = &config.cluster {
+            for name in cluster.deploy.keys() {
+                if !node_map.contains_key(name) {
+                    let idx = graph.add_node(ResourceNode {
+                        name: name.clone(),
+                        kind: ResourceKind::ClusterDeploy,
+                    });
+                    node_map.insert(name.clone(), idx);
+                }
+            }
+        }
+
         // Add service nodes
         for name in config.services.keys() {
             let idx = graph.add_node(ResourceNode {
@@ -82,6 +96,22 @@ impl DependencyResolver {
                     )
                 })?;
                 graph.add_edge(*dep_idx, dependent_idx, ());
+            }
+        }
+
+        // Add edges for cluster deploy depends_on
+        if let Some(cluster) = &config.cluster {
+            for (name, deploy) in &cluster.deploy {
+                let dependent_idx = node_map[name];
+                for dep in &deploy.depends_on {
+                    let dep_idx = node_map.get(dep).ok_or_else(|| {
+                        format!(
+                            "cluster deploy '{}' depends on '{}', which is not defined",
+                            name, dep
+                        )
+                    })?;
+                    graph.add_edge(*dep_idx, dependent_idx, ());
+                }
             }
         }
 
@@ -140,7 +170,8 @@ impl DependencyResolver {
 mod tests {
     use super::*;
     use crate::config::model::{
-        ComposeConfig, DevrigConfig, InfraConfig, ProjectConfig, ServiceConfig,
+        ClusterConfig, ClusterDeployConfig, ComposeConfig, DevrigConfig, InfraConfig,
+        ProjectConfig, ServiceConfig,
     };
 
     fn make_config(services: Vec<(&str, Vec<&str>)>) -> DevrigConfig {
@@ -164,6 +195,7 @@ mod tests {
             services: svc_map,
             infra: BTreeMap::new(),
             compose: None,
+            cluster: None,
             env: BTreeMap::new(),
             network: None,
         }
@@ -380,6 +412,160 @@ mod tests {
         let resolver = DependencyResolver::from_config(&config).unwrap();
         let err = resolver.start_order().unwrap_err();
         assert!(err.contains("dependency cycle detected"));
+    }
+
+    fn make_deploy(context: &str, manifests: &str, deps: Vec<&str>) -> ClusterDeployConfig {
+        ClusterDeployConfig {
+            context: context.to_string(),
+            dockerfile: "Dockerfile".to_string(),
+            manifests: manifests.to_string(),
+            watch: false,
+            depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn cluster_deploy_in_graph() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+        assert_eq!(order.len(), 1);
+        assert_eq!(order[0].0, "api");
+        assert_eq!(order[0].1, ResourceKind::ClusterDeploy);
+    }
+
+    #[test]
+    fn service_depends_on_cluster_deploy() {
+        let mut config = make_config(vec![("web", vec!["api"])]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+        assert_before(&order, "api", "web");
+        assert_eq!(
+            resolver.resource_kind("api"),
+            Some(ResourceKind::ClusterDeploy)
+        );
+        assert_eq!(resolver.resource_kind("web"), Some(ResourceKind::Service));
+    }
+
+    #[test]
+    fn cluster_deploy_depends_on_infra() {
+        let mut config = make_config(vec![]);
+        config
+            .infra
+            .insert("postgres".into(), make_infra("postgres:16", vec![]));
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([(
+                "api".to_string(),
+                make_deploy("./api", "./k8s", vec!["postgres"]),
+            )]),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+        assert_before(&order, "postgres", "api");
+    }
+
+    #[test]
+    fn all_four_types_in_one_graph() {
+        let mut config = make_config(vec![("web", vec!["api", "cache"])]);
+        config
+            .infra
+            .insert("postgres".into(), make_infra("postgres:16", vec![]));
+        config.compose = Some(ComposeConfig {
+            file: "docker-compose.yml".to_string(),
+            services: vec!["cache".to_string()],
+            env_file: None,
+            ready_checks: BTreeMap::new(),
+        });
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([(
+                "api".to_string(),
+                make_deploy("./api", "./k8s", vec!["postgres"]),
+            )]),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+
+        assert_eq!(order.len(), 4);
+        assert_before(&order, "postgres", "api");
+        assert_before(&order, "api", "web");
+        assert_before(&order, "cache", "web");
+        assert_eq!(
+            resolver.resource_kind("postgres"),
+            Some(ResourceKind::Infra)
+        );
+        assert_eq!(
+            resolver.resource_kind("api"),
+            Some(ResourceKind::ClusterDeploy)
+        );
+        assert_eq!(resolver.resource_kind("cache"), Some(ResourceKind::Compose));
+        assert_eq!(resolver.resource_kind("web"), Some(ResourceKind::Service));
+    }
+
+    #[test]
+    fn cluster_deploy_cycle_detected() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([
+                ("a".to_string(), make_deploy("./a", "./k8s/a", vec!["b"])),
+                ("b".to_string(), make_deploy("./b", "./k8s/b", vec!["a"])),
+            ]),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let err = resolver.start_order().unwrap_err();
+        assert!(err.contains("dependency cycle detected"));
+    }
+
+    #[test]
+    fn cluster_deploy_unknown_dependency_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([(
+                "api".to_string(),
+                make_deploy("./api", "./k8s", vec!["nonexistent"]),
+            )]),
+        });
+
+        let err = DependencyResolver::from_config(&config).unwrap_err();
+        assert!(
+            err.contains("'api'") && err.contains("'nonexistent'") && err.contains("not defined"),
+            "unexpected error: {}",
+            err
+        );
     }
 
     #[test]

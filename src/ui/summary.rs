@@ -38,6 +38,11 @@ pub fn print_startup_summary(
         );
     }
 
+    if services.keys().any(|name| name.starts_with("[cluster]")) {
+        println!();
+        println!("  Use: devrig k get pods");
+    }
+
     println!();
     println!("  Press Ctrl+C to stop");
     println!();

@@ -15,6 +15,23 @@ pub struct ProjectState {
     pub compose_services: BTreeMap<String, ComposeServiceState>,
     #[serde(default)]
     pub network_name: Option<String>,
+    #[serde(default)]
+    pub cluster: Option<ClusterState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterState {
+    pub cluster_name: String,
+    pub kubeconfig_path: String,
+    pub registry_name: Option<String>,
+    pub registry_port: Option<u16>,
+    pub deployed_services: BTreeMap<String, ClusterDeployState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClusterDeployState {
+    pub image_tag: String,
+    pub last_deployed: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

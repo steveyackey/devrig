@@ -25,12 +25,21 @@ pub enum ConfigError {
 
     #[error("compose.file is empty")]
     EmptyComposeFile,
+
+    #[error("cluster deploy '{deploy}' has an empty context")]
+    EmptyDeployContext { deploy: String },
+
+    #[error("cluster deploy '{deploy}' has an empty manifests path")]
+    EmptyDeployManifests { deploy: String },
+
+    #[error("resource name '{name}' is used by multiple resource types: {kinds:?}")]
+    DuplicateResourceName { name: String, kinds: Vec<String> },
 }
 
 pub fn validate(config: &DevrigConfig) -> Result<(), Vec<ConfigError>> {
     let mut errors = Vec::new();
 
-    // Build the list of all available names: services + infra + compose.services
+    // Build the list of all available names: services + infra + compose.services + cluster.deploy
     let mut available: Vec<String> = config.services.keys().cloned().collect();
     for name in config.infra.keys() {
         available.push(name.clone());
@@ -38,6 +47,11 @@ pub fn validate(config: &DevrigConfig) -> Result<(), Vec<ConfigError>> {
     if let Some(compose) = &config.compose {
         for svc in &compose.services {
             available.push(svc.clone());
+        }
+    }
+    if let Some(cluster) = &config.cluster {
+        for name in cluster.deploy.keys() {
+            available.push(name.clone());
         }
     }
 
@@ -62,6 +76,46 @@ pub fn validate(config: &DevrigConfig) -> Result<(), Vec<ConfigError>> {
                     service: name.clone(),
                     dependency: dep.clone(),
                     available: available.clone(),
+                });
+            }
+        }
+    }
+
+    // Check all depends_on references exist (cluster deploy)
+    if let Some(cluster) = &config.cluster {
+        for (name, deploy) in &cluster.deploy {
+            for dep in &deploy.depends_on {
+                if !available.contains(dep) {
+                    errors.push(ConfigError::MissingDependency {
+                        service: name.clone(),
+                        dependency: dep.clone(),
+                        available: available.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    // Check cluster deploy names don't conflict with service, infra, or compose names
+    if let Some(cluster) = &config.cluster {
+        for name in cluster.deploy.keys() {
+            let mut kinds = Vec::new();
+            if config.services.contains_key(name) {
+                kinds.push("service".to_string());
+            }
+            if config.infra.contains_key(name) {
+                kinds.push("infra".to_string());
+            }
+            if let Some(compose) = &config.compose {
+                if compose.services.contains(name) {
+                    kinds.push("compose".to_string());
+                }
+            }
+            if !kinds.is_empty() {
+                kinds.push("cluster.deploy".to_string());
+                errors.push(ConfigError::DuplicateResourceName {
+                    name: name.clone(),
+                    kinds,
                 });
             }
         }
@@ -97,6 +151,11 @@ pub fn validate(config: &DevrigConfig) -> Result<(), Vec<ConfigError>> {
     }
     for (name, infra) in &config.infra {
         deps_map.insert(name.as_str(), &infra.depends_on);
+    }
+    if let Some(cluster) = &config.cluster {
+        for (name, deploy) in &cluster.deploy {
+            deps_map.insert(name.as_str(), &deploy.depends_on);
+        }
     }
 
     // Check for dependency cycles using iterative DFS with visited/in_stack
@@ -167,6 +226,22 @@ pub fn validate(config: &DevrigConfig) -> Result<(), Vec<ConfigError>> {
         }
     }
 
+    // Check cluster deploy entries have non-empty context and manifests
+    if let Some(cluster) = &config.cluster {
+        for (name, deploy) in &cluster.deploy {
+            if deploy.context.trim().is_empty() {
+                errors.push(ConfigError::EmptyDeployContext {
+                    deploy: name.clone(),
+                });
+            }
+            if deploy.manifests.trim().is_empty() {
+                errors.push(ConfigError::EmptyDeployManifests {
+                    deploy: name.clone(),
+                });
+            }
+        }
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
@@ -177,7 +252,10 @@ pub fn validate(config: &DevrigConfig) -> Result<(), Vec<ConfigError>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::model::{ComposeConfig, InfraConfig, ProjectConfig, ServiceConfig};
+    use crate::config::model::{
+        ClusterConfig, ClusterDeployConfig, ComposeConfig, InfraConfig, ProjectConfig,
+        ServiceConfig,
+    };
 
     /// Helper to build a DevrigConfig from a list of service definitions.
     fn make_config(services: Vec<(&str, &str, Option<Port>, Vec<&str>)>) -> DevrigConfig {
@@ -201,6 +279,7 @@ mod tests {
             services: svc_map,
             infra: BTreeMap::new(),
             compose: None,
+            cluster: None,
             env: BTreeMap::new(),
             network: None,
         }
@@ -491,5 +570,137 @@ mod tests {
             ready_checks: BTreeMap::new(),
         });
         assert!(validate(&config).is_ok());
+    }
+
+    // --- v0.3 cluster validation tests ---
+
+    fn make_deploy(context: &str, manifests: &str, deps: Vec<&str>) -> ClusterDeployConfig {
+        ClusterDeployConfig {
+            context: context.to_string(),
+            dockerfile: "Dockerfile".to_string(),
+            manifests: manifests.to_string(),
+            watch: false,
+            depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn service_depends_on_cluster_deploy_name_is_valid() {
+        let mut config = make_config(vec![(
+            "web",
+            "npm run dev",
+            Some(Port::Fixed(3000)),
+            vec!["api"],
+        )]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: true,
+            deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
+        });
+        assert!(validate(&config).is_ok());
+    }
+
+    #[test]
+    fn cluster_deploy_depends_on_infra_is_valid() {
+        let mut config = make_config(vec![]);
+        config.infra.insert(
+            "postgres".to_string(),
+            make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
+        );
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: true,
+            deploy: BTreeMap::from([(
+                "api".to_string(),
+                make_deploy("./api", "./k8s", vec!["postgres"]),
+            )]),
+        });
+        assert!(validate(&config).is_ok());
+    }
+
+    #[test]
+    fn cluster_deploy_with_empty_context_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([("api".to_string(), make_deploy("", "./k8s", vec![]))]),
+        });
+        let errs = validate(&config).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigError::EmptyDeployContext { deploy } if deploy == "api"
+        )));
+    }
+
+    #[test]
+    fn cluster_deploy_with_empty_manifests_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "", vec![]))]),
+        });
+        let errs = validate(&config).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigError::EmptyDeployManifests { deploy } if deploy == "api"
+        )));
+    }
+
+    #[test]
+    fn cluster_deploy_name_conflicts_with_infra_name_errors() {
+        let mut config = make_config(vec![]);
+        config.infra.insert(
+            "postgres".to_string(),
+            make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
+        );
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([(
+                "postgres".to_string(),
+                make_deploy("./pg", "./k8s", vec![]),
+            )]),
+        });
+        let errs = validate(&config).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigError::DuplicateResourceName { name, .. } if name == "postgres"
+        )));
+    }
+
+    #[test]
+    fn cluster_deploy_depends_on_unknown_name_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            deploy: BTreeMap::from([(
+                "api".to_string(),
+                make_deploy("./api", "./k8s", vec!["nonexistent"]),
+            )]),
+        });
+        let errs = validate(&config).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigError::MissingDependency {
+                service,
+                dependency,
+                ..
+            } if service == "api" && dependency == "nonexistent"
+        )));
     }
 }

@@ -100,6 +100,15 @@ pub fn build_template_vars(
         }
     }
 
+    // cluster.name
+    if let Some(cluster) = &config.cluster {
+        let cluster_name = cluster
+            .name
+            .clone()
+            .unwrap_or_else(|| format!("{}-dev", config.project.name));
+        vars.insert("cluster.name".to_string(), cluster_name);
+    }
+
     vars
 }
 
@@ -248,6 +257,7 @@ mod tests {
             services,
             infra,
             compose: None,
+            cluster: None,
             env: BTreeMap::new(),
             network: None,
         };
@@ -265,5 +275,35 @@ mod tests {
         assert_eq!(vars.get("infra.postgres.port").unwrap(), "5432");
         assert_eq!(vars.get("infra.mailpit.ports.smtp").unwrap(), "1025");
         assert_eq!(vars.get("infra.mailpit.ports.ui").unwrap(), "8025");
+    }
+
+    #[test]
+    fn cluster_name_template_var() {
+        let mut config = DevrigConfig {
+            project: ProjectConfig {
+                name: "myapp".to_string(),
+            },
+            services: BTreeMap::new(),
+            infra: BTreeMap::new(),
+            compose: None,
+            cluster: Some(crate::config::model::ClusterConfig {
+                name: Some("my-cluster".to_string()),
+                agents: 1,
+                ports: vec![],
+                registry: false,
+                deploy: BTreeMap::new(),
+            }),
+            env: BTreeMap::new(),
+            network: None,
+        };
+
+        let resolved_ports = HashMap::new();
+        let vars = build_template_vars(&config, &resolved_ports);
+        assert_eq!(vars.get("cluster.name").unwrap(), "my-cluster");
+
+        // Test default name
+        config.cluster.as_mut().unwrap().name = None;
+        let vars = build_template_vars(&config, &resolved_ports);
+        assert_eq!(vars.get("cluster.name").unwrap(), "myapp-dev");
     }
 }

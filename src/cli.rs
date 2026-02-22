@@ -60,4 +60,28 @@ pub enum Commands {
         /// Infrastructure service name
         infra: String,
     },
+
+    /// Manage the k3d cluster
+    Cluster {
+        #[command(subcommand)]
+        command: ClusterCommands,
+    },
+
+    /// Proxy to kubectl with devrig's isolated kubeconfig
+    #[command(name = "kubectl", alias = "k")]
+    Kubectl {
+        /// Arguments passed to kubectl
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ClusterCommands {
+    /// Create the k3d cluster
+    Create,
+    /// Delete the k3d cluster
+    Delete,
+    /// Print path to devrig's isolated kubeconfig
+    Kubeconfig,
 }

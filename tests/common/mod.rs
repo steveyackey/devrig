@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 use std::net::{TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 
 pub struct TestProject {
@@ -130,4 +130,102 @@ pub fn docker_cleanup(slug: &str) {
                 .output();
         }
     }
+}
+
+/// Check if k3d is available on the system.
+pub fn k3d_available() -> bool {
+    std::process::Command::new("k3d")
+        .arg("version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Clean up a k3d cluster by name. Ignores errors (best-effort cleanup).
+pub async fn k3d_cleanup(cluster_name: &str) {
+    let _ = tokio::process::Command::new("k3d")
+        .args(["cluster", "delete", cluster_name])
+        .output()
+        .await;
+}
+
+/// Synchronous version of k3d_cleanup, safe to call from scopeguard Drop.
+/// Does NOT create a tokio runtime, so it works inside async contexts.
+pub fn k3d_cleanup_sync(cluster_name: &str) {
+    let _ = std::process::Command::new("k3d")
+        .args(["cluster", "delete", cluster_name])
+        .output();
+}
+
+/// Wait for a pod matching a label selector to be in Running state.
+pub async fn wait_for_pod_running(
+    kubeconfig: &Path,
+    label: &str,
+    timeout: std::time::Duration,
+) -> bool {
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        let output = tokio::process::Command::new("kubectl")
+            .args([
+                "get",
+                "pods",
+                "-l",
+                label,
+                "--kubeconfig",
+                &kubeconfig.to_string_lossy(),
+                "-o",
+                "jsonpath={.items[0].status.phase}",
+            ])
+            .output()
+            .await;
+
+        if let Ok(output) = output {
+            let phase = String::from_utf8_lossy(&output.stdout);
+            if phase.trim() == "Running" {
+                return true;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    }
+    false
+}
+
+/// Wait for a Job to complete (Succeeded status).
+pub async fn wait_for_job_complete(
+    kubeconfig: &Path,
+    job_name: &str,
+    timeout: std::time::Duration,
+) -> bool {
+    let start = std::time::Instant::now();
+    while start.elapsed() < timeout {
+        let output = tokio::process::Command::new("kubectl")
+            .args([
+                "get",
+                "job",
+                job_name,
+                "--kubeconfig",
+                &kubeconfig.to_string_lossy(),
+                "-o",
+                "jsonpath={.status.succeeded}",
+            ])
+            .output()
+            .await;
+
+        if let Ok(output) = output {
+            let succeeded = String::from_utf8_lossy(&output.stdout);
+            if succeeded.trim() == "1" {
+                return true;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+    }
+    false
+}
+
+/// Compute SHA-256 checksum of a file. Returns None if file doesn't exist.
+pub fn file_checksum(path: &Path) -> Option<String> {
+    use sha2::{Digest, Sha256};
+    let content = std::fs::read(path).ok()?;
+    let hash = Sha256::digest(&content);
+    Some(hex::encode(hash))
 }

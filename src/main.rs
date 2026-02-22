@@ -33,6 +33,20 @@ async fn main() {
         Commands::Reset { infra } => {
             commands::reset::run(cli.global.config_file.as_deref(), &infra)
         }
+        Commands::Cluster { command } => match command {
+            devrig::cli::ClusterCommands::Create => {
+                commands::cluster::run_create(cli.global.config_file.as_deref()).await
+            }
+            devrig::cli::ClusterCommands::Delete => {
+                commands::cluster::run_delete(cli.global.config_file.as_deref()).await
+            }
+            devrig::cli::ClusterCommands::Kubeconfig => {
+                commands::cluster::run_kubeconfig(cli.global.config_file.as_deref())
+            }
+        },
+        Commands::Kubectl { args } => {
+            commands::cluster::run_kubectl(cli.global.config_file.as_deref(), args).await
+        }
     };
 
     if let Err(e) = result {

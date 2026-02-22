@@ -1,4 +1,5 @@
 pub mod cli;
+pub mod cluster;
 pub mod commands;
 pub mod compose;
 pub mod config;

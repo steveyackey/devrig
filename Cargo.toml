@@ -30,11 +30,14 @@ bollard = "0.20"
 futures-util = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 backon = "1"
+notify = "8"
+notify-debouncer-mini = "0.5"
 
 [dev-dependencies]
 assert_cmd = "2"
 assert_fs = "1"
 predicates = "3"
+scopeguard = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
 

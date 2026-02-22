@@ -2,6 +2,12 @@
 
 mod common;
 
+#[path = "integration/cluster_lifecycle.rs"]
+mod cluster_lifecycle;
+#[path = "integration/cluster_network.rs"]
+mod cluster_network;
+#[path = "integration/cluster_registry.rs"]
+mod cluster_registry;
 #[path = "integration/compose_interop.rs"]
 mod compose_interop;
 #[path = "integration/config_file_flag.rs"]

@@ -98,6 +98,7 @@ mod tests {
             services: BTreeMap::new(),
             infra: BTreeMap::new(),
             compose: None,
+            cluster: None,
             env: BTreeMap::new(),
             network: None,
         }
