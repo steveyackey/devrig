@@ -36,9 +36,9 @@ test.describe('Overview / Status View', () => {
   });
 
   test('shows reporting services section', async ({ page }) => {
-    await expect(page.getByText('Reporting Services')).toBeVisible();
+    await expect(page.getByText(/Services \(\d+\)/)).toBeVisible();
     await expect(
-      page.getByText('Services that have sent telemetry data'),
+      page.getByText('Configured services and their ports'),
     ).toBeVisible();
   });
 
@@ -58,8 +58,8 @@ test.describe('Overview / Status View', () => {
 
     if (rowCount > 0) {
       const firstRow = serviceRows.first();
-      await expect(firstRow.getByText('View Traces')).toBeVisible();
-      await expect(firstRow.getByText('View Logs')).toBeVisible();
+      await expect(firstRow.getByText('Traces')).toBeVisible();
+      await expect(firstRow.getByText('Logs')).toBeVisible();
     }
   });
 

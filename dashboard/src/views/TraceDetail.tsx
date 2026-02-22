@@ -8,7 +8,22 @@ import {
   type StoredMetric,
   type RelatedResponse,
 } from '../api';
-import { Badge, Skeleton, Card, CardHeader, CardContent } from '../components/ui';
+import {
+  Badge,
+  Skeleton,
+  Card,
+  CardHeader,
+  CardContent,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  Table,
+  TableHeader,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '../components/ui';
 
 interface TraceDetailProps {
   traceId: string;
@@ -26,7 +41,6 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [selectedSpan, setSelectedSpan] = createSignal<StoredSpan | null>(null);
-  const [activeTab, setActiveTab] = createSignal<'spans' | 'logs' | 'metrics'>('spans');
 
   const loadData = async () => {
     try {
@@ -162,7 +176,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
   return (
     <div class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-6 py-4 border-b border-border flex items-center gap-4">
+      <div class="px-7 py-5 border-b border-border flex items-center gap-4">
         <a
           href="#/traces"
           class="text-text-muted hover:text-text-primary text-sm flex items-center gap-1"
@@ -180,11 +194,11 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
               }}
             </Show>
           </h2>
-          <p class="text-xs text-text-muted font-mono mt-0.5">{props.traceId}</p>
+          <p class="text-xs text-text-secondary font-mono mt-0.5">{props.traceId}</p>
         </div>
 
         <Show when={traceData()}>
-          <div class="ml-auto flex items-center gap-4 text-sm text-text-muted">
+          <div class="ml-auto flex items-center gap-4 text-sm text-text-secondary">
             <span>{traceData()!.spans.length} span{traceData()!.spans.length !== 1 ? 's' : ''}</span>
             <span>
               {formatDuration(
@@ -197,7 +211,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
       {/* Loading / Error states */}
       <Show when={loading()}>
-        <div class="flex-1 p-6 space-y-3">
+        <div class="flex-1 p-7 space-y-3">
           <Skeleton class="h-8 w-48" />
           <For each={[1, 2, 3, 4]}>
             {() => <Skeleton class="h-10 w-full" />}
@@ -224,191 +238,171 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
         <div class="flex flex-1 overflow-hidden">
           {/* Span waterfall */}
           <div class="flex-1 overflow-auto">
-            {/* Tabs */}
-            <div class="flex border-b border-border px-6">
-              <button
-                onClick={() => setActiveTab('spans')}
-                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                  activeTab() === 'spans'
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                Spans ({traceData()!.spans.length})
-              </button>
-              <button
-                onClick={() => setActiveTab('logs')}
-                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                  activeTab() === 'logs'
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                Logs ({related()?.logs.length ?? 0})
-              </button>
-              <button
-                onClick={() => setActiveTab('metrics')}
-                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
-                  activeTab() === 'metrics'
-                    ? 'border-accent text-accent'
-                    : 'border-transparent text-text-muted hover:text-text-secondary'
-                }`}
-              >
-                Metrics ({related()?.metrics.length ?? 0})
-              </button>
-            </div>
+            <Tabs defaultValue="spans">
+              <TabsList>
+                <TabsTrigger value="spans">
+                  Spans ({traceData()!.spans.length})
+                </TabsTrigger>
+                <TabsTrigger value="logs">
+                  Logs ({related()?.logs.length ?? 0})
+                </TabsTrigger>
+                <TabsTrigger value="metrics">
+                  Metrics ({related()?.metrics.length ?? 0})
+                </TabsTrigger>
+              </TabsList>
 
-            {/* Spans tab - Waterfall view */}
-            <Show when={activeTab() === 'spans'}>
-              <div class="px-2 py-2">
-                <For each={flattenedSpans()} fallback={
-                  <div class="px-6 py-8 text-center text-text-muted text-sm">No spans found.</div>
-                }>
-                  {(node) => {
-                    const bounds = timelineBounds();
-                    const spanStart = new Date(node.span.start_time).getTime();
-                    const spanEnd = new Date(node.span.end_time).getTime();
-                    const totalDuration = bounds.max - bounds.min;
-                    const leftPct = ((spanStart - bounds.min) / totalDuration) * 100;
-                    const widthPct = Math.max(((spanEnd - spanStart) / totalDuration) * 100, 0.5);
-                    const isSelected = selectedSpan()?.span_id === node.span.span_id;
+              {/* Spans tab - Waterfall view */}
+              <TabsContent value="spans">
+                <div class="px-2 py-2">
+                  <For each={flattenedSpans()} fallback={
+                    <div class="px-7 py-8 text-center text-text-secondary text-sm">No spans found.</div>
+                  }>
+                    {(node) => {
+                      const bounds = timelineBounds();
+                      const spanStart = new Date(node.span.start_time).getTime();
+                      const spanEnd = new Date(node.span.end_time).getTime();
+                      const totalDuration = bounds.max - bounds.min;
+                      const leftPct = ((spanStart - bounds.min) / totalDuration) * 100;
+                      const widthPct = Math.max(((spanEnd - spanStart) / totalDuration) * 100, 0.5);
+                      const isSelected = selectedSpan()?.span_id === node.span.span_id;
 
-                    return (
-                      <div
-                        data-testid="waterfall-row"
-                        class={`flex items-center hover:bg-surface-2/60 cursor-pointer rounded px-2 py-1 transition-colors animate-fade-in ${
-                          isSelected ? 'bg-surface-2 ring-1 ring-accent/30' : ''
-                        }`}
-                        onClick={() => setSelectedSpan(isSelected ? null : node.span)}
-                      >
-                        {/* Label area */}
+                      return (
                         <div
-                          class="shrink-0 flex items-center gap-1 pr-3 overflow-hidden"
-                          style={{ width: '280px', "padding-left": `${node.depth * 20}px` }}
+                          data-testid="waterfall-row"
+                          class={`flex items-center hover:bg-surface-2/60 cursor-pointer rounded px-2 py-1 transition-colors animate-fade-in ${
+                            isSelected ? 'bg-surface-2 ring-1 ring-accent/30' : ''
+                          }`}
+                          onClick={() => setSelectedSpan(isSelected ? null : node.span)}
                         >
-                          <Show when={node.depth > 0}>
-                            <span class="text-border text-xs select-none">{'\u2514'}</span>
-                          </Show>
-                          <span class="text-xs text-text-muted truncate">{node.span.service_name}</span>
-                          <span class="text-border text-xs">/</span>
-                          <span class={`text-xs truncate ${
-                            node.span.status === 'Error' ? 'text-error' : 'text-text-secondary'
-                          }`}>
-                            {node.span.operation_name}
-                          </span>
-                        </div>
-
-                        {/* Timeline bar area */}
-                        <div data-testid="waterfall-bar" class="flex-1 relative h-6 bg-surface-2/30 rounded overflow-hidden">
+                          {/* Label area */}
                           <div
-                            class={`absolute top-1 bottom-1 rounded-sm ${barGradient(node.span.status)}`}
-                            style={{
-                              left: `${leftPct}%`,
-                              width: `${widthPct}%`,
-                              "min-width": '2px',
-                            }}
-                          />
-                          <span
-                            class="absolute top-0.5 text-[10px] text-text-muted font-mono whitespace-nowrap"
-                            style={{ left: `${Math.min(leftPct + widthPct + 1, 85)}%` }}
+                            class="shrink-0 flex items-center gap-1 pr-3 overflow-hidden"
+                            style={{ width: '280px', "padding-left": `${node.depth * 20}px` }}
                           >
-                            {formatDuration(node.span.duration_ms)}
-                          </span>
+                            <Show when={node.depth > 0}>
+                              <span class="text-border text-xs select-none">{'\u2514'}</span>
+                            </Show>
+                            <span class="text-xs text-text-muted truncate">{node.span.service_name}</span>
+                            <span class="text-border text-xs">/</span>
+                            <span class={`text-xs truncate ${
+                              node.span.status === 'Error' ? 'text-error' : 'text-text-secondary'
+                            }`}>
+                              {node.span.operation_name}
+                            </span>
+                          </div>
+
+                          {/* Timeline bar area */}
+                          <div data-testid="waterfall-bar" class="flex-1 relative h-6 bg-surface-2/30 rounded overflow-hidden">
+                            <div
+                              class={`absolute top-1 bottom-1 rounded-sm ${barGradient(node.span.status)}`}
+                              style={{
+                                left: `${leftPct}%`,
+                                width: `${widthPct}%`,
+                                "min-width": '2px',
+                              }}
+                            />
+                            <span
+                              class="absolute top-0.5 text-[10px] text-text-muted font-mono whitespace-nowrap"
+                              style={{ left: `${Math.min(leftPct + widthPct + 1, 85)}%` }}
+                            >
+                              {formatDuration(node.span.duration_ms)}
+                            </span>
+                          </div>
                         </div>
-                      </div>
-                    );
-                  }}
-                </For>
-              </div>
-            </Show>
+                      );
+                    }}
+                  </For>
+                </div>
+              </TabsContent>
 
-            {/* Logs tab */}
-            <Show when={activeTab() === 'logs'}>
-              <div class="overflow-auto">
-                <Show when={related()?.logs.length === 0}>
-                  <div class="px-6 py-8 text-center text-text-muted text-sm">
-                    No related logs found for this trace.
-                  </div>
-                </Show>
-                <table class="w-full">
+              {/* Logs tab */}
+              <TabsContent value="logs">
+                <div class="overflow-auto">
+                  <Show when={related()?.logs.length === 0}>
+                    <div class="px-7 py-8 text-center text-text-secondary text-sm">
+                      No related logs found for this trace.
+                    </div>
+                  </Show>
                   <Show when={(related()?.logs.length ?? 0) > 0}>
-                    <thead>
-                      <tr class="text-xs text-text-muted uppercase tracking-wider bg-surface-2/50">
-                        <th class="text-left px-4 py-2 font-medium">Time</th>
-                        <th class="text-left px-4 py-2 font-medium">Severity</th>
-                        <th class="text-left px-4 py-2 font-medium">Service</th>
-                        <th class="text-left px-4 py-2 font-medium">Body</th>
-                      </tr>
-                    </thead>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead class="text-left">Time</TableHead>
+                          <TableHead class="text-left">Severity</TableHead>
+                          <TableHead class="text-left">Service</TableHead>
+                          <TableHead class="text-left">Body</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <tbody>
+                        <For each={related()?.logs ?? []}>
+                          {(log) => (
+                            <TableRow>
+                              <TableCell class="text-xs font-mono text-text-secondary whitespace-nowrap">
+                                {new Date(log.timestamp).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant={severityVariant(log.severity)}>
+                                  {log.severity}
+                                </Badge>
+                              </TableCell>
+                              <TableCell class="text-xs text-text-secondary">{log.service_name}</TableCell>
+                              <TableCell class="text-sm text-text-secondary font-mono max-w-md truncate">
+                                {log.body}
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </For>
+                      </tbody>
+                    </Table>
                   </Show>
-                  <tbody>
-                    <For each={related()?.logs ?? []}>
-                      {(log) => (
-                        <tr class="border-b border-border/30 hover:bg-surface-2/40">
-                          <td class="px-4 py-2 text-xs font-mono text-text-muted whitespace-nowrap">
-                            {new Date(log.timestamp).toLocaleTimeString()}
-                          </td>
-                          <td class="px-4 py-2">
-                            <Badge variant={severityVariant(log.severity)}>
-                              {log.severity}
-                            </Badge>
-                          </td>
-                          <td class="px-4 py-2 text-xs text-text-muted">{log.service_name}</td>
-                          <td class="px-4 py-2 text-sm text-text-secondary font-mono max-w-md truncate">
-                            {log.body}
-                          </td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
-            </Show>
+                </div>
+              </TabsContent>
 
-            {/* Metrics tab */}
-            <Show when={activeTab() === 'metrics'}>
-              <div class="overflow-auto">
-                <Show when={related()?.metrics.length === 0}>
-                  <div class="px-6 py-8 text-center text-text-muted text-sm">
-                    No related metrics found for this trace.
-                  </div>
-                </Show>
-                <table class="w-full">
-                  <Show when={(related()?.metrics.length ?? 0) > 0}>
-                    <thead>
-                      <tr class="text-xs text-text-muted uppercase tracking-wider bg-surface-2/50">
-                        <th class="text-left px-4 py-2 font-medium">Time</th>
-                        <th class="text-left px-4 py-2 font-medium">Service</th>
-                        <th class="text-left px-4 py-2 font-medium">Name</th>
-                        <th class="text-left px-4 py-2 font-medium">Type</th>
-                        <th class="text-right px-4 py-2 font-medium">Value</th>
-                        <th class="text-left px-4 py-2 font-medium">Unit</th>
-                      </tr>
-                    </thead>
+              {/* Metrics tab */}
+              <TabsContent value="metrics">
+                <div class="overflow-auto">
+                  <Show when={related()?.metrics.length === 0}>
+                    <div class="px-7 py-8 text-center text-text-secondary text-sm">
+                      No related metrics found for this trace.
+                    </div>
                   </Show>
-                  <tbody>
-                    <For each={related()?.metrics ?? []}>
-                      {(metric) => (
-                        <tr class="border-b border-border/30 hover:bg-surface-2/40">
-                          <td class="px-4 py-2 text-xs font-mono text-text-muted whitespace-nowrap">
-                            {new Date(metric.timestamp).toLocaleTimeString()}
-                          </td>
-                          <td class="px-4 py-2 text-xs text-text-muted">{metric.service_name}</td>
-                          <td class="px-4 py-2 text-sm text-text-secondary font-mono">{metric.metric_name}</td>
-                          <td class="px-4 py-2">
-                            <Badge variant="default">{metric.metric_type}</Badge>
-                          </td>
-                          <td class="px-4 py-2 text-right text-sm font-mono text-text-secondary">
-                            {metric.value.toFixed(2)}
-                          </td>
-                          <td class="px-4 py-2 text-xs text-text-muted">{metric.unit ?? '-'}</td>
-                        </tr>
-                      )}
-                    </For>
-                  </tbody>
-                </table>
-              </div>
-            </Show>
+                  <Show when={(related()?.metrics.length ?? 0) > 0}>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead class="text-left">Time</TableHead>
+                          <TableHead class="text-left">Service</TableHead>
+                          <TableHead class="text-left">Name</TableHead>
+                          <TableHead class="text-left">Type</TableHead>
+                          <TableHead class="text-right">Value</TableHead>
+                          <TableHead class="text-left">Unit</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <tbody>
+                        <For each={related()?.metrics ?? []}>
+                          {(metric) => (
+                            <TableRow>
+                              <TableCell class="text-xs font-mono text-text-secondary whitespace-nowrap">
+                                {new Date(metric.timestamp).toLocaleTimeString()}
+                              </TableCell>
+                              <TableCell class="text-xs text-text-secondary">{metric.service_name}</TableCell>
+                              <TableCell class="text-sm text-text-secondary font-mono">{metric.metric_name}</TableCell>
+                              <TableCell>
+                                <Badge variant="default">{metric.metric_type}</Badge>
+                              </TableCell>
+                              <TableCell class="text-right text-sm font-mono text-text-secondary">
+                                {metric.value.toFixed(2)}
+                              </TableCell>
+                              <TableCell class="text-xs text-text-secondary">{metric.unit ?? '-'}</TableCell>
+                            </TableRow>
+                          )}
+                        </For>
+                      </tbody>
+                    </Table>
+                  </Show>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
 
           {/* Span detail panel */}
@@ -434,7 +428,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                     <DetailRow label="Parent Span" value={span().parent_span_id ?? '(root)'} mono />
                     <DetailRow label="Kind" value={span().kind} />
                     <div class="flex items-center justify-between">
-                      <span class="text-xs text-text-muted">Status</span>
+                      <span class="text-xs text-text-secondary">Status</span>
                       <span class={`text-xs font-medium ${statusColor(span().status)}`}>
                         {span().status}
                         {span().status_message ? `: ${span().status_message}` : ''}
@@ -456,7 +450,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                   {/* Attributes */}
                   <Show when={span().attributes.length > 0}>
                     <div>
-                      <h4 class="text-xs text-text-muted uppercase tracking-wider mb-2">
+                      <h4 class="text-xs text-text-secondary uppercase tracking-wider mb-2">
                         Attributes ({span().attributes.length})
                       </h4>
                       <div class="bg-surface-2/50 rounded-lg border border-border divide-y divide-border">
@@ -485,7 +479,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
 const DetailRow: Component<{ label: string; value: string; mono?: boolean }> = (props) => (
   <div class="flex items-center justify-between gap-2">
-    <span class="text-xs text-text-muted shrink-0">{props.label}</span>
+    <span class="text-xs text-text-secondary shrink-0">{props.label}</span>
     <span
       class={`text-xs text-text-secondary truncate text-right ${props.mono ? 'font-mono' : ''}`}
       title={props.value}

@@ -87,7 +87,7 @@ test.describe('Trace Correlation', () => {
       await relatedResponse;
 
       // Click the Logs tab
-      const logsTab = page.getByRole('button', { name: /Logs \(/ });
+      const logsTab = page.getByRole('tab', { name: /Logs \(/ });
       await logsTab.click();
 
       // Extract the log count from the tab label
@@ -131,7 +131,7 @@ test.describe('Trace Correlation', () => {
       await relatedResponse;
 
       // Click the Metrics tab
-      const metricsTab = page.getByRole('button', { name: /Metrics \(/ });
+      const metricsTab = page.getByRole('tab', { name: /Metrics \(/ });
       await metricsTab.click();
 
       const tabText = await metricsTab.textContent();

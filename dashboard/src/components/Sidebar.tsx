@@ -69,7 +69,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
       </div>
 
       {/* Navigation */}
-      <nav class="flex-1 px-3 py-5 space-y-2">
+      <nav class="flex-1 px-3 py-5 space-y-3">
         {navItems.map((item, index) => {
           const isActive = createMemo(() => activeIndex() === index);
           const Icon = item.icon;
@@ -79,7 +79,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
               href={item.route}
               aria-current={isActive() ? 'page' : undefined}
               data-active={isActive() ? 'true' : undefined}
-              class={`flex items-center gap-3 px-3.5 py-3 rounded-lg text-sm font-medium transition-colors ${
+              class={`flex items-center gap-3 px-4 py-3.5 rounded-lg text-sm font-medium transition-colors ${
                 isActive()
                   ? 'bg-accent/15 text-accent border border-accent/20'
                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-2 border border-transparent'

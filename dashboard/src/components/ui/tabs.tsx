@@ -8,7 +8,7 @@ const TabsList: Component<{ class?: string; children: JSX.Element }> = (props) =
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
     <KTabs.List
-      class={cn('flex border-b border-border px-6', local.class)}
+      class={cn('flex border-b border-border px-7', local.class)}
       {...rest}
     >
       {local.children}

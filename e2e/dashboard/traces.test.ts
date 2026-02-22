@@ -84,7 +84,7 @@ test.describe('Traces View', () => {
       await expect(page.getByRole('heading', { name: 'Trace Detail' })).toBeVisible();
 
       // Spans tab should be active and show span count
-      const spansTab = page.getByRole('button', { name: /Spans \(/ });
+      const spansTab = page.getByRole('tab', { name: /Spans \(/ });
       await expect(spansTab).toBeVisible();
 
       // Waterfall bars should be present
@@ -172,9 +172,9 @@ test.describe('Traces View', () => {
       await detailResponse;
 
       // All three tabs should be present
-      await expect(page.getByRole('button', { name: /Spans \(/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: /Logs \(/ })).toBeVisible();
-      await expect(page.getByRole('button', { name: /Metrics \(/ })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /Spans \(/ })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /Logs \(/ })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /Metrics \(/ })).toBeVisible();
     }
   });
 

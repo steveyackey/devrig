@@ -64,7 +64,6 @@ body {
   background-color: var(--color-surface-0);
   color: var(--color-text-primary);
   font-family: var(--font-sans);
-  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow: hidden;

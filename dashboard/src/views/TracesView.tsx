@@ -1,6 +1,6 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { fetchTraces, fetchStatus, type TraceSummary, type TelemetryEvent } from '../api';
-import { Badge, Skeleton } from '../components/ui';
+import { Badge, Skeleton, Input, Select, Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui';
 
 interface TracesViewProps {
   onEvent?: TelemetryEvent | null;
@@ -96,48 +96,43 @@ const TracesView: Component<TracesViewProps> = (props) => {
       <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
-          <select
+          <Select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
-            class="bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[140px]"
+            class="min-w-[140px]"
           >
             <option value="">All Services</option>
             <For each={services()}>
               {(svc) => <option value={svc}>{svc}</option>}
             </For>
-          </select>
+          </Select>
         </div>
 
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Status</label>
-          <select
+          <Select
             value={filterStatus()}
             onChange={(e) => setFilterStatus(e.currentTarget.value)}
-            class="bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[120px]"
+            class="min-w-[120px]"
           >
             <option value="">All</option>
             <option value="Ok">Ok</option>
             <option value="Error">Error</option>
-          </select>
+          </Select>
         </div>
 
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Min Duration</label>
-          <input
+          <Input
             type="number"
             placeholder="ms"
             value={filterMinDuration()}
             onInput={(e) => setFilterMinDuration(e.currentTarget.value)}
-            class="bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary focus:outline-none focus:border-accent w-24"
+            class="w-24"
           />
         </div>
 
-        <button
-          type="submit"
-          class="bg-accent hover:bg-accent-hover text-white text-sm font-medium px-5 py-2 rounded-md transition-colors"
-        >
-          Search
-        </button>
+        <Button type="submit">Search</Button>
 
         <button
           type="button"
@@ -161,7 +156,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
       {/* Table */}
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
-          <div class="px-6 py-8 text-center">
+          <div class="px-7 py-8 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button
               onClick={() => { setLoading(true); loadTraces(); }}
@@ -173,46 +168,46 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </Show>
 
         <Show when={loading() && traces().length === 0}>
-          <div class="px-6 py-4 space-y-2">
+          <div class="px-7 py-4 space-y-2">
             <For each={[1, 2, 3, 4, 5]}>
-              {() => <Skeleton class="h-10 w-full" />}
+              {() => <Skeleton class="h-12 w-full" />}
             </For>
           </div>
         </Show>
 
         <Show when={!loading() || traces().length > 0}>
-          <table class="w-full">
-            <thead class="sticky top-0 z-10">
-              <tr class="bg-surface-2/90 backdrop-blur text-xs text-text-secondary uppercase tracking-wider">
-                <th class="text-left px-7 py-3 font-medium">Trace ID</th>
-                <th class="text-left px-5 py-3 font-medium">Operation</th>
-                <th class="text-left px-5 py-3 font-medium">Services</th>
-                <th class="text-right px-5 py-3 font-medium">Duration</th>
-                <th class="text-right px-5 py-3 font-medium">Spans</th>
-                <th class="text-center px-5 py-3 font-medium">Status</th>
-                <th class="text-right px-7 py-3 font-medium">Time</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead class="text-left">Trace ID</TableHead>
+                <TableHead class="text-left">Operation</TableHead>
+                <TableHead class="text-left">Services</TableHead>
+                <TableHead class="text-right">Duration</TableHead>
+                <TableHead class="text-right">Spans</TableHead>
+                <TableHead class="text-center">Status</TableHead>
+                <TableHead class="text-right">Time</TableHead>
+              </TableRow>
+            </TableHeader>
             <tbody>
               <Show when={!loading() && !error() && traces().length === 0}>
-                <tr><td colspan="7" class="px-6 py-12 text-center text-text-secondary text-sm">No traces found. Waiting for telemetry data...</td></tr>
+                <tr><td colspan="7" class="px-5 py-12 text-center text-text-secondary text-sm">No traces found. Waiting for telemetry data...</td></tr>
               </Show>
               <For each={traces()}>
                 {(trace) => (
-                  <tr
+                  <TableRow
                     data-testid="trace-row"
-                    class="border-b border-border/30 hover:bg-surface-2/50 cursor-pointer transition-colors animate-fade-in"
+                    class="cursor-pointer animate-fade-in"
                     onClick={() => { window.location.hash = `/traces/${trace.trace_id}`; }}
                   >
-                    <td class="px-7 py-3.5">
+                    <TableCell>
                       <span data-testid="trace-id" class="font-mono text-sm text-accent hover:text-accent-hover">
                         {truncateId(trace.trace_id)}
                       </span>
-                    </td>
-                    <td class="px-5 py-3.5 text-sm text-text-secondary max-w-[200px] truncate">
+                    </TableCell>
+                    <TableCell class="text-sm text-text-secondary max-w-[200px] truncate">
                       {trace.root_operation || '(unknown)'}
-                    </td>
-                    <td class="px-5 py-3.5">
+                    </TableCell>
+                    <TableCell>
                       <div class="flex flex-wrap gap-1">
                         <For each={trace.services}>
                           {(svc) => (
@@ -220,30 +215,30 @@ const TracesView: Component<TracesViewProps> = (props) => {
                           )}
                         </For>
                       </div>
-                    </td>
-                    <td class="px-5 py-3.5 text-right">
+                    </TableCell>
+                    <TableCell class="text-right">
                       <span class={`text-sm font-mono ${
                         trace.duration_ms > 1000 ? 'text-warning' : 'text-text-secondary'
                       }`}>
                         {formatDuration(trace.duration_ms)}
                       </span>
-                    </td>
-                    <td class="px-5 py-3.5 text-right text-sm text-text-secondary">
+                    </TableCell>
+                    <TableCell class="text-right text-sm text-text-secondary">
                       {trace.span_count}
-                    </td>
-                    <td class="px-5 py-3.5 text-center">
+                    </TableCell>
+                    <TableCell class="text-center">
                       <Badge data-testid="trace-status-badge" variant={trace.has_error ? 'error' : 'success'}>
                         {trace.has_error ? 'Error' : 'Ok'}
                       </Badge>
-                    </td>
-                    <td class="px-7 py-3.5 text-right text-xs text-text-secondary font-mono">
+                    </TableCell>
+                    <TableCell class="text-right text-xs text-text-secondary font-mono">
                       {formatTime(trace.start_time)}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
               </For>
             </tbody>
-          </table>
+          </Table>
         </Show>
       </div>
     </div>

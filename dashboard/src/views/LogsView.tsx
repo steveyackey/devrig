@@ -1,6 +1,6 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { fetchLogs, fetchStatus, type StoredLog, type TelemetryEvent } from '../api';
-import { Badge, Skeleton } from '../components/ui';
+import { Badge, Skeleton, Input, Select, Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui';
 
 interface LogsViewProps {
   onEvent?: TelemetryEvent | null;
@@ -98,46 +98,44 @@ const LogsView: Component<LogsViewProps> = (props) => {
       <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
-          <select
+          <Select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
-            class="bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[140px]"
+            class="min-w-[140px]"
           >
             <option value="">All Services</option>
             <For each={services()}>
               {(svc) => <option value={svc}>{svc}</option>}
             </For>
-          </select>
+          </Select>
         </div>
 
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Severity</label>
-          <select
+          <Select
             value={filterSeverity()}
             onChange={(e) => setFilterSeverity(e.currentTarget.value)}
-            class="bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[120px]"
+            class="min-w-[120px]"
           >
             <option value="">All</option>
             <For each={severities}>
               {(sev) => <option value={sev}>{sev}</option>}
             </For>
-          </select>
+          </Select>
         </div>
 
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-secondary uppercase tracking-wider">Search</label>
-          <input
+          <Input
             type="text"
             placeholder="Search log body..."
             value={filterSearch()}
             onInput={(e) => setFilterSearch(e.currentTarget.value)}
-            class="bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary focus:outline-none focus:border-accent w-60"
+            class="w-60"
           />
         </div>
 
-        <button type="submit" class="bg-accent hover:bg-accent-hover text-white text-sm font-medium px-5 py-2 rounded-md transition-colors">
-          Search
-        </button>
+        <Button type="submit">Search</Button>
 
         <button
           type="button"
@@ -160,55 +158,55 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
-          <div class="px-6 py-8 text-center">
+          <div class="px-7 py-8 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => { setLoading(true); loadLogs(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && logs().length === 0}>
-          <div class="px-6 py-4 space-y-2">
-            <For each={[1, 2, 3, 4, 5]}>{() => <Skeleton class="h-8 w-full" />}</For>
+          <div class="px-7 py-4 space-y-2">
+            <For each={[1, 2, 3, 4, 5]}>{() => <Skeleton class="h-10 w-full" />}</For>
           </div>
         </Show>
 
         <Show when={!loading() || logs().length > 0}>
-          <table class="w-full">
-            <thead class="sticky top-0 z-10">
-              <tr class="bg-surface-2/90 backdrop-blur text-xs text-text-secondary uppercase tracking-wider">
-                <th class="text-left px-5 py-3 font-medium w-32">Time</th>
-                <th class="text-left px-4 py-3 font-medium w-20">Severity</th>
-                <th class="text-left px-4 py-3 font-medium w-32">Service</th>
-                <th class="text-left px-4 py-3 font-medium">Body</th>
-                <th class="text-left px-5 py-3 font-medium w-32">Trace</th>
-              </tr>
-            </thead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead class="text-left w-32">Time</TableHead>
+                <TableHead class="text-left w-20">Severity</TableHead>
+                <TableHead class="text-left w-32">Service</TableHead>
+                <TableHead class="text-left">Body</TableHead>
+                <TableHead class="text-left w-32">Trace</TableHead>
+              </TableRow>
+            </TableHeader>
             <tbody>
               <Show when={!loading() && !error() && logs().length === 0}>
-                <tr><td colspan="5" class="px-6 py-12 text-center text-text-secondary text-sm">No logs found. Adjust filters or wait for new data.</td></tr>
+                <tr><td colspan="5" class="px-5 py-12 text-center text-text-secondary text-sm">No logs found. Adjust filters or wait for new data.</td></tr>
               </Show>
               <For each={logs()}>
                 {(log) => (
-                  <tr data-testid="log-row" class="border-b border-border/30 hover:bg-surface-2/40 group animate-fade-in">
-                    <td class="px-5 py-3.5 align-top">
+                  <TableRow data-testid="log-row" class="group animate-fade-in">
+                    <TableCell class="align-top">
                       <span data-testid="log-timestamp" class="text-xs font-mono text-text-secondary whitespace-nowrap">
                         {formatTime(log.timestamp)}
                       </span>
-                    </td>
-                    <td class="px-4 py-3.5 align-top">
+                    </TableCell>
+                    <TableCell class="align-top">
                       <Badge data-testid="log-severity-badge" variant={severityVariant(log.severity)}>
                         {log.severity}
                       </Badge>
-                    </td>
-                    <td class="px-4 py-3.5 text-xs text-text-secondary align-top truncate max-w-[130px]">
+                    </TableCell>
+                    <TableCell class="text-xs text-text-secondary align-top truncate max-w-[130px]">
                       {log.service_name}
-                    </td>
-                    <td class="px-4 py-3.5 text-sm text-text-secondary font-mono align-top">
+                    </TableCell>
+                    <TableCell class="text-sm text-text-secondary font-mono align-top">
                       <div data-testid="log-body" class="whitespace-pre-wrap break-all max-h-24 overflow-hidden group-hover:max-h-none">
                         {log.body}
                       </div>
-                    </td>
-                    <td class="px-5 py-3.5 align-top">
+                    </TableCell>
+                    <TableCell class="align-top">
                       <Show when={log.trace_id}>
                         <a
                           data-testid="log-trace-link"
@@ -222,12 +220,12 @@ const LogsView: Component<LogsViewProps> = (props) => {
                       <Show when={!log.trace_id}>
                         <span class="text-xs text-text-secondary">-</span>
                       </Show>
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 )}
               </For>
             </tbody>
-          </table>
+          </Table>
         </Show>
       </div>
     </div>
