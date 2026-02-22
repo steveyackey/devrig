@@ -24,6 +24,15 @@ async fn main() {
         Commands::Ps { all } => commands::ps::run(cli.global.config_file.as_deref(), all),
         Commands::Init => commands::init::run(),
         Commands::Doctor => commands::doctor::run(),
+        Commands::Env { service } => {
+            commands::env::run(cli.global.config_file.as_deref(), &service)
+        }
+        Commands::Exec { infra, command } => {
+            commands::exec::run(cli.global.config_file.as_deref(), &infra, command).await
+        }
+        Commands::Reset { infra } => {
+            commands::reset::run(cli.global.config_file.as_deref(), &infra)
+        }
     };
 
     if let Err(e) = result {
@@ -37,7 +46,7 @@ async fn run_start(
     services: Vec<String>,
 ) -> anyhow::Result<()> {
     let config_path = resolve_config(config_file.as_deref())?;
-    let orchestrator = Orchestrator::from_config(config_path)?;
+    let mut orchestrator = Orchestrator::from_config(config_path)?;
     orchestrator.start(services).await
 }
 

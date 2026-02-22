@@ -8,6 +8,7 @@ pub fn run() -> Result<()> {
 
     let checks = [
         ("docker", &["--version"] as &[&str]),
+        ("docker-compose", &["compose", "version"]),
         ("k3d", &["--version"]),
         ("kubectl", &["version", "--client", "--short"]),
         ("cargo-watch", &["watch", "--version"]),
@@ -16,11 +17,13 @@ pub fn run() -> Result<()> {
     let mut all_ok = true;
 
     for (name, args) in &checks {
-        // For cargo-watch, the binary is 'cargo' with subcommand 'watch'
-        let (bin, cmd_args) = if *name == "cargo-watch" {
-            ("cargo", *args)
+        // Special cases: cargo-watch uses 'cargo' binary, docker-compose uses 'docker' binary
+        let (bin, cmd_args, display_name) = if *name == "cargo-watch" {
+            ("cargo", *args, *name)
+        } else if *name == "docker-compose" {
+            ("docker", *args, "docker compose")
         } else {
-            (*name, *args)
+            (*name, *args, *name)
         };
 
         match Command::new(bin).args(cmd_args).output() {
@@ -33,10 +36,10 @@ pub fn run() -> Result<()> {
                 } else {
                     version.to_string()
                 };
-                println!("  [ok] {:<16} {}", name, version);
+                println!("  [ok] {:<20} {}", display_name, version);
             }
             _ => {
-                println!("  [!!] {:<16} not found", name);
+                println!("  [!!] {:<20} not found", display_name);
                 all_ok = false;
             }
         }
@@ -47,7 +50,7 @@ pub fn run() -> Result<()> {
         println!("All dependencies found.");
     } else {
         println!("Some dependencies are missing. Install them for full functionality.");
-        println!("Note: docker and k3d are only needed for infrastructure services (v0.2+).");
+        println!("Note: docker, docker compose, and k3d are only needed for infrastructure services (v0.2+).");
     }
 
     Ok(())

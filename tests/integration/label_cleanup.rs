@@ -25,10 +25,20 @@ port = {port}
 
     assert!(wait_for_port(port, Duration::from_secs(10)).await);
 
+    // Wait for state file before stopping
+    let state_file = state_dir.join("state.json");
+    let start_time = std::time::Instant::now();
+    while start_time.elapsed() < Duration::from_secs(10) {
+        if state_file.exists() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
     // State directory should exist
     assert!(state_dir.exists(), "State dir should exist while running");
 
-    // Stop with SIGTERM
+    // Stop with SIGINT (preserves state)
     #[cfg(unix)]
     {
         let pid = child.id().unwrap();
@@ -39,12 +49,29 @@ port = {port}
         .ok();
     }
     let _ = tokio::time::timeout(Duration::from_secs(15), child.wait()).await;
-
-    // After stop, state should be cleaned up
     tokio::time::sleep(Duration::from_millis(500)).await;
-    let state_file = state_dir.join("state.json");
+
+    // After stop via SIGINT, state file is preserved (for restart support)
+    assert!(
+        state_file.exists(),
+        "State file should be preserved after stop (Ctrl+C)"
+    );
+
+    // Now run delete explicitly — this should remove state
+    let delete_output = std::process::Command::new(env!("CARGO_BIN_EXE_devrig"))
+        .args(["delete", "-f", project.config_path.to_str().unwrap()])
+        .output()
+        .expect("failed to run delete");
+
+    assert!(
+        delete_output.status.success(),
+        "delete should succeed: {}",
+        String::from_utf8_lossy(&delete_output.stderr)
+    );
+
+    // After delete, state should be cleaned up
     assert!(
         !state_file.exists(),
-        "State file should be removed after stop"
+        "State file should be removed after delete"
     );
 }

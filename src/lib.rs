@@ -1,6 +1,9 @@
 pub mod cli;
 pub mod commands;
+pub mod compose;
 pub mod config;
+pub mod discovery;
 pub mod identity;
+pub mod infra;
 pub mod orchestrator;
 pub mod ui;

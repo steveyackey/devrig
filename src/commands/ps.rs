@@ -35,26 +35,79 @@ fn run_local(config_path: Option<&Path>) -> Result<()> {
         state.started_at.format("%Y-%m-%d %H:%M:%S")
     );
     println!();
-    println!("  {:<16} {:<8} {:<24} STATUS", "SERVICE", "PID", "URL");
-    println!("  {}", "-".repeat(60));
 
-    for (name, svc) in &state.services {
-        let url = svc
-            .port
-            .map(|p| format!("http://localhost:{}", p))
-            .unwrap_or_else(|| "-".to_string());
-        let auto_tag = if svc.port_auto { " (auto)" } else { "" };
-        let alive = is_process_alive(svc.pid);
-        let status = if alive { "running" } else { "stopped" };
-        println!(
-            "  {:<16} {:<8} {:<24} {}",
-            name,
-            svc.pid,
-            format!("{}{}", url, auto_tag),
-            status
-        );
+    // Infra containers
+    if !state.infra.is_empty() {
+        println!("  {:<20} {:<14} {:<24} STATUS", "INFRA", "CONTAINER", "URL");
+        println!("  {}", "-".repeat(68));
+        for (name, infra) in &state.infra {
+            let url = infra
+                .port
+                .map(|p| format!("localhost:{}", p))
+                .unwrap_or_else(|| "-".to_string());
+            let auto_tag = if infra.port_auto { " (auto)" } else { "" };
+            let short_id = if infra.container_id.len() > 12 {
+                &infra.container_id[..12]
+            } else {
+                &infra.container_id
+            };
+            let init_tag = if infra.init_completed { " [init]" } else { "" };
+            println!(
+                "  {:<20} {:<14} {:<24} running{}",
+                name,
+                short_id,
+                format!("{}{}", url, auto_tag),
+                init_tag,
+            );
+        }
+        println!();
     }
-    println!();
+
+    // Compose services
+    if !state.compose_services.is_empty() {
+        println!(
+            "  {:<20} {:<14} {:<24} STATUS",
+            "COMPOSE", "CONTAINER", "URL"
+        );
+        println!("  {}", "-".repeat(68));
+        for (name, cs) in &state.compose_services {
+            let url = cs
+                .port
+                .map(|p| format!("localhost:{}", p))
+                .unwrap_or_else(|| "-".to_string());
+            let short_id = if cs.container_id.len() > 12 {
+                &cs.container_id[..12]
+            } else {
+                &cs.container_id
+            };
+            println!("  {:<20} {:<14} {:<24} running", name, short_id, url,);
+        }
+        println!();
+    }
+
+    // Services
+    if !state.services.is_empty() {
+        println!("  {:<20} {:<8} {:<24} STATUS", "SERVICE", "PID", "URL");
+        println!("  {}", "-".repeat(62));
+        for (name, svc) in &state.services {
+            let url = svc
+                .port
+                .map(|p| format!("http://localhost:{}", p))
+                .unwrap_or_else(|| "-".to_string());
+            let auto_tag = if svc.port_auto { " (auto)" } else { "" };
+            let alive = is_process_alive(svc.pid);
+            let status = if alive { "running" } else { "stopped" };
+            println!(
+                "  {:<20} {:<8} {:<24} {}",
+                name,
+                svc.pid,
+                format!("{}{}", url, auto_tag),
+                status
+            );
+        }
+        println!();
+    }
+
     Ok(())
 }
 
@@ -74,11 +127,25 @@ fn run_all() -> Result<()> {
 
     for entry in instances {
         let state = ProjectState::load(&std::path::PathBuf::from(&entry.state_dir));
-        let svc_count = state.as_ref().map(|s| s.services.len()).unwrap_or(0);
-        let status = if svc_count > 0 {
-            format!("{} services", svc_count)
+        let parts: Vec<String> = if let Some(ref s) = state {
+            let mut p = Vec::new();
+            if !s.services.is_empty() {
+                p.push(format!("{} svc", s.services.len()));
+            }
+            if !s.infra.is_empty() {
+                p.push(format!("{} infra", s.infra.len()));
+            }
+            if !s.compose_services.is_empty() {
+                p.push(format!("{} compose", s.compose_services.len()));
+            }
+            p
         } else {
+            vec![]
+        };
+        let status = if parts.is_empty() {
             "unknown".to_string()
+        } else {
+            parts.join(", ")
         };
         println!("  {:<24} {:<40} {}", entry.slug, entry.config_path, status);
     }

@@ -1,5 +1,5 @@
-use crate::config::model::{Port, ServiceConfig};
-use std::collections::BTreeMap;
+use crate::config::model::{DevrigConfig, Port, ServiceConfig};
+use std::collections::{BTreeMap, HashSet};
 use std::net::TcpListener;
 
 #[derive(Debug)]
@@ -38,12 +38,56 @@ pub fn find_free_port() -> u16 {
         .port()
 }
 
+/// Find a free port that is not already in the allocated set.
+pub fn find_free_port_excluding(allocated: &HashSet<u16>) -> u16 {
+    for _ in 0..100 {
+        let port = find_free_port();
+        if !allocated.contains(&port) {
+            return port;
+        }
+    }
+    panic!("failed to find a free port after 100 attempts");
+}
+
+/// Resolve a single port from its config, respecting sticky auto-ports from
+/// previous state.
+pub fn resolve_port(
+    resource_key: &str,
+    port_config: &Port,
+    prev_port: Option<u16>,
+    prev_auto: bool,
+    allocated: &mut HashSet<u16>,
+) -> u16 {
+    match port_config {
+        Port::Fixed(p) => {
+            allocated.insert(*p);
+            *p
+        }
+        Port::Auto => {
+            // Try to reuse previously assigned auto port
+            if prev_auto {
+                if let Some(prev) = prev_port {
+                    if !allocated.contains(&prev) && check_port_available(prev) {
+                        allocated.insert(prev);
+                        return prev;
+                    }
+                    tracing::info!(
+                        "{}: previously assigned port {} no longer available",
+                        resource_key,
+                        prev
+                    );
+                }
+            }
+            let port = find_free_port_excluding(allocated);
+            allocated.insert(port);
+            port
+        }
+    }
+}
+
 /// Identify which process owns a given port.
-/// On Linux, parses /proc/net/tcp and /proc/*/fd to find the owning process.
-/// Returns None on non-Linux or if identification fails.
 #[cfg(target_os = "linux")]
 pub fn identify_port_owner(port: u16) -> Option<String> {
-    // Parse /proc/net/tcp to find the inode for this port
     let tcp_content = std::fs::read_to_string("/proc/net/tcp").ok()?;
     let port_hex = format!("{:04X}", port);
 
@@ -53,10 +97,9 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
         if fields.len() < 10 {
             continue;
         }
-        // local_address is field[1], format is "IP:PORT" in hex
         let local_addr = fields[1];
         if let Some(addr_port) = local_addr.split(':').nth(1) {
-            if addr_port == port_hex || addr_port == format!("{:04X}", port) {
+            if addr_port == port_hex {
                 target_inode = Some(fields[9].to_string());
                 break;
             }
@@ -68,7 +111,6 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
         return None;
     }
 
-    // Scan /proc/*/fd/ to find which PID owns this inode
     let proc_dir = std::fs::read_dir("/proc").ok()?;
     for entry in proc_dir.flatten() {
         let pid_str = entry.file_name().to_string_lossy().to_string();
@@ -81,14 +123,12 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
                 if let Ok(link) = std::fs::read_link(fd_entry.path()) {
                     let link_str = link.to_string_lossy();
                     if link_str.contains(&format!("socket:[{}]", inode)) {
-                        // Found the PID, read cmdline
                         let cmdline_path = format!("/proc/{}/cmdline", pid_str);
                         if let Ok(cmdline) = std::fs::read_to_string(&cmdline_path) {
                             let cmd = cmdline.replace('\0', " ").trim().to_string();
                             if cmd.is_empty() {
                                 return Some(format!("PID {}", pid_str));
                             }
-                            // Truncate long commands
                             if cmd.len() > 60 {
                                 return Some(format!("{}... (PID {})", &cmd[..57], pid_str));
                             }
@@ -109,6 +149,50 @@ pub fn identify_port_owner(_port: u16) -> Option<String> {
     None
 }
 
+/// Check all fixed ports (services + infra) for conflicts with already-bound
+/// ports on the system.
+pub fn check_all_ports_unified(config: &DevrigConfig) -> Vec<PortConflict> {
+    let mut conflicts = Vec::new();
+
+    for (name, svc) in &config.services {
+        if let Some(Port::Fixed(port)) = &svc.port {
+            if !check_port_available(*port) {
+                conflicts.push(PortConflict {
+                    service: name.clone(),
+                    port: *port,
+                    owner: identify_port_owner(*port),
+                });
+            }
+        }
+    }
+
+    for (name, infra) in &config.infra {
+        if let Some(Port::Fixed(port)) = &infra.port {
+            if !check_port_available(*port) {
+                conflicts.push(PortConflict {
+                    service: format!("infra:{}", name),
+                    port: *port,
+                    owner: identify_port_owner(*port),
+                });
+            }
+        }
+        for (port_name, port_val) in &infra.ports {
+            if let Port::Fixed(port) = port_val {
+                if !check_port_available(*port) {
+                    conflicts.push(PortConflict {
+                        service: format!("infra:{}:{}", name, port_name),
+                        port: *port,
+                        owner: identify_port_owner(*port),
+                    });
+                }
+            }
+        }
+    }
+
+    conflicts
+}
+
+/// Check all service ports only (backward compatibility).
 pub fn check_all_ports(services: &BTreeMap<String, ServiceConfig>) -> Vec<PortConflict> {
     let mut conflicts = Vec::new();
     for (name, svc) in services {

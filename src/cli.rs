@@ -42,4 +42,22 @@ pub enum Commands {
     Init,
     /// Check that dependencies are installed
     Doctor,
+    /// Show resolved environment variables for a service
+    Env {
+        /// Service name to show env for
+        service: String,
+    },
+    /// Execute a command in an infra container
+    Exec {
+        /// Infrastructure service name
+        infra: String,
+        /// Command to execute
+        #[arg(last = true)]
+        command: Vec<String>,
+    },
+    /// Reset init-completed flag for an infra service
+    Reset {
+        /// Infrastructure service name
+        infra: String,
+    },
 }

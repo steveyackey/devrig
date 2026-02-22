@@ -7,7 +7,13 @@ pub struct DevrigConfig {
     #[serde(default)]
     pub services: BTreeMap<String, ServiceConfig>,
     #[serde(default)]
+    pub infra: BTreeMap<String, InfraConfig>,
+    #[serde(default)]
+    pub compose: Option<ComposeConfig>,
+    #[serde(default)]
     pub env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub network: Option<NetworkConfig>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -26,6 +32,64 @@ pub struct ServiceConfig {
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct InfraConfig {
+    pub image: String,
+    #[serde(default)]
+    pub port: Option<Port>,
+    #[serde(default)]
+    pub ports: BTreeMap<String, Port>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub volumes: Vec<String>,
+    #[serde(default)]
+    pub ready_check: Option<ReadyCheck>,
+    #[serde(default)]
+    pub init: Vec<String>,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "type")]
+pub enum ReadyCheck {
+    #[serde(rename = "pg_isready")]
+    PgIsReady,
+    #[serde(rename = "cmd")]
+    Cmd {
+        command: String,
+        #[serde(default)]
+        expect: Option<String>,
+    },
+    #[serde(rename = "http")]
+    Http { url: String },
+    #[serde(rename = "tcp")]
+    Tcp,
+    #[serde(rename = "log")]
+    Log {
+        #[serde(rename = "match")]
+        pattern: String,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ComposeConfig {
+    pub file: String,
+    #[serde(default)]
+    pub services: Vec<String>,
+    #[serde(default)]
+    pub env_file: Option<String>,
+    #[serde(default)]
+    pub ready_checks: BTreeMap<String, ReadyCheck>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NetworkConfig {
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -312,5 +376,281 @@ mod tests {
         assert_eq!(Port::Auto.as_fixed(), None);
         assert!(!Port::Fixed(3000).is_auto());
         assert!(Port::Auto.is_auto());
+    }
+
+    // --- v0.2 InfraConfig tests ---
+
+    #[test]
+    fn parse_infra_single_port() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [infra.postgres]
+            image = "postgres:16-alpine"
+            port = 5432
+            [infra.postgres.env]
+            POSTGRES_USER = "devrig"
+            POSTGRES_PASSWORD = "devrig"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.infra.len(), 1);
+        let pg = &config.infra["postgres"];
+        assert_eq!(pg.image, "postgres:16-alpine");
+        assert!(matches!(pg.port, Some(Port::Fixed(5432))));
+        assert_eq!(pg.env["POSTGRES_USER"], "devrig");
+    }
+
+    #[test]
+    fn parse_infra_named_ports() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [infra.mailpit]
+            image = "axllent/mailpit:latest"
+            [infra.mailpit.ports]
+            smtp = 1025
+            ui = 8025
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let mp = &config.infra["mailpit"];
+        assert_eq!(mp.image, "axllent/mailpit:latest");
+        assert!(mp.port.is_none());
+        assert_eq!(mp.ports.len(), 2);
+        assert!(matches!(mp.ports["smtp"], Port::Fixed(1025)));
+        assert!(matches!(mp.ports["ui"], Port::Fixed(8025)));
+    }
+
+    #[test]
+    fn parse_infra_auto_port() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [infra.redis]
+            image = "redis:7-alpine"
+            port = "auto"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(config.infra["redis"].port, Some(Port::Auto)));
+    }
+
+    #[test]
+    fn parse_ready_check_pg_isready() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [infra.postgres]
+            image = "postgres:16"
+            port = 5432
+            ready_check = { type = "pg_isready" }
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(
+            config.infra["postgres"].ready_check,
+            Some(ReadyCheck::PgIsReady)
+        ));
+    }
+
+    #[test]
+    fn parse_ready_check_cmd() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [infra.redis]
+            image = "redis:7"
+            port = 6379
+            [infra.redis.ready_check]
+            type = "cmd"
+            command = "redis-cli ping"
+            expect = "PONG"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        match &config.infra["redis"].ready_check {
+            Some(ReadyCheck::Cmd { command, expect }) => {
+                assert_eq!(command, "redis-cli ping");
+                assert_eq!(expect.as_deref(), Some("PONG"));
+            }
+            other => panic!("expected ReadyCheck::Cmd, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_ready_check_http() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [infra.minio]
+            image = "minio/minio"
+            port = 9000
+            ready_check = { type = "http", url = "http://localhost:9000/minio/health/live" }
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        match &config.infra["minio"].ready_check {
+            Some(ReadyCheck::Http { url }) => {
+                assert_eq!(url, "http://localhost:9000/minio/health/live");
+            }
+            other => panic!("expected ReadyCheck::Http, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_ready_check_tcp() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [infra.redis]
+            image = "redis:7"
+            port = 6379
+            ready_check = { type = "tcp" }
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(matches!(
+            config.infra["redis"].ready_check,
+            Some(ReadyCheck::Tcp)
+        ));
+    }
+
+    #[test]
+    fn parse_ready_check_log() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [infra.postgres]
+            image = "postgres:16"
+            port = 5432
+            [infra.postgres.ready_check]
+            type = "log"
+            match = "ready to accept connections"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        match &config.infra["postgres"].ready_check {
+            Some(ReadyCheck::Log { pattern }) => {
+                assert_eq!(pattern, "ready to accept connections");
+            }
+            other => panic!("expected ReadyCheck::Log, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_compose_config() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [compose]
+            file = "docker-compose.yml"
+            services = ["redis", "postgres"]
+            env_file = ".env"
+
+            [compose.ready_checks.redis]
+            type = "cmd"
+            command = "redis-cli ping"
+            expect = "PONG"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let compose = config.compose.unwrap();
+        assert_eq!(compose.file, "docker-compose.yml");
+        assert_eq!(compose.services, vec!["redis", "postgres"]);
+        assert_eq!(compose.env_file.as_deref(), Some(".env"));
+        assert_eq!(compose.ready_checks.len(), 1);
+        assert!(matches!(
+            compose.ready_checks["redis"],
+            ReadyCheck::Cmd { .. }
+        ));
+    }
+
+    #[test]
+    fn parse_config_with_infra_and_services() {
+        let toml = r#"
+            [project]
+            name = "myapp"
+
+            [infra.postgres]
+            image = "postgres:16-alpine"
+            port = 5432
+            [infra.postgres.env]
+            POSTGRES_USER = "app"
+            POSTGRES_PASSWORD = "secret"
+
+            [infra.redis]
+            image = "redis:7-alpine"
+            port = 6379
+
+            [services.api]
+            command = "cargo run"
+            port = 3000
+            depends_on = ["postgres"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert_eq!(config.infra.len(), 2);
+        assert_eq!(config.services.len(), 1);
+        assert_eq!(config.services["api"].depends_on, vec!["postgres"]);
+    }
+
+    #[test]
+    fn parse_minimal_config_still_works() {
+        // Backwards compatibility: v0.1 config with no infra/compose still works
+        let toml = r#"
+            [project]
+            name = "test"
+            [services.api]
+            command = "echo hi"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(config.infra.is_empty());
+        assert!(config.compose.is_none());
+        assert!(config.network.is_none());
+    }
+
+    #[test]
+    fn parse_infra_with_all_fields() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [infra.postgres]
+            image = "postgres:16-alpine"
+            port = 5432
+            volumes = ["pgdata:/var/lib/postgresql/data"]
+            init = [
+                "CREATE DATABASE myapp;",
+                "CREATE USER appuser WITH PASSWORD 'secret';",
+            ]
+            depends_on = ["redis"]
+
+            [infra.postgres.env]
+            POSTGRES_USER = "devrig"
+            POSTGRES_PASSWORD = "devrig"
+
+            [infra.postgres.ready_check]
+            type = "pg_isready"
+
+            [infra.redis]
+            image = "redis:7-alpine"
+            port = 6379
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let pg = &config.infra["postgres"];
+        assert_eq!(pg.image, "postgres:16-alpine");
+        assert!(matches!(pg.port, Some(Port::Fixed(5432))));
+        assert_eq!(pg.volumes, vec!["pgdata:/var/lib/postgresql/data"]);
+        assert_eq!(pg.init.len(), 2);
+        assert_eq!(pg.depends_on, vec!["redis"]);
+        assert!(matches!(pg.ready_check, Some(ReadyCheck::PgIsReady)));
+        assert_eq!(pg.env.len(), 2);
+    }
+
+    #[test]
+    fn parse_network_config() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [network]
+            name = "custom-net"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let net = config.network.unwrap();
+        assert_eq!(net.name.as_deref(), Some("custom-net"));
     }
 }

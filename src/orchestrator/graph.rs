@@ -4,34 +4,88 @@ use std::collections::BTreeMap;
 
 use crate::config::model::DevrigConfig;
 
-/// Resolves service startup order from the dependency graph declared in a DevrigConfig.
+/// The kind of resource represented by a node in the dependency graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ResourceKind {
+    Service,
+    Infra,
+    Compose,
+}
+
+/// A node in the unified dependency graph.
+#[derive(Debug, Clone)]
+pub struct ResourceNode {
+    pub name: String,
+    pub kind: ResourceKind,
+}
+
+/// Resolves startup order from the dependency graph declared in a DevrigConfig.
 ///
-/// Edges point from dependency to dependent (i.e. if service B depends on service A,
-/// the edge is A -> B). A topological sort then yields the correct startup order:
-/// dependencies before the services that need them.
+/// The graph is unified: it contains service nodes, infra nodes, and compose
+/// service nodes. Edges point from dependency to dependent (i.e. if service B
+/// depends on infra A, the edge is A -> B). A topological sort yields the
+/// correct startup order: dependencies before their dependents.
 #[derive(Debug)]
 pub struct DependencyResolver {
-    graph: DiGraph<String, ()>,
-    #[allow(dead_code)]
+    graph: DiGraph<ResourceNode, ()>,
     node_map: BTreeMap<String, NodeIndex>,
 }
 
 impl DependencyResolver {
-    /// Build a dependency graph from a DevrigConfig.
+    /// Build a unified dependency graph from a DevrigConfig.
     ///
-    /// Returns an error if any service lists a dependency that is not itself
-    /// defined as a service in the config.
+    /// Includes services, infra, and compose service nodes. Returns an error
+    /// if any node lists a dependency that is not defined anywhere.
     pub fn from_config(config: &DevrigConfig) -> Result<Self, String> {
         let mut graph = DiGraph::new();
         let mut node_map = BTreeMap::new();
 
-        // First pass: add every service as a node.
-        for name in config.services.keys() {
-            let idx = graph.add_node(name.clone());
+        // Add infra nodes
+        for name in config.infra.keys() {
+            let idx = graph.add_node(ResourceNode {
+                name: name.clone(),
+                kind: ResourceKind::Infra,
+            });
             node_map.insert(name.clone(), idx);
         }
 
-        // Second pass: add edges from dependency -> dependent.
+        // Add compose service nodes
+        if let Some(compose) = &config.compose {
+            for svc_name in &compose.services {
+                if !node_map.contains_key(svc_name) {
+                    let idx = graph.add_node(ResourceNode {
+                        name: svc_name.clone(),
+                        kind: ResourceKind::Compose,
+                    });
+                    node_map.insert(svc_name.clone(), idx);
+                }
+            }
+        }
+
+        // Add service nodes
+        for name in config.services.keys() {
+            let idx = graph.add_node(ResourceNode {
+                name: name.clone(),
+                kind: ResourceKind::Service,
+            });
+            node_map.insert(name.clone(), idx);
+        }
+
+        // Add edges for infra depends_on
+        for (name, infra) in &config.infra {
+            let dependent_idx = node_map[name];
+            for dep in &infra.depends_on {
+                let dep_idx = node_map.get(dep).ok_or_else(|| {
+                    format!(
+                        "infra '{}' depends on '{}', which is not defined",
+                        name, dep
+                    )
+                })?;
+                graph.add_edge(*dep_idx, dependent_idx, ());
+            }
+        }
+
+        // Add edges for service depends_on
         for (name, svc) in &config.services {
             let dependent_idx = node_map[name];
             for dep in &svc.depends_on {
@@ -48,32 +102,47 @@ impl DependencyResolver {
         Ok(Self { graph, node_map })
     }
 
-    /// Return a valid startup order (dependencies first).
+    /// Return a valid startup order (dependencies first) with resource kind info.
     ///
     /// Returns an error if the graph contains a cycle.
-    pub fn start_order(&self) -> Result<Vec<String>, String> {
+    pub fn start_order(&self) -> Result<Vec<(String, ResourceKind)>, String> {
         match toposort(&self.graph, None) {
             Ok(indices) => Ok(indices
                 .into_iter()
-                .map(|idx| self.graph[idx].clone())
+                .map(|idx| {
+                    let node = &self.graph[idx];
+                    (node.name.clone(), node.kind)
+                })
                 .collect()),
             Err(cycle) => {
                 let offending = &self.graph[cycle.node_id()];
                 Err(format!(
-                    "dependency cycle detected involving service '{}'",
-                    offending
+                    "dependency cycle detected involving '{}'",
+                    offending.name
                 ))
             }
         }
+    }
+
+    /// Return just the names in startup order (for backward compatibility).
+    pub fn start_order_names(&self) -> Result<Vec<String>, String> {
+        self.start_order()
+            .map(|order| order.into_iter().map(|(name, _)| name).collect())
+    }
+
+    /// Look up the resource kind for a given name.
+    pub fn resource_kind(&self, name: &str) -> Option<ResourceKind> {
+        self.node_map.get(name).map(|idx| self.graph[*idx].kind)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::model::{DevrigConfig, ProjectConfig, ServiceConfig};
+    use crate::config::model::{
+        ComposeConfig, DevrigConfig, InfraConfig, ProjectConfig, ServiceConfig,
+    };
 
-    /// Build a DevrigConfig from a list of (service_name, dependencies) pairs.
     fn make_config(services: Vec<(&str, Vec<&str>)>) -> DevrigConfig {
         let mut svc_map = BTreeMap::new();
         for (name, deps) in services {
@@ -93,19 +162,34 @@ mod tests {
                 name: "test".to_string(),
             },
             services: svc_map,
+            infra: BTreeMap::new(),
+            compose: None,
             env: BTreeMap::new(),
+            network: None,
         }
     }
 
-    /// Assert that service `a` appears before service `b` in the given order.
-    fn assert_before(order: &[String], a: &str, b: &str) {
+    fn make_infra(image: &str, deps: Vec<&str>) -> InfraConfig {
+        InfraConfig {
+            image: image.to_string(),
+            port: None,
+            ports: BTreeMap::new(),
+            env: BTreeMap::new(),
+            volumes: Vec::new(),
+            ready_check: None,
+            init: Vec::new(),
+            depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
+    fn assert_before(order: &[(String, ResourceKind)], a: &str, b: &str) {
         let pos_a = order
             .iter()
-            .position(|s| s == a)
+            .position(|(s, _)| s == a)
             .unwrap_or_else(|| panic!("'{}' not found in order {:?}", a, order));
         let pos_b = order
             .iter()
-            .position(|s| s == b)
+            .position(|(s, _)| s == b)
             .unwrap_or_else(|| panic!("'{}' not found in order {:?}", b, order));
         assert!(
             pos_a < pos_b,
@@ -118,18 +202,20 @@ mod tests {
         );
     }
 
+    fn names(order: &[(String, ResourceKind)]) -> Vec<String> {
+        order.iter().map(|(n, _)| n.clone()).collect()
+    }
+
     #[test]
     fn linear_chain() {
-        // a depends on b, b depends on c  =>  start order: c, b, a
         let config = make_config(vec![("a", vec!["b"]), ("b", vec!["c"]), ("c", vec![])]);
         let resolver = DependencyResolver::from_config(&config).unwrap();
         let order = resolver.start_order().unwrap();
-        assert_eq!(order, vec!["c", "b", "a"]);
+        assert_eq!(names(&order), vec!["c", "b", "a"]);
     }
 
     #[test]
     fn diamond_dependency() {
-        // d depends on b and c; b and c both depend on a
         let config = make_config(vec![
             ("a", vec![]),
             ("b", vec!["a"]),
@@ -148,15 +234,10 @@ mod tests {
 
     #[test]
     fn cycle_detected() {
-        // a -> b -> c -> a  (cycle)
         let config = make_config(vec![("a", vec!["c"]), ("b", vec!["a"]), ("c", vec!["b"])]);
         let resolver = DependencyResolver::from_config(&config).unwrap();
         let err = resolver.start_order().unwrap_err();
-        assert!(
-            err.contains("dependency cycle detected"),
-            "unexpected error message: {}",
-            err
-        );
+        assert!(err.contains("dependency cycle detected"));
     }
 
     #[test]
@@ -164,25 +245,16 @@ mod tests {
         let config = make_config(vec![("a", vec!["a"])]);
         let resolver = DependencyResolver::from_config(&config).unwrap();
         let err = resolver.start_order().unwrap_err();
-        assert!(
-            err.contains("dependency cycle detected"),
-            "unexpected error message: {}",
-            err
-        );
-        assert!(
-            err.contains("'a'"),
-            "error should name the offending service: {}",
-            err
-        );
+        assert!(err.contains("dependency cycle detected"));
+        assert!(err.contains("'a'"));
     }
 
     #[test]
     fn no_dependencies() {
         let config = make_config(vec![("alpha", vec![]), ("beta", vec![]), ("gamma", vec![])]);
         let resolver = DependencyResolver::from_config(&config).unwrap();
-        let order = resolver.start_order().unwrap();
+        let order = resolver.start_order_names().unwrap();
         assert_eq!(order.len(), 3);
-        // All three must be present (order is deterministic because BTreeMap is sorted).
         assert!(order.contains(&"alpha".to_string()));
         assert!(order.contains(&"beta".to_string()));
         assert!(order.contains(&"gamma".to_string()));
@@ -200,7 +272,7 @@ mod tests {
     fn single_service() {
         let config = make_config(vec![("only", vec![])]);
         let resolver = DependencyResolver::from_config(&config).unwrap();
-        let order = resolver.start_order().unwrap();
+        let order = resolver.start_order_names().unwrap();
         assert_eq!(order, vec!["only"]);
     }
 
@@ -213,5 +285,126 @@ mod tests {
             "unexpected error message: {}",
             err
         );
+    }
+
+    #[test]
+    fn mixed_graph_with_services_and_infra() {
+        let mut config = make_config(vec![("api", vec!["postgres"]), ("worker", vec!["redis"])]);
+        config
+            .infra
+            .insert("postgres".into(), make_infra("postgres:16", vec![]));
+        config
+            .infra
+            .insert("redis".into(), make_infra("redis:7", vec![]));
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+
+        assert_before(&order, "postgres", "api");
+        assert_before(&order, "redis", "worker");
+        assert_eq!(
+            resolver.resource_kind("postgres"),
+            Some(ResourceKind::Infra)
+        );
+        assert_eq!(resolver.resource_kind("redis"), Some(ResourceKind::Infra));
+        assert_eq!(resolver.resource_kind("api"), Some(ResourceKind::Service));
+        assert_eq!(
+            resolver.resource_kind("worker"),
+            Some(ResourceKind::Service)
+        );
+    }
+
+    #[test]
+    fn service_depends_on_infra() {
+        let mut config = make_config(vec![("api", vec!["postgres", "redis"])]);
+        config
+            .infra
+            .insert("postgres".into(), make_infra("postgres:16", vec![]));
+        config
+            .infra
+            .insert("redis".into(), make_infra("redis:7", vec![]));
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+
+        assert_before(&order, "postgres", "api");
+        assert_before(&order, "redis", "api");
+        assert_eq!(order.len(), 3);
+    }
+
+    #[test]
+    fn compose_nodes_before_dependent_services() {
+        let mut config = make_config(vec![("api", vec!["redis"])]);
+        config.compose = Some(ComposeConfig {
+            file: "docker-compose.yml".to_string(),
+            services: vec!["redis".to_string()],
+            env_file: None,
+            ready_checks: BTreeMap::new(),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+
+        assert_before(&order, "redis", "api");
+        assert_eq!(resolver.resource_kind("redis"), Some(ResourceKind::Compose));
+        assert_eq!(resolver.resource_kind("api"), Some(ResourceKind::Service));
+    }
+
+    #[test]
+    fn infra_depends_on_another_infra() {
+        let mut config = make_config(vec![("api", vec!["postgres"])]);
+        config
+            .infra
+            .insert("postgres".into(), make_infra("postgres:16", vec!["redis"]));
+        config
+            .infra
+            .insert("redis".into(), make_infra("redis:7", vec![]));
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+
+        assert_before(&order, "redis", "postgres");
+        assert_before(&order, "postgres", "api");
+    }
+
+    #[test]
+    fn infra_cycle_detected() {
+        let mut config = make_config(vec![]);
+        config
+            .infra
+            .insert("a".into(), make_infra("img-a", vec!["b"]));
+        config
+            .infra
+            .insert("b".into(), make_infra("img-b", vec!["a"]));
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let err = resolver.start_order().unwrap_err();
+        assert!(err.contains("dependency cycle detected"));
+    }
+
+    #[test]
+    fn all_three_types_in_one_graph() {
+        let mut config = make_config(vec![("api", vec!["postgres", "cache"])]);
+        config
+            .infra
+            .insert("postgres".into(), make_infra("postgres:16", vec![]));
+        config.compose = Some(ComposeConfig {
+            file: "docker-compose.yml".to_string(),
+            services: vec!["cache".to_string()],
+            env_file: None,
+            ready_checks: BTreeMap::new(),
+        });
+
+        let resolver = DependencyResolver::from_config(&config).unwrap();
+        let order = resolver.start_order().unwrap();
+
+        assert_before(&order, "postgres", "api");
+        assert_before(&order, "cache", "api");
+        assert_eq!(
+            resolver.resource_kind("postgres"),
+            Some(ResourceKind::Infra)
+        );
+        assert_eq!(resolver.resource_kind("cache"), Some(ResourceKind::Compose));
+        assert_eq!(resolver.resource_kind("api"), Some(ResourceKind::Service));
     }
 }

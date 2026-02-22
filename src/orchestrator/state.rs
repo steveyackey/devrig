@@ -9,6 +9,12 @@ pub struct ProjectState {
     pub config_path: String,
     pub services: BTreeMap<String, ServiceState>,
     pub started_at: DateTime<Utc>,
+    #[serde(default)]
+    pub infra: BTreeMap<String, InfraState>,
+    #[serde(default)]
+    pub compose_services: BTreeMap<String, ComposeServiceState>,
+    #[serde(default)]
+    pub network_name: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -16,6 +22,24 @@ pub struct ServiceState {
     pub pid: u32,
     pub port: Option<u16>,
     pub port_auto: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InfraState {
+    pub container_id: String,
+    pub container_name: String,
+    pub port: Option<u16>,
+    pub port_auto: bool,
+    pub named_ports: BTreeMap<String, u16>,
+    pub init_completed: bool,
+    pub init_completed_at: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComposeServiceState {
+    pub container_id: String,
+    pub container_name: String,
+    pub port: Option<u16>,
 }
 
 impl ProjectState {
@@ -48,5 +72,15 @@ impl ProjectState {
 
     pub fn state_dir_for(project_dir: &Path) -> std::path::PathBuf {
         project_dir.join(".devrig")
+    }
+
+    pub fn reset_init(&mut self, infra_name: &str) -> bool {
+        if let Some(state) = self.infra.get_mut(infra_name) {
+            state.init_completed = false;
+            state.init_completed_at = None;
+            true
+        } else {
+            false
+        }
     }
 }
