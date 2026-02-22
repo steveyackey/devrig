@@ -87,7 +87,9 @@ pub mod test_commands {
     }
     #[cfg(windows)]
     pub fn sleep_long() -> &'static str {
-        "timeout /t 60 /nobreak > nul"
+        // `timeout` exits immediately when stdout is piped (non-interactive).
+        // `ping` with 61 attempts (~1s each) reliably blocks for ~60s.
+        "ping -n 61 127.0.0.1 > nul"
     }
 
     #[cfg(unix)]

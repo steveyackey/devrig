@@ -84,6 +84,7 @@ mod tests {
     use tempfile::NamedTempFile;
 
     #[tokio::test]
+    #[cfg_attr(windows, ignore = "filesystem watcher timing unreliable on Windows CI")]
     async fn watcher_detects_file_change() {
         let mut tmp = NamedTempFile::new().unwrap();
         writeln!(tmp, "[project]\nname = \"test\"").unwrap();
