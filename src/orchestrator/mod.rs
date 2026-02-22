@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{error, info, warn};
 
+use crate::cluster::addon::PortForwardManager;
 use crate::cluster::K3dManager;
 use crate::compose;
 use crate::config;
@@ -53,6 +54,7 @@ pub struct Orchestrator {
     state_dir: PathBuf,
     cancel: CancellationToken,
     tracker: TaskTracker,
+    port_forward_mgr: Option<PortForwardManager>,
 }
 
 impl Orchestrator {
@@ -92,6 +94,7 @@ impl Orchestrator {
             state_dir,
             cancel: CancellationToken::new(),
             tracker: TaskTracker::new(),
+            port_forward_mgr: None,
         })
     }
 
@@ -380,12 +383,35 @@ impl Orchestrator {
                 &cluster_config.deploy,
                 registry_port,
                 k3d_mgr.kubeconfig_path().to_path_buf(),
-                config_dir,
+                config_dir.clone(),
                 self.cancel.clone(),
                 &self.tracker,
             )
             .await
             .context("starting file watchers")?;
+
+            // Install addons (helm charts, manifests, kustomize)
+            let installed_addons = if !cluster_config.addons.is_empty() {
+                info!(
+                    count = cluster_config.addons.len(),
+                    "installing cluster addons"
+                );
+                crate::cluster::addon::install_addons(
+                    &cluster_config.addons,
+                    k3d_mgr.kubeconfig_path(),
+                    &config_dir,
+                    &self.cancel,
+                )
+                .await
+                .context("installing cluster addons")?
+            } else {
+                BTreeMap::new()
+            };
+
+            // Start port-forwards for addons
+            let pf_mgr = PortForwardManager::new();
+            pf_mgr.start_port_forwards(&cluster_config.addons, k3d_mgr.kubeconfig_path());
+            self.port_forward_mgr = Some(pf_mgr);
 
             let registry_name = if cluster_config.registry {
                 Some(format!("k3d-devrig-{}-reg", self.identity.slug))
@@ -399,6 +425,7 @@ impl Orchestrator {
                 registry_name,
                 registry_port,
                 deployed_services: deployed,
+                installed_addons,
             });
         }
 
@@ -503,12 +530,14 @@ impl Orchestrator {
             let events_tx = collector.events_tx();
 
             let dash_cancel = self.cancel.clone();
+            let dash_config_path = Some(self.config_path.clone());
             self.tracker.spawn(async move {
                 if let Err(e) = crate::dashboard::server::start_dashboard_server(
                     dash_port,
                     store,
                     events_tx,
                     dash_cancel,
+                    dash_config_path,
                 )
                 .await
                 {
@@ -741,6 +770,29 @@ impl Orchestrator {
                     },
                 );
             }
+
+            // Addon summary entries
+            for (name, addon_state) in &cs.installed_addons {
+                let pf_port = self
+                    .config
+                    .cluster
+                    .as_ref()
+                    .and_then(|c| c.addons.get(name))
+                    .and_then(|a| {
+                        a.port_forward()
+                            .keys()
+                            .next()
+                            .and_then(|p| p.parse::<u16>().ok())
+                    });
+                summary_services.insert(
+                    format!("[addon] {}", name),
+                    RunningService {
+                        port: pf_port,
+                        port_auto: false,
+                        status: format!("installed ({})", addon_state.addon_type),
+                    },
+                );
+            }
         }
 
         if let Some(ref ds) = dashboard_state {
@@ -815,6 +867,11 @@ impl Orchestrator {
             Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
         }
 
+        // Stop addon port-forwards
+        if let Some(pf_mgr) = &self.port_forward_mgr {
+            pf_mgr.stop().await;
+        }
+
         // Stop infra containers on shutdown (preserve state for restart)
         for (name, infra_state) in &infra_states {
             if let Some(mgr) = &infra_mgr {
@@ -880,6 +937,25 @@ impl Orchestrator {
                     &self.state_dir,
                     network,
                 );
+
+                // Uninstall addons before deleting the cluster
+                if !cluster_config.addons.is_empty() {
+                    info!("uninstalling cluster addons before deletion");
+                    let cancel = CancellationToken::new();
+                    let config_dir = self
+                        .config_path
+                        .parent()
+                        .unwrap_or_else(|| std::path::Path::new("."))
+                        .to_path_buf();
+                    crate::cluster::addon::uninstall_addons(
+                        &cluster_config.addons,
+                        k3d_mgr.kubeconfig_path(),
+                        &config_dir,
+                        &cancel,
+                    )
+                    .await;
+                }
+
                 info!(cluster = %cs.cluster_name, "deleting k3d cluster");
                 if let Err(e) = k3d_mgr.delete_cluster().await {
                     warn!(error = %e, "failed to delete k3d cluster");

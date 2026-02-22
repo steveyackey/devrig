@@ -1,3 +1,4 @@
+pub mod addon;
 pub mod deploy;
 pub mod registry;
 pub mod watcher;

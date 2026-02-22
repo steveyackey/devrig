@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use tokio::sync::{broadcast, RwLock};
@@ -16,8 +17,13 @@ pub async fn start_dashboard_server(
     store: Arc<RwLock<TelemetryStore>>,
     events_tx: broadcast::Sender<TelemetryEvent>,
     cancel: CancellationToken,
+    config_path: Option<PathBuf>,
 ) -> anyhow::Result<()> {
-    let state = DashboardState { store, events_tx };
+    let state = DashboardState {
+        store,
+        events_tx,
+        config_path,
+    };
 
     let app = routes::api_router(state.clone())
         .merge(ws::ws_router(state))

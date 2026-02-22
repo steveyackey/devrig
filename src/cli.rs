@@ -133,6 +133,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: QueryCommands,
     },
+
+    /// Manage the devrig Claude Code skill
+    Skill {
+        #[command(subcommand)]
+        command: SkillCommands,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -243,6 +249,16 @@ pub enum QueryCommands {
         /// Output format: table, json, jsonl
         #[arg(long, alias = "output")]
         format: Option<String>,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SkillCommands {
+    /// Install the devrig skill for Claude Code
+    Install {
+        /// Install globally to ~/.claude/skills/ instead of project-local
+        #[arg(long)]
+        global: bool,
     },
 }
 

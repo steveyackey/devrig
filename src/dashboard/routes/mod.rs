@@ -1,3 +1,4 @@
+pub mod config;
 pub mod env;
 pub mod logs;
 pub mod metrics;
@@ -5,9 +6,10 @@ pub mod services;
 pub mod status;
 pub mod traces;
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::Router;
 use tokio::sync::{broadcast, RwLock};
 
@@ -18,6 +20,7 @@ use crate::otel::types::TelemetryEvent;
 pub struct DashboardState {
     pub store: Arc<RwLock<TelemetryStore>>,
     pub events_tx: broadcast::Sender<TelemetryEvent>,
+    pub config_path: Option<PathBuf>,
 }
 
 pub fn api_router(state: DashboardState) -> Router {
@@ -28,5 +31,10 @@ pub fn api_router(state: DashboardState) -> Router {
         .route("/api/logs", get(logs::list_logs))
         .route("/api/metrics", get(metrics::list_metrics))
         .route("/api/status", get(status::get_status))
+        .route(
+            "/api/config",
+            get(config::get_config).put(config::update_config),
+        )
+        .route("/api/config/validate", post(config::validate_config))
         .with_state(state)
 }

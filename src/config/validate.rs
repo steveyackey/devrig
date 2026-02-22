@@ -158,6 +158,67 @@ pub enum ConfigDiagnostic {
         a: String,
         b: String,
     },
+
+    #[error("addon `{addon}` has an empty chart")]
+    #[diagnostic(code(devrig::empty_addon_chart))]
+    EmptyAddonChart {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("chart is empty")]
+        span: SourceSpan,
+        addon: String,
+    },
+
+    #[error("addon `{addon}` has an empty repo")]
+    #[diagnostic(code(devrig::empty_addon_repo))]
+    EmptyAddonRepo {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("repo is empty")]
+        span: SourceSpan,
+        addon: String,
+    },
+
+    #[error("addon `{addon}` has an empty namespace")]
+    #[diagnostic(code(devrig::empty_addon_namespace))]
+    EmptyAddonNamespace {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("namespace is empty")]
+        span: SourceSpan,
+        addon: String,
+    },
+
+    #[error("addon `{addon}` has an empty path")]
+    #[diagnostic(code(devrig::empty_addon_path))]
+    EmptyAddonPath {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("path is empty")]
+        span: SourceSpan,
+        addon: String,
+    },
+
+    #[error("addon port-forward port {port} conflicts with {conflict_with}")]
+    #[diagnostic(code(devrig::addon_port_conflict))]
+    AddonPortConflict {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("addon port conflict")]
+        span: SourceSpan,
+        port: u16,
+        conflict_with: String,
+    },
+
+    #[error("addon name `{name}` conflicts with a cluster.deploy name")]
+    #[diagnostic(code(devrig::addon_name_conflict))]
+    AddonNameConflict {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("addon shares name with a deploy")]
+        span: SourceSpan,
+        name: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -538,6 +599,137 @@ pub fn validate(
                     src: src.clone(),
                     span: find_field_span(source, "cluster.deploy", name, "manifests"),
                     deploy: name.clone(),
+                });
+            }
+        }
+    }
+
+    // Validate cluster addon configs
+    if let Some(cluster) = &config.cluster {
+        for (name, addon) in &cluster.addons {
+            match addon {
+                crate::config::model::AddonConfig::Helm {
+                    chart,
+                    repo,
+                    namespace,
+                    ..
+                } => {
+                    if chart.trim().is_empty() {
+                        errors.push(ConfigDiagnostic::EmptyAddonChart {
+                            src: src.clone(),
+                            span: find_field_span(
+                                source,
+                                &format!("cluster.addons.{}", name),
+                                name,
+                                "chart",
+                            ),
+                            addon: name.clone(),
+                        });
+                    }
+                    if repo.trim().is_empty() {
+                        errors.push(ConfigDiagnostic::EmptyAddonRepo {
+                            src: src.clone(),
+                            span: find_field_span(
+                                source,
+                                &format!("cluster.addons.{}", name),
+                                name,
+                                "repo",
+                            ),
+                            addon: name.clone(),
+                        });
+                    }
+                    if namespace.trim().is_empty() {
+                        errors.push(ConfigDiagnostic::EmptyAddonNamespace {
+                            src: src.clone(),
+                            span: find_field_span(
+                                source,
+                                &format!("cluster.addons.{}", name),
+                                name,
+                                "namespace",
+                            ),
+                            addon: name.clone(),
+                        });
+                    }
+                }
+                crate::config::model::AddonConfig::Manifest { path, .. } => {
+                    if path.trim().is_empty() {
+                        errors.push(ConfigDiagnostic::EmptyAddonPath {
+                            src: src.clone(),
+                            span: find_field_span(
+                                source,
+                                &format!("cluster.addons.{}", name),
+                                name,
+                                "path",
+                            ),
+                            addon: name.clone(),
+                        });
+                    }
+                }
+                crate::config::model::AddonConfig::Kustomize { path, .. } => {
+                    if path.trim().is_empty() {
+                        errors.push(ConfigDiagnostic::EmptyAddonPath {
+                            src: src.clone(),
+                            span: find_field_span(
+                                source,
+                                &format!("cluster.addons.{}", name),
+                                name,
+                                "path",
+                            ),
+                            addon: name.clone(),
+                        });
+                    }
+                }
+            }
+
+            // Check addon port_forward ports don't conflict with service/infra ports
+            for port_str in addon.port_forward().keys() {
+                if let Ok(port) = port_str.parse::<u16>() {
+                    // Check against service ports
+                    for (svc_name, svc) in &config.services {
+                        if let Some(Port::Fixed(p)) = &svc.port {
+                            if *p == port {
+                                errors.push(ConfigDiagnostic::AddonPortConflict {
+                                    src: src.clone(),
+                                    span: find_table_span(source, "cluster.addons", name),
+                                    port,
+                                    conflict_with: format!("service `{}`", svc_name),
+                                });
+                            }
+                        }
+                    }
+                    // Check against infra ports
+                    for (infra_name, infra) in &config.infra {
+                        if let Some(Port::Fixed(p)) = &infra.port {
+                            if *p == port {
+                                errors.push(ConfigDiagnostic::AddonPortConflict {
+                                    src: src.clone(),
+                                    span: find_table_span(source, "cluster.addons", name),
+                                    port,
+                                    conflict_with: format!("infra `{}`", infra_name),
+                                });
+                            }
+                        }
+                    }
+                    // Check against dashboard ports
+                    if let Some(dashboard) = &config.dashboard {
+                        if dashboard.port == port {
+                            errors.push(ConfigDiagnostic::AddonPortConflict {
+                                src: src.clone(),
+                                span: find_table_span(source, "cluster.addons", name),
+                                port,
+                                conflict_with: "dashboard".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+
+            // Check addon names don't conflict with deploy names
+            if cluster.deploy.contains_key(name) {
+                errors.push(ConfigDiagnostic::AddonNameConflict {
+                    src: src.clone(),
+                    span: find_table_span(source, "cluster.addons", name),
+                    name: name.clone(),
                 });
             }
         }
@@ -1136,6 +1328,7 @@ mod tests {
             ports: vec![],
             registry: true,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
+            addons: BTreeMap::new(),
         });
         let source = "[project]\nname = \"test\"\n\n[services.web]\ncommand = \"npm run dev\"\nport = 3000\ndepends_on = [\"api\"]\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1157,6 +1350,7 @@ mod tests {
                 "api".to_string(),
                 make_deploy("./api", "./k8s", vec!["postgres"]),
             )]),
+            addons: BTreeMap::new(),
         });
         let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"postgres\"]\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1171,6 +1365,7 @@ mod tests {
             ports: vec![],
             registry: false,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("", "./k8s", vec![]))]),
+            addons: BTreeMap::new(),
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1189,6 +1384,7 @@ mod tests {
             ports: vec![],
             registry: false,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "", vec![]))]),
+            addons: BTreeMap::new(),
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1214,6 +1410,7 @@ mod tests {
                 "postgres".to_string(),
                 make_deploy("./pg", "./k8s", vec![]),
             )]),
+            addons: BTreeMap::new(),
         });
         let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.deploy.postgres]\ncontext = \"./pg\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1235,6 +1432,7 @@ mod tests {
                 "api".to_string(),
                 make_deploy("./api", "./k8s", vec!["nonexistent"]),
             )]),
+            addons: BTreeMap::new(),
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"nonexistent\"]\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1407,5 +1605,99 @@ http_port = 4318
             e,
             ConfigDiagnostic::DashboardPortsNotDistinct { port: 4318, .. }
         )));
+    }
+
+    // --- v0.6 addon validation tests ---
+
+    #[test]
+    fn validate_addon_empty_chart() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster.addons.traefik]
+type = "helm"
+chart = ""
+repo = "https://traefik.github.io/charts"
+namespace = "traefik"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::EmptyAddonChart { addon, .. } if addon == "traefik"
+        )));
+    }
+
+    #[test]
+    fn validate_addon_port_conflict_with_service() {
+        let source = r#"
+[project]
+name = "test"
+
+[services.api]
+command = "cargo run"
+port = 9000
+
+[cluster.addons.traefik]
+type = "helm"
+chart = "traefik/traefik"
+repo = "https://traefik.github.io/charts"
+namespace = "traefik"
+port_forward = { 9000 = "svc/traefik:9000" }
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs
+            .iter()
+            .any(|e| matches!(e, ConfigDiagnostic::AddonPortConflict { port: 9000, .. })));
+    }
+
+    #[test]
+    fn validate_addon_name_conflict_with_deploy() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster.deploy.traefik]
+context = "./traefik"
+manifests = "./k8s/traefik"
+
+[cluster.addons.traefik]
+type = "helm"
+chart = "traefik/traefik"
+repo = "https://traefik.github.io/charts"
+namespace = "traefik"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::AddonNameConflict { name, .. } if name == "traefik"
+        )));
+    }
+
+    #[test]
+    fn validate_valid_addon_config() {
+        let source = r#"
+[project]
+name = "test"
+
+[services.api]
+command = "cargo run"
+port = 3000
+
+[cluster]
+registry = true
+
+[cluster.addons.traefik]
+type = "helm"
+chart = "traefik/traefik"
+repo = "https://traefik.github.io/charts"
+namespace = "traefik"
+port_forward = { 9000 = "svc/traefik:9000" }
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
     }
 }

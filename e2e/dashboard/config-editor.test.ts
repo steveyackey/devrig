@@ -1,0 +1,77 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Config Editor', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/#/config');
+    // Wait for the config API to respond
+    await page.waitForResponse(
+      (resp) => resp.url().includes('/api/config') && resp.status() === 200,
+    );
+  });
+
+  test('config editor loads current config', async ({ page }) => {
+    // The config view heading should be visible
+    await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible();
+    await expect(page.getByText('Edit devrig.toml')).toBeVisible();
+
+    // The editor should be present with CodeMirror content
+    const editor = page.locator('.cm-editor');
+    await expect(editor).toBeVisible();
+
+    // The save button should be present
+    await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
+  });
+
+  test('shows validation error for invalid TOML', async ({ page }) => {
+    // Wait for the editor to be ready
+    const editor = page.locator('.cm-editor');
+    await expect(editor).toBeVisible();
+
+    // Focus the editor and type invalid TOML
+    const cmContent = page.locator('.cm-content');
+    await cmContent.click();
+
+    // Select all and replace with invalid content
+    await page.keyboard.press('Meta+a');
+    await page.keyboard.press('Control+a');
+    await page.keyboard.type('this is not [valid toml =');
+
+    // Should show a TOML error message
+    await expect(page.getByText(/TOML error/i)).toBeVisible({ timeout: 5000 });
+
+    // Save button should be disabled when there's a validation error
+    const saveButton = page.getByRole('button', { name: 'Save' });
+    await expect(saveButton).toBeDisabled();
+  });
+
+  test('save button persists changes', async ({ page }) => {
+    const editor = page.locator('.cm-editor');
+    await expect(editor).toBeVisible();
+
+    // Focus the editor
+    const cmContent = page.locator('.cm-content');
+    await cmContent.click();
+
+    // Move to end and add a comment
+    await page.keyboard.press('Meta+End');
+    await page.keyboard.press('Control+End');
+    await page.keyboard.press('Enter');
+    await page.keyboard.type('# test comment');
+
+    // Click the save button
+    const saveButton = page.getByRole('button', { name: 'Save' });
+    await expect(saveButton).toBeEnabled();
+
+    const responsePromise = page.waitForResponse(
+      (resp) => resp.url().includes('/api/config') && resp.request().method() === 'PUT',
+    );
+    await saveButton.click();
+    const response = await responsePromise;
+
+    // Save should succeed (200)
+    expect(response.status()).toBe(200);
+
+    // Should show "Saved" status
+    await expect(page.getByText('Saved')).toBeVisible({ timeout: 3000 });
+  });
+});

@@ -1,5 +1,3 @@
-use std::collections::BTreeMap;
-
 #[test]
 fn diff_detects_service_addition() {
     use devrig::config::diff::diff_configs;

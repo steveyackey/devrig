@@ -149,6 +149,34 @@ export function fetchStatus(): Promise<StatusResponse> {
   return fetchJson<StatusResponse>(`${BASE_URL}/api/status`);
 }
 
+// ---- Config API ----
+
+export interface ConfigResponse {
+  content: string;
+  hash: string;
+}
+
+export interface ConfigErrorResponse {
+  error: string;
+}
+
+export async function fetchConfig(): Promise<ConfigResponse> {
+  return fetchJson<ConfigResponse>(`${BASE_URL}/api/config`);
+}
+
+export async function updateConfig(content: string, hash: string): Promise<ConfigResponse> {
+  const response = await fetch(`${BASE_URL}/api/config`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, hash }),
+  });
+  if (!response.ok) {
+    const err = await response.json() as ConfigErrorResponse;
+    throw new Error(err.error || `API error: ${response.status}`);
+  }
+  return response.json();
+}
+
 export function connectWebSocket(onEvent: (event: TelemetryEvent) => void): () => void {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws`;

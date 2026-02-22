@@ -370,6 +370,104 @@ debounces with a 500ms window, rebuilds the Docker image, pushes it to the
 local registry, and triggers a rollout restart. The directories `.git`,
 `node_modules`, `target`, `__pycache__`, and `.devrig` are ignored.
 
+## `[cluster.addons.*]` section
+
+Addons are Helm charts, raw manifests, or Kustomize overlays that devrig
+installs into the cluster after it is created but before services are deployed.
+Use addons for shared infrastructure like ingress controllers, cert-manager,
+or monitoring stacks.
+
+### Helm addon
+
+```toml
+[cluster.addons.traefik]
+type = "helm"
+chart = "traefik/traefik"
+repo = "https://traefik.github.io/charts"
+namespace = "traefik"
+version = "26.0.0"
+
+[cluster.addons.traefik.values]
+deployment.replicas = 1
+
+[cluster.addons.traefik.port_forward]
+8080 = "svc/traefik:80"
+```
+
+### Manifest addon
+
+```toml
+[cluster.addons.monitoring]
+type = "manifest"
+path = "k8s/monitoring.yaml"
+namespace = "monitoring"
+```
+
+### Kustomize addon
+
+```toml
+[cluster.addons.platform]
+type = "kustomize"
+path = "k8s/overlays/dev"
+namespace = "platform"
+```
+
+### Addon fields
+
+**Helm addons** (`type = "helm"`):
+
+| Field          | Type           | Required | Default | Description                              |
+|----------------|----------------|----------|---------|------------------------------------------|
+| `type`         | string         | Yes      | --      | Must be `"helm"`.                        |
+| `chart`        | string         | Yes      | --      | Chart reference (e.g. `repo/chart`).     |
+| `repo`         | string         | Yes      | --      | Helm repository URL.                     |
+| `namespace`    | string         | Yes      | --      | Kubernetes namespace for the release.    |
+| `version`      | string         | No       | (latest)| Chart version constraint.                |
+| `values`       | map            | No       | `{}`    | Values passed via `helm --set`.          |
+| `port_forward` | map            | No       | `{}`    | Local port-forwards (see below).         |
+
+**Manifest addons** (`type = "manifest"`):
+
+| Field          | Type           | Required | Default   | Description                              |
+|----------------|----------------|----------|-----------|------------------------------------------|
+| `type`         | string         | Yes      | --        | Must be `"manifest"`.                    |
+| `path`         | string         | Yes      | --        | Path to YAML manifest, relative to config.|
+| `namespace`    | string         | No       | `default` | Namespace for `kubectl apply`.           |
+| `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).         |
+
+**Kustomize addons** (`type = "kustomize"`):
+
+| Field          | Type           | Required | Default   | Description                              |
+|----------------|----------------|----------|-----------|------------------------------------------|
+| `type`         | string         | Yes      | --        | Must be `"kustomize"`.                   |
+| `path`         | string         | Yes      | --        | Path to kustomization directory.         |
+| `namespace`    | string         | No       | `default` | Namespace for `kubectl apply -k`.        |
+| `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).         |
+
+### Port forwarding
+
+Any addon can declare port-forwards that devrig starts automatically after
+the addon is installed:
+
+```toml
+[cluster.addons.grafana.port_forward]
+3000 = "svc/grafana:80"
+9090 = "svc/prometheus-server:80"
+```
+
+The key is the local port and the value is a `kubectl port-forward` target
+in the format `resource:remotePort`. Port-forwards automatically reconnect
+with exponential backoff if the connection drops.
+
+### Lifecycle
+
+- `devrig start` installs addons in alphabetical order after the cluster is
+  created and before services are deployed. Installation is idempotent
+  (`helm upgrade --install`).
+- `devrig delete` uninstalls addons in reverse alphabetical order before
+  deleting the cluster.
+- Addons appear in the startup summary as `[addon] name`.
+
 ## `[compose]` section
 
 The `[compose]` section delegates infrastructure to an existing
@@ -729,6 +827,17 @@ devrig validate
 devrig validate -f devrig.staging.toml
 ```
 
+### `devrig skill install [--global]`
+
+Install the Claude Code skill file for AI-assisted debugging.
+
+```bash
+devrig skill install           # Install to project .claude/skills/
+devrig skill install --global  # Install to ~/.claude/skills/
+```
+
+See the [Claude Code Skill guide](claude-code-skill.md) for details.
+
 ### `devrig logs [services...] [options]`
 
 Show and filter service logs from the JSONL log file.
@@ -880,5 +989,11 @@ Run `devrig validate` to check your config without starting services.
    be specified.
 8. **Restart policy is valid** -- If `[services.<name>.restart]` is present,
    `policy` must be one of `always`, `on-failure`, or `never`.
+9. **Addon charts are non-empty** -- Helm addons must have a non-empty `chart`
+   and `repo`.
+10. **Addon names are unique** -- Addon names must not conflict with cluster
+    deploy names.
+11. **Addon ports are unique** -- Port-forward local ports must not conflict
+    with service ports.
 
 All validation errors are reported together so you can fix them in one pass.

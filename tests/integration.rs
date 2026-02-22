@@ -2,6 +2,8 @@
 
 mod common;
 
+#[path = "integration/addon_lifecycle.rs"]
+mod addon_lifecycle;
 #[path = "integration/cluster_lifecycle.rs"]
 mod cluster_lifecycle;
 #[path = "integration/cluster_network.rs"]
@@ -14,6 +16,8 @@ mod completions;
 mod compose_interop;
 #[path = "integration/config_diff.rs"]
 mod config_diff;
+#[path = "integration/config_editor.rs"]
+mod config_editor;
 #[path = "integration/config_file_flag.rs"]
 mod config_file_flag;
 #[path = "integration/crash_recovery.rs"]
@@ -48,6 +52,8 @@ mod ready_checks;
 mod reset_command;
 #[path = "integration/service_discovery.rs"]
 mod service_discovery;
+#[path = "integration/skill_install.rs"]
+mod skill_install;
 #[path = "integration/start_stop.rs"]
 mod start_stop;
 #[path = "integration/validate_command.rs"]

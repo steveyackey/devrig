@@ -156,7 +156,7 @@ async fn start_stack(grpc_port: u16, http_port: u16, dashboard_port: u16) -> Can
 
     let dash_cancel = cancel.clone();
     tokio::spawn(async move {
-        let _ = start_dashboard_server(dashboard_port, store, events_tx, dash_cancel).await;
+        let _ = start_dashboard_server(dashboard_port, store, events_tx, dash_cancel, None).await;
     });
 
     tokio::time::sleep(Duration::from_millis(500)).await;

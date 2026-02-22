@@ -235,6 +235,78 @@ pub struct ClusterConfig {
     pub registry: bool,
     #[serde(default)]
     pub deploy: BTreeMap<String, ClusterDeployConfig>,
+    #[serde(default)]
+    pub addons: BTreeMap<String, AddonConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(tag = "type")]
+pub enum AddonConfig {
+    #[serde(rename = "helm")]
+    Helm {
+        chart: String,
+        repo: String,
+        namespace: String,
+        #[serde(default)]
+        version: Option<String>,
+        #[serde(default)]
+        values: BTreeMap<String, toml::Value>,
+        #[serde(default)]
+        port_forward: BTreeMap<String, String>,
+    },
+    #[serde(rename = "manifest")]
+    Manifest {
+        path: String,
+        #[serde(default)]
+        namespace: Option<String>,
+        #[serde(default)]
+        port_forward: BTreeMap<String, String>,
+    },
+    #[serde(rename = "kustomize")]
+    Kustomize {
+        path: String,
+        #[serde(default)]
+        namespace: Option<String>,
+        #[serde(default)]
+        port_forward: BTreeMap<String, String>,
+    },
+}
+
+impl AddonConfig {
+    /// Returns the raw port_forward map for any addon variant.
+    pub fn port_forward(&self) -> &BTreeMap<String, String> {
+        match self {
+            AddonConfig::Helm { port_forward, .. } => port_forward,
+            AddonConfig::Manifest { port_forward, .. } => port_forward,
+            AddonConfig::Kustomize { port_forward, .. } => port_forward,
+        }
+    }
+
+    /// Returns parsed port_forward entries as (local_port, target) pairs.
+    pub fn parsed_port_forwards(&self) -> Vec<(u16, String)> {
+        self.port_forward()
+            .iter()
+            .filter_map(|(k, v)| k.parse::<u16>().ok().map(|port| (port, v.clone())))
+            .collect()
+    }
+
+    /// Returns the namespace for any addon variant.
+    pub fn namespace(&self) -> Option<&str> {
+        match self {
+            AddonConfig::Helm { namespace, .. } => Some(namespace.as_str()),
+            AddonConfig::Manifest { namespace, .. } => namespace.as_deref(),
+            AddonConfig::Kustomize { namespace, .. } => namespace.as_deref(),
+        }
+    }
+
+    /// Returns the addon type as a string.
+    pub fn addon_type(&self) -> &str {
+        match self {
+            AddonConfig::Helm { .. } => "helm",
+            AddonConfig::Manifest { .. } => "manifest",
+            AddonConfig::Kustomize { .. } => "kustomize",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1137,6 +1209,189 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         assert!(config.dashboard.is_none());
+    }
+
+    // --- v0.6 AddonConfig tests ---
+
+    #[test]
+    fn parse_addon_helm_config() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+
+            [cluster.addons.traefik]
+            type = "helm"
+            chart = "traefik/traefik"
+            repo = "https://traefik.github.io/charts"
+            namespace = "traefik"
+            version = "26.0.0"
+            port_forward = { 9000 = "svc/traefik:9000" }
+
+            [cluster.addons.traefik.values]
+            "ports.web.nodePort" = 32080
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert_eq!(cluster.addons.len(), 1);
+        match &cluster.addons["traefik"] {
+            AddonConfig::Helm {
+                chart,
+                repo,
+                namespace,
+                version,
+                values,
+                port_forward,
+            } => {
+                assert_eq!(chart, "traefik/traefik");
+                assert_eq!(repo, "https://traefik.github.io/charts");
+                assert_eq!(namespace, "traefik");
+                assert_eq!(version.as_deref(), Some("26.0.0"));
+                assert_eq!(values.len(), 1);
+                assert_eq!(port_forward.len(), 1);
+                assert_eq!(port_forward["9000"], "svc/traefik:9000");
+            }
+            other => panic!("expected Helm addon, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_addon_manifest_config() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.my-tool]
+            type = "manifest"
+            path = "./k8s/addons/my-tool.yaml"
+            namespace = "tools"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        match &cluster.addons["my-tool"] {
+            AddonConfig::Manifest {
+                path, namespace, ..
+            } => {
+                assert_eq!(path, "./k8s/addons/my-tool.yaml");
+                assert_eq!(namespace.as_deref(), Some("tools"));
+            }
+            other => panic!("expected Manifest addon, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_addon_kustomize_config() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.overlay]
+            type = "kustomize"
+            path = "./k8s/overlays/dev"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        match &cluster.addons["overlay"] {
+            AddonConfig::Kustomize { path, .. } => {
+                assert_eq!(path, "./k8s/overlays/dev");
+            }
+            other => panic!("expected Kustomize addon, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_cluster_without_addons() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert!(cluster.addons.is_empty());
+    }
+
+    #[test]
+    fn parse_addon_port_forward_map() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.traefik]
+            type = "helm"
+            chart = "traefik/traefik"
+            repo = "https://traefik.github.io/charts"
+            namespace = "traefik"
+            port_forward = { 9000 = "svc/traefik:9000", 8080 = "svc/traefik:80" }
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        let pf = cluster.addons["traefik"].port_forward();
+        assert_eq!(pf.len(), 2);
+        assert_eq!(pf["9000"], "svc/traefik:9000");
+        assert_eq!(pf["8080"], "svc/traefik:80");
+    }
+
+    #[test]
+    fn parse_addon_with_values() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.cert-manager]
+            type = "helm"
+            chart = "jetstack/cert-manager"
+            repo = "https://charts.jetstack.io"
+            namespace = "cert-manager"
+
+            [cluster.addons.cert-manager.values]
+            installCRDs = true
+            replicaCount = 2
+            webhook_port = 10250
+            image_tag = "v1.14.0"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        match &cluster.addons["cert-manager"] {
+            AddonConfig::Helm { values, .. } => {
+                assert_eq!(values.len(), 4);
+                assert_eq!(values["installCRDs"], toml::Value::Boolean(true));
+                assert_eq!(values["replicaCount"], toml::Value::Integer(2));
+                assert_eq!(
+                    values["image_tag"],
+                    toml::Value::String("v1.14.0".to_string())
+                );
+            }
+            other => panic!("expected Helm addon, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn addon_config_helper_methods() {
+        let helm = AddonConfig::Helm {
+            chart: "test".to_string(),
+            repo: "https://example.com".to_string(),
+            namespace: "default".to_string(),
+            version: None,
+            values: BTreeMap::new(),
+            port_forward: BTreeMap::from([("8080".to_string(), "svc/test:80".to_string())]),
+        };
+        assert_eq!(helm.addon_type(), "helm");
+        assert_eq!(helm.namespace(), Some("default"));
+        assert_eq!(helm.port_forward().len(), 1);
+
+        let manifest = AddonConfig::Manifest {
+            path: "./test.yaml".to_string(),
+            namespace: None,
+            port_forward: BTreeMap::new(),
+        };
+        assert_eq!(manifest.addon_type(), "manifest");
+        assert_eq!(manifest.namespace(), None);
+        assert!(manifest.port_forward().is_empty());
     }
 
     #[test]

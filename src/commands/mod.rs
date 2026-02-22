@@ -7,4 +7,5 @@ pub mod logs;
 pub mod ps;
 pub mod query;
 pub mod reset;
+pub mod skill;
 pub mod validate;

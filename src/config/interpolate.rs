@@ -340,6 +340,7 @@ mod tests {
                 ports: vec![],
                 registry: false,
                 deploy: BTreeMap::new(),
+                addons: BTreeMap::new(),
             }),
             dashboard: None,
             env: BTreeMap::new(),

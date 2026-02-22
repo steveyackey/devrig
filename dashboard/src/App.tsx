@@ -7,6 +7,7 @@ import TraceDetail from './views/TraceDetail';
 import LogsView from './views/LogsView';
 import MetricsView from './views/MetricsView';
 import StatusView from './views/StatusView';
+import ConfigView from './views/ConfigView';
 
 const App: Component = () => {
   const [route, setRoute] = createSignal(getHashRoute());
@@ -58,6 +59,7 @@ const App: Component = () => {
     if (r === '/logs') return 'logs';
     if (r === '/metrics') return 'metrics';
     if (r === '/status') return 'status';
+    if (r === '/config') return 'config';
     return 'traces'; // fallback
   };
 
@@ -93,6 +95,9 @@ const App: Component = () => {
             </Match>
             <Match when={routeSegment() === 'status'}>
               <StatusView />
+            </Match>
+            <Match when={routeSegment() === 'config'}>
+              <ConfigView />
             </Match>
           </Switch>
         </main>

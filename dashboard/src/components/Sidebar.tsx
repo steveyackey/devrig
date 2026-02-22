@@ -36,6 +36,12 @@ const navItems: NavItem[] = [
     route: '#/status',
     match: (r) => r.startsWith('/status'),
   },
+  {
+    label: 'Config',
+    icon: '\u2699',  // gear
+    route: '#/config',
+    match: (r) => r.startsWith('/config'),
+  },
 ];
 
 const Sidebar: Component<SidebarProps> = (props) => {

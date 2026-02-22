@@ -11,6 +11,7 @@ pub fn run() -> Result<()> {
         ("docker-compose", &["compose", "version"]),
         ("k3d", &["--version"]),
         ("kubectl", &["version", "--client", "--short"]),
+        ("helm", &["version", "--short"]),
         ("cargo-watch", &["watch", "--version"]),
     ];
 

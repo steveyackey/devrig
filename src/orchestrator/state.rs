@@ -28,12 +28,21 @@ pub struct ClusterState {
     pub registry_name: Option<String>,
     pub registry_port: Option<u16>,
     pub deployed_services: BTreeMap<String, ClusterDeployState>,
+    #[serde(default)]
+    pub installed_addons: BTreeMap<String, AddonState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterDeployState {
     pub image_tag: String,
     pub last_deployed: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AddonState {
+    pub addon_type: String,
+    pub namespace: String,
+    pub installed_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
