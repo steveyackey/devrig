@@ -20,6 +20,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Create dashboard dist stub
+        run: mkdir -p dashboard/dist
+        shell: bash
       - run: cargo check
 
   test:
@@ -32,6 +35,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: Create dashboard dist stub
+        run: mkdir -p dashboard/dist
+        shell: bash
       - run: cargo test
 
   clippy:
@@ -43,4 +49,6 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Create dashboard dist stub
+        run: mkdir -p dashboard/dist
       - run: cargo clippy -- -D warnings
