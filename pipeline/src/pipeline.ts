@@ -2,6 +2,7 @@ import { log } from "./log.js";
 import { notify } from "./notify.js";
 import { architect } from "./phases/architect.js";
 import { execute } from "./phases/execute.js";
+import { fix } from "./phases/fix.js";
 import { parse } from "./phases/parse.js";
 import { finalReport, report } from "./phases/report.js";
 import { research } from "./phases/research.js";
@@ -130,9 +131,15 @@ export async function runPipeline(config: PipelineConfig): Promise<void> {
 
 			log("execute_verify_attempt", { milestone: i, attempt, maxRetries: config.maxRetries });
 
-			// Execute
-			const executeCost = await runMilestonePhase("execute", execute, config, i);
-			milestoneCost += executeCost;
+			// Execute (attempt 1) or Fix (attempt 2+)
+			if (attempt === 1) {
+				const executeCost = await runMilestonePhase("execute", execute, config, i);
+				milestoneCost += executeCost;
+			} else {
+				await notify(`devrig-pipeline: ${milestone.version} — running targeted fix (attempt ${attempt})`);
+				const fixCost = await runMilestonePhase("fix", fix, config, i);
+				milestoneCost += fixCost;
+			}
 
 			// Verify
 			const verifyCost = await runMilestonePhase("verify", verify, config, i);
