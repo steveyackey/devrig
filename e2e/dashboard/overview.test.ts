@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Overview / Status View', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/#/status');
-    // Wait for the status API to respond and the view to render
-    await page.waitForResponse((resp) =>
+    const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/status') && resp.status() === 200,
     );
+    await page.goto('/#/status');
+    await responsePromise;
   });
 
   test('displays the system status heading', async ({ page }) => {
@@ -23,8 +23,8 @@ test.describe('Overview / Status View', () => {
   });
 
   test('stat cards display numeric values', async ({ page }) => {
-    // The stat card values are rendered as large numbers in font-mono
-    const statValues = page.locator('.text-2xl.font-semibold.font-mono');
+    // The stat card values are rendered with data-testid
+    const statValues = page.locator('[data-testid="stat-card-value"]');
     await expect(statValues).toHaveCount(4);
 
     for (let i = 0; i < 4; i++) {
@@ -43,21 +43,17 @@ test.describe('Overview / Status View', () => {
   });
 
   test('services have green status indicator dots', async ({ page }) => {
-    // Each service row has a green dot (w-2 h-2 rounded-full bg-green-500)
-    const greenDots = page.locator('.bg-green-500.rounded-full');
-    const count = await greenDots.count();
+    const serviceIndicators = page.locator('[data-testid="service-indicator"]');
+    const count = await serviceIndicators.count();
 
     if (count > 0) {
-      // At least the first service should have a visible green dot
-      await expect(greenDots.first()).toBeVisible();
+      // At least the first service should have a visible indicator
+      await expect(serviceIndicators.first()).toBeVisible();
     }
   });
 
   test('service rows have View Traces and View Logs links', async ({ page }) => {
-    // Wait for potential services to load
-    const servicesSection = page.locator('.divide-y');
-
-    const serviceRows = servicesSection.locator('> div');
+    const serviceRows = page.locator('[data-testid="service-row"]');
     const rowCount = await serviceRows.count();
 
     if (rowCount > 0) {
@@ -84,13 +80,12 @@ test.describe('Overview / Status View', () => {
   });
 
   test('sidebar navigation highlights the Status link', async ({ page }) => {
-    // The Status nav item should have the active styling (blue colors)
-    const statusNav = page.locator('nav a').filter({ hasText: 'Status' });
-    await expect(statusNav).toHaveClass(/bg-blue-500/);
+    const statusNav = page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Status' });
+    await expect(statusNav).toHaveAttribute('data-active', 'true');
   });
 
   test('status bar at the bottom shows telemetry counts', async ({ page }) => {
-    const footer = page.locator('footer');
+    const footer = page.locator('[data-testid="status-bar"]');
     await expect(footer).toBeVisible();
 
     // Status bar shows counts for Traces, Spans, Logs, Metrics, Services

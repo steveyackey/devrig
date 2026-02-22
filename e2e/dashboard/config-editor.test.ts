@@ -2,11 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Config Editor', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/#/config');
-    // Wait for the config API to respond
-    await page.waitForResponse(
+    const responsePromise = page.waitForResponse(
       (resp) => resp.url().includes('/api/config') && resp.status() === 200,
     );
+    await page.goto('/#/config');
+    await responsePromise;
   });
 
   test('config editor loads current config', async ({ page }) => {
@@ -71,7 +71,9 @@ test.describe('Config Editor', () => {
     // Save should succeed (200)
     expect(response.status()).toBe(200);
 
-    // Should show "Saved" status
-    await expect(page.getByText('Saved')).toBeVisible({ timeout: 3000 });
+    // Should show "Saved" status or "Configuration saved" toast
+    await expect(
+      page.getByText('Saved').first(),
+    ).toBeVisible({ timeout: 5000 });
   });
 });

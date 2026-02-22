@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect, onCleanup } from 'solid-js';
 import { fetchStatus, type StatusResponse } from '../api';
+import { Badge } from './ui';
 
 const StatusBar: Component = () => {
   const [status, setStatus] = createSignal<StatusResponse | null>(null);
@@ -22,10 +23,9 @@ const StatusBar: Component = () => {
     onCleanup(() => clearInterval(interval));
   });
 
-  // Monitor WebSocket connectivity by checking if the WS is established
+  // Monitor WebSocket connectivity
   createEffect(() => {
     const checkWs = () => {
-      // We track WS state through a global flag set by App
       setWsConnected(!!(window as any).__devrig_ws_connected);
     };
     checkWs();
@@ -34,42 +34,53 @@ const StatusBar: Component = () => {
   });
 
   return (
-    <footer class="h-8 bg-zinc-900 border-t border-zinc-700/50 flex items-center px-4 text-xs text-zinc-500 gap-6 shrink-0">
+    <footer data-testid="status-bar" class="h-8 bg-surface-1 border-t border-border flex items-center px-4 text-xs text-text-muted gap-6 shrink-0">
       <div class="flex items-center gap-1.5">
         <span
+          data-testid="status-bar-ws-indicator"
           class={`inline-block w-2 h-2 rounded-full ${
-            wsConnected() ? 'bg-green-500' : 'bg-zinc-600'
+            wsConnected() ? 'bg-success animate-pulse-live' : 'bg-surface-3'
           }`}
         />
-        <span>{wsConnected() ? 'Live' : 'Disconnected'}</span>
+        <span data-testid="status-bar-ws-status">{wsConnected() ? 'Live' : 'Disconnected'}</span>
       </div>
 
       {status() && (
         <>
-          <div class="flex items-center gap-1">
-            <span class="text-zinc-600">Traces:</span>
-            <span class="text-zinc-400">{status()!.trace_count.toLocaleString()}</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-text-muted">Traces:</span>
+            <Badge variant="default" class="text-[10px] px-1.5 py-0">
+              <span data-testid="status-bar-traces-count">{status()!.trace_count.toLocaleString()}</span>
+            </Badge>
           </div>
-          <div class="flex items-center gap-1">
-            <span class="text-zinc-600">Spans:</span>
-            <span class="text-zinc-400">{status()!.span_count.toLocaleString()}</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-text-muted">Spans:</span>
+            <Badge variant="default" class="text-[10px] px-1.5 py-0">
+              <span data-testid="status-bar-spans-count">{status()!.span_count.toLocaleString()}</span>
+            </Badge>
           </div>
-          <div class="flex items-center gap-1">
-            <span class="text-zinc-600">Logs:</span>
-            <span class="text-zinc-400">{status()!.log_count.toLocaleString()}</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-text-muted">Logs:</span>
+            <Badge variant="default" class="text-[10px] px-1.5 py-0">
+              <span data-testid="status-bar-logs-count">{status()!.log_count.toLocaleString()}</span>
+            </Badge>
           </div>
-          <div class="flex items-center gap-1">
-            <span class="text-zinc-600">Metrics:</span>
-            <span class="text-zinc-400">{status()!.metric_count.toLocaleString()}</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-text-muted">Metrics:</span>
+            <Badge variant="default" class="text-[10px] px-1.5 py-0">
+              <span data-testid="status-bar-metrics-count">{status()!.metric_count.toLocaleString()}</span>
+            </Badge>
           </div>
-          <div class="flex items-center gap-1">
-            <span class="text-zinc-600">Services:</span>
-            <span class="text-zinc-400">{status()!.services.length}</span>
+          <div class="flex items-center gap-1.5">
+            <span class="text-text-muted">Services:</span>
+            <Badge variant="default" class="text-[10px] px-1.5 py-0">
+              <span data-testid="status-bar-services-count">{status()!.services.length}</span>
+            </Badge>
           </div>
         </>
       )}
 
-      <div class="ml-auto text-zinc-600">
+      <div class="ml-auto text-text-muted">
         {lastUpdated() && `Updated ${lastUpdated()}`}
       </div>
     </footer>

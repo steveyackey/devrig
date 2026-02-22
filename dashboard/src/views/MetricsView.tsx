@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { fetchMetrics, fetchStatus, type StoredMetric, type TelemetryEvent } from '../api';
+import { Badge, Skeleton } from '../components/ui';
 
 interface MetricsViewProps {
   onEvent?: TelemetryEvent | null;
@@ -11,7 +12,6 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
   const [error, setError] = createSignal<string | null>(null);
   const [services, setServices] = createSignal<string[]>([]);
 
-  // Filters
   const [filterName, setFilterName] = createSignal('');
   const [filterService, setFilterService] = createSignal('');
 
@@ -40,13 +40,11 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
     }
   };
 
-  // Initial load
   createEffect(() => {
     loadMetrics();
     loadServices();
   });
 
-  // React to WebSocket metric events
   createEffect(() => {
     const event = props.onEvent;
     if (event && event.type === 'MetricUpdate') {
@@ -78,42 +76,40 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
     return value.toFixed(4);
   };
 
-  const metricTypeColor = (type: string): string => {
+  const metricTypeVariant = (type: string) => {
     switch (type) {
-      case 'Counter': return 'bg-blue-500/20 text-blue-400 border border-blue-500/30';
-      case 'Gauge': return 'bg-green-500/20 text-green-400 border border-green-500/30';
-      case 'Histogram': return 'bg-purple-500/20 text-purple-400 border border-purple-500/30';
-      default: return 'bg-zinc-600/20 text-zinc-400 border border-zinc-600/30';
+      case 'Counter': return 'counter' as const;
+      case 'Gauge': return 'gauge' as const;
+      case 'Histogram': return 'histogram' as const;
+      default: return 'default' as const;
     }
   };
 
   return (
-    <div class="flex flex-col h-full">
-      {/* Header */}
-      <div class="px-6 py-4 border-b border-zinc-700/50">
-        <h2 class="text-lg font-semibold text-zinc-100">Metrics</h2>
-        <p class="text-sm text-zinc-500 mt-0.5">Telemetry metric data points</p>
+    <div data-testid="metrics-view" class="flex flex-col h-full">
+      <div class="px-6 py-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-text-primary">Metrics</h2>
+        <p class="text-sm text-text-muted mt-0.5">Telemetry metric data points</p>
       </div>
 
-      {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-zinc-700/50 flex items-center gap-3 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-2">
-          <label class="text-xs text-zinc-500 uppercase tracking-wider">Metric Name</label>
+          <label class="text-xs text-text-muted uppercase tracking-wider">Metric Name</label>
           <input
             type="text"
             placeholder="Filter by name..."
             value={filterName()}
             onInput={(e) => setFilterName(e.currentTarget.value)}
-            class="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-blue-500 w-48"
+            class="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent w-48"
           />
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-zinc-500 uppercase tracking-wider">Service</label>
+          <label class="text-xs text-text-muted uppercase tracking-wider">Service</label>
           <select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
-            class="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-blue-500 min-w-[140px]"
+            class="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[140px]"
           >
             <option value="">All Services</option>
             <For each={services()}>
@@ -122,10 +118,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
           </select>
         </div>
 
-        <button
-          type="submit"
-          class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-1.5 rounded-md"
-        >
+        <button type="submit" class="bg-accent hover:bg-accent-hover text-white text-sm font-medium px-4 py-1.5 rounded-md transition-colors">
           Search
         </button>
 
@@ -137,46 +130,34 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
             setLoading(true);
             loadMetrics();
           }}
-          class="text-zinc-400 hover:text-zinc-200 text-sm px-3 py-1.5"
+          class="text-text-secondary hover:text-text-primary text-sm px-3 py-1.5"
         >
           Clear
         </button>
 
-        <div class="ml-auto text-xs text-zinc-600">
+        <div data-testid="metrics-count" class="ml-auto text-xs text-text-muted">
           {metrics().length} metric{metrics().length !== 1 ? 's' : ''}
         </div>
       </form>
 
-      {/* Table */}
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
           <div class="px-6 py-8 text-center">
-            <p class="text-red-400 text-sm">{error()}</p>
-            <button
-              onClick={() => { setLoading(true); loadMetrics(); }}
-              class="mt-2 text-blue-400 hover:text-blue-300 text-sm"
-            >
-              Retry
-            </button>
+            <p class="text-error text-sm">{error()}</p>
+            <button onClick={() => { setLoading(true); loadMetrics(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && metrics().length === 0}>
-          <div class="px-6 py-12 text-center text-zinc-500 text-sm">
-            Loading metrics...
+          <div class="px-6 py-4 space-y-2">
+            <For each={[1, 2, 3, 4, 5]}>{() => <Skeleton class="h-8 w-full" />}</For>
           </div>
         </Show>
 
-        <Show when={!loading() && !error() && metrics().length === 0}>
-          <div class="px-6 py-12 text-center text-zinc-500 text-sm">
-            No metrics found. Adjust filters or wait for new data.
-          </div>
-        </Show>
-
-        <Show when={metrics().length > 0}>
+        <Show when={!loading() || metrics().length > 0}>
           <table class="w-full">
             <thead class="sticky top-0 z-10">
-              <tr class="bg-zinc-800/90 backdrop-blur text-xs text-zinc-500 uppercase tracking-wider">
+              <tr class="bg-surface-2/90 backdrop-blur text-xs text-text-muted uppercase tracking-wider">
                 <th class="text-left px-6 py-2.5 font-medium">Time</th>
                 <th class="text-left px-4 py-2.5 font-medium">Service</th>
                 <th class="text-left px-4 py-2.5 font-medium">Metric Name</th>
@@ -186,27 +167,30 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
               </tr>
             </thead>
             <tbody>
+              <Show when={!loading() && !error() && metrics().length === 0}>
+                <tr><td colspan="6" class="px-6 py-12 text-center text-text-muted text-sm">No metrics found. Adjust filters or wait for new data.</td></tr>
+              </Show>
               <For each={metrics()}>
                 {(metric) => (
-                  <tr class="border-b border-zinc-800/30 hover:bg-zinc-800/40">
-                    <td class="px-6 py-2.5 text-xs font-mono text-zinc-500 whitespace-nowrap">
+                  <tr data-testid="metric-row" class="border-b border-border/30 hover:bg-surface-2/40 animate-fade-in">
+                    <td class="px-6 py-2.5 text-xs font-mono text-text-muted whitespace-nowrap">
                       {formatTime(metric.timestamp)}
                     </td>
-                    <td class="px-4 py-2.5 text-sm text-zinc-400">
+                    <td class="px-4 py-2.5 text-sm text-text-muted">
                       {metric.service_name}
                     </td>
-                    <td class="px-4 py-2.5 text-sm text-zinc-300 font-mono">
-                      {metric.metric_name}
+                    <td class="px-4 py-2.5">
+                      <span data-testid="metric-name" class="text-sm text-text-secondary font-mono">{metric.metric_name}</span>
                     </td>
                     <td class="px-4 py-2.5">
-                      <span class={`inline-block text-xs font-medium px-2 py-0.5 rounded ${metricTypeColor(metric.metric_type)}`}>
+                      <Badge data-testid="metric-type-badge" variant={metricTypeVariant(metric.metric_type)}>
                         {metric.metric_type}
-                      </span>
+                      </Badge>
                     </td>
-                    <td class="px-4 py-2.5 text-right text-sm font-mono text-zinc-200">
-                      {formatValue(metric.value)}
+                    <td class="px-4 py-2.5 text-right">
+                      <span data-testid="metric-value" class="text-sm font-mono text-text-primary">{formatValue(metric.value)}</span>
                     </td>
-                    <td class="px-6 py-2.5 text-sm text-zinc-500">
+                    <td class="px-6 py-2.5 text-sm text-text-muted">
                       {metric.unit ?? '-'}
                     </td>
                   </tr>

@@ -1,0 +1,21 @@
+import { splitProps, type JSX, type Component } from 'solid-js';
+import { cn } from '../../lib/cn';
+
+export interface InputProps extends JSX.InputHTMLAttributes<HTMLInputElement> {}
+
+const Input: Component<InputProps> = (props) => {
+  const [local, rest] = splitProps(props, ['class']);
+  return (
+    <input
+      class={cn(
+        'bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm text-text-primary',
+        'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
+        'placeholder:text-text-muted',
+        local.class
+      )}
+      {...rest}
+    />
+  );
+};
+
+export { Input };

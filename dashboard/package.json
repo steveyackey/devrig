@@ -12,9 +12,16 @@
     "@codemirror/language": "^6.12.1",
     "@codemirror/state": "^6.5.4",
     "@codemirror/view": "^6.39.15",
+    "@kobalte/core": "^0.13.11",
+    "@tailwindcss/vite": "^4.2.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
+    "lucide-solid": "^0.575.0",
     "smol-toml": "^1.6.0",
-    "solid-js": "^1.9.0"
+    "solid-js": "^1.9.0",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",

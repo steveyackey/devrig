@@ -3,81 +3,81 @@ import { fetchConfig, updateConfig } from '../api';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
-
-// We use smol-toml for client-side TOML validation
 import { parse as parseToml } from 'smol-toml';
+import { Button } from '../components/ui';
+import { showToast } from '../components/ui/toast';
 
-// Inline dark theme since @codemirror/theme-one-dark is not installed
+// Dark theme matching the new design system
 const darkTheme = EditorView.theme(
   {
     '&': {
-      color: '#e4e4e7',
-      backgroundColor: '#18181b',
+      color: 'var(--color-text-primary)',
+      backgroundColor: 'var(--color-surface-0)',
     },
     '.cm-content': {
-      caretColor: '#60a5fa',
+      caretColor: 'var(--color-accent)',
     },
     '.cm-cursor, .cm-dropCursor': {
-      borderLeftColor: '#60a5fa',
+      borderLeftColor: 'var(--color-accent)',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: '#3f3f46',
+      backgroundColor: 'var(--color-surface-3)',
     },
     '.cm-panels': {
-      backgroundColor: '#27272a',
-      color: '#e4e4e7',
+      backgroundColor: 'var(--color-surface-2)',
+      color: 'var(--color-text-primary)',
     },
     '.cm-panels.cm-panels-top': {
-      borderBottom: '1px solid #3f3f46',
+      borderBottom: '1px solid var(--color-border)',
     },
     '.cm-panels.cm-panels-bottom': {
-      borderTop: '1px solid #3f3f46',
+      borderTop: '1px solid var(--color-border)',
     },
     '.cm-searchMatch': {
       backgroundColor: '#fbbf2440',
       outline: '1px solid #fbbf2480',
     },
     '.cm-searchMatch.cm-searchMatch-selected': {
-      backgroundColor: '#60a5fa40',
+      backgroundColor: 'rgba(99, 102, 241, 0.25)',
     },
     '.cm-activeLine': {
-      backgroundColor: '#27272a50',
+      backgroundColor: 'rgba(26, 34, 54, 0.5)',
     },
     '.cm-selectionMatch': {
-      backgroundColor: '#3f3f4680',
+      backgroundColor: 'rgba(36, 48, 73, 0.5)',
     },
     '&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
-      backgroundColor: '#52525b80',
+      backgroundColor: 'rgba(36, 48, 73, 0.8)',
     },
     '.cm-gutters': {
-      backgroundColor: '#18181b',
-      color: '#52525b',
+      backgroundColor: 'var(--color-surface-0)',
+      color: 'var(--color-text-muted)',
       border: 'none',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: '#27272a50',
+      backgroundColor: 'rgba(26, 34, 54, 0.5)',
     },
     '.cm-foldPlaceholder': {
       backgroundColor: 'transparent',
       border: 'none',
-      color: '#71717a',
+      color: 'var(--color-text-muted)',
     },
     '.cm-tooltip': {
-      border: '1px solid #3f3f46',
-      backgroundColor: '#27272a',
+      border: '1px solid var(--color-border)',
+      backgroundColor: 'var(--color-surface-2)',
     },
     '.cm-tooltip .cm-tooltip-arrow:before': {
       borderTopColor: 'transparent',
       borderBottomColor: 'transparent',
     },
     '.cm-tooltip .cm-tooltip-arrow:after': {
-      borderTopColor: '#27272a',
-      borderBottomColor: '#27272a',
+      borderTopColor: 'var(--color-surface-2)',
+      borderBottomColor: 'var(--color-surface-2)',
     },
     '.cm-tooltip-autocomplete': {
       '& > ul > li[aria-selected]': {
-        backgroundColor: '#3f3f46',
-        color: '#e4e4e7',
+        backgroundColor: 'var(--color-surface-3)',
+        color: 'var(--color-text-primary)',
       },
     },
   },
@@ -132,12 +132,12 @@ const ConfigView: Component = () => {
 
     const content = editorView.state.doc.toString();
 
-    // Client-side TOML validation
     const validErr = validateToml(content);
     if (validErr) {
       setValidationError(validErr);
       setSaveStatus('error');
       setSaveError(`Invalid TOML: ${validErr}`);
+      showToast(`Invalid TOML: ${validErr}`, 'error');
       return;
     }
     setValidationError(null);
@@ -148,7 +148,7 @@ const ConfigView: Component = () => {
       const result = await updateConfig(content, hash());
       setHash(result.hash);
       setSaveStatus('saved');
-      // Reset status after 3 seconds
+      showToast('Configuration saved', 'success');
       setTimeout(() => {
         if (saveStatus() === 'saved') setSaveStatus('idle');
       }, 3000);
@@ -156,9 +156,11 @@ const ConfigView: Component = () => {
       if (err.message?.includes('modified externally')) {
         setSaveStatus('conflict');
         setSaveError('Config was modified externally. Reload to get the latest version.');
+        showToast('Config conflict — reload required', 'error');
       } else {
         setSaveStatus('error');
         setSaveError(err.message || 'Failed to save');
+        showToast(err.message || 'Failed to save', 'error');
       }
     }
   };
@@ -201,11 +203,11 @@ const ConfigView: Component = () => {
 
   const statusColor = () => {
     switch (saveStatus()) {
-      case 'saved': return 'text-green-400';
-      case 'error': return 'text-red-400';
-      case 'conflict': return 'text-yellow-400';
-      case 'saving': return 'text-blue-400';
-      default: return 'text-zinc-500';
+      case 'saved': return 'text-success';
+      case 'error': return 'text-error';
+      case 'conflict': return 'text-warning';
+      case 'saving': return 'text-accent';
+      default: return 'text-text-muted';
     }
   };
 
@@ -221,50 +223,40 @@ const ConfigView: Component = () => {
 
   return (
     <div class="flex flex-col h-full">
-      {/* Header */}
-      <div class="px-6 py-4 border-b border-zinc-700/50 flex items-center justify-between">
+      <div class="px-6 py-4 border-b border-border flex items-center justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-zinc-100">Configuration</h2>
-          <p class="text-sm text-zinc-500 mt-0.5">Edit devrig.toml</p>
+          <h2 class="text-lg font-semibold text-text-primary">Configuration</h2>
+          <p class="text-sm text-text-muted mt-0.5">Edit devrig.toml</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={statusText()}>
             <span class={`text-xs ${statusColor()}`}>{statusText()}</span>
           </Show>
           <Show when={saveStatus() === 'conflict'}>
-            <button
-              onClick={() => loadConfig()}
-              class="bg-yellow-600 hover:bg-yellow-500 text-white text-sm px-3 py-1.5 rounded-md"
-            >
+            <Button variant="destructive" size="sm" onClick={() => loadConfig()}>
               Reload
-            </button>
+            </Button>
           </Show>
-          <button
+          <Button
             onClick={handleSave}
             disabled={saveStatus() === 'saving' || !!validationError()}
-            class="bg-blue-600 hover:bg-blue-500 disabled:bg-zinc-700 disabled:text-zinc-500 text-white text-sm px-4 py-1.5 rounded-md transition-colors"
+            size="sm"
           >
             Save
-          </button>
+          </Button>
         </div>
       </div>
 
-      {/* Editor */}
       <div class="flex-1 overflow-hidden">
         <Show when={error()}>
-          <div class="m-6 bg-red-500/10 border border-red-500/20 rounded-lg p-4 text-center">
-            <p class="text-red-400 text-sm">{error()}</p>
-            <button
-              onClick={() => loadConfig()}
-              class="mt-2 text-blue-400 hover:text-blue-300 text-sm"
-            >
-              Retry
-            </button>
+          <div class="m-6 bg-error/10 border border-error/20 rounded-lg p-4 text-center">
+            <p class="text-error text-sm">{error()}</p>
+            <button onClick={() => loadConfig()} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && !editorView}>
-          <div class="py-12 text-center text-zinc-500 text-sm">
+          <div class="py-12 text-center text-text-muted text-sm">
             Loading configuration...
           </div>
         </Show>

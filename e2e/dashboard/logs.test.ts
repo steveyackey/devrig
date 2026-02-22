@@ -2,10 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Logs View', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/#/logs');
-    await page.waitForResponse((resp) =>
+    const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/logs') && resp.status() === 200,
     );
+    await page.goto('/#/logs');
+    await responsePromise;
   });
 
   test('displays the logs heading', async ({ page }) => {
@@ -44,18 +45,18 @@ test.describe('Logs View', () => {
   });
 
   test('log lines appear with timestamp, severity badge, and body', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="log-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
       const firstRow = rows.first();
 
-      // Timestamp in monospace
-      const timestamp = firstRow.locator('.font-mono.text-zinc-500');
-      await expect(timestamp.first()).toBeVisible();
+      // Timestamp
+      const timestamp = firstRow.locator('[data-testid="log-timestamp"]');
+      await expect(timestamp).toBeVisible();
 
       // Severity badge
-      const severityBadge = firstRow.locator('.rounded .font-medium');
+      const severityBadge = firstRow.locator('[data-testid="log-severity-badge"]');
       await expect(severityBadge).toBeVisible();
       const badgeText = await severityBadge.textContent();
       expect(['Trace', 'Debug', 'Info', 'Warn', 'Error', 'Fatal']).toContain(
@@ -63,18 +64,18 @@ test.describe('Logs View', () => {
       );
 
       // Body text
-      const body = firstRow.locator('.whitespace-pre-wrap');
+      const body = firstRow.locator('[data-testid="log-body"]');
       await expect(body).toBeVisible();
     }
   });
 
   test('severity badges have correct color coding', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="log-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
-      // Check that severity badges exist and have colored styling
-      const badges = page.locator('tbody .rounded');
+      // Check that severity badges exist
+      const badges = page.locator('[data-testid="log-severity-badge"]');
       const badgeCount = await badges.count();
       expect(badgeCount).toBeGreaterThan(0);
 
@@ -101,7 +102,7 @@ test.describe('Logs View', () => {
     await responsePromise;
 
     // All visible severity badges should be Error (or no results)
-    const badges = page.locator('tbody .rounded .font-medium');
+    const badges = page.locator('[data-testid="log-severity-badge"]');
     const count = await badges.count();
     for (let i = 0; i < count; i++) {
       await expect(badges.nth(i)).toHaveText('Error');
@@ -155,14 +156,14 @@ test.describe('Logs View', () => {
   });
 
   test('log count is displayed in filter bar', async ({ page }) => {
-    const countText = page.locator('form .text-zinc-600').last();
+    const countText = page.locator('[data-testid="logs-count"]');
     await expect(countText).toBeVisible();
     const text = await countText.textContent();
     expect(text).toMatch(/\d+ logs?/);
   });
 
   test('logs with trace IDs show clickable trace links', async ({ page }) => {
-    const traceLinks = page.locator('tbody a[href^="#/traces/"]');
+    const traceLinks = page.locator('[data-testid="log-trace-link"]');
     const linkCount = await traceLinks.count();
 
     if (linkCount > 0) {
@@ -177,16 +178,25 @@ test.describe('Logs View', () => {
 
   test('logs without trace IDs show a dash', async ({ page }) => {
     // Some logs may not have trace IDs and should show "-"
-    const dashIndicators = page.locator('tbody td:last-child span.text-zinc-600');
-    const dashCount = await dashIndicators.count();
+    const logRows = page.locator('[data-testid="log-row"]');
+    const rowCount = await logRows.count();
 
-    if (dashCount > 0) {
-      await expect(dashIndicators.first()).toHaveText('-');
+    for (let i = 0; i < rowCount; i++) {
+      const row = logRows.nth(i);
+      const traceLink = row.locator('[data-testid="log-trace-link"]');
+      if ((await traceLink.count()) === 0) {
+        // Row without trace link should have a dash
+        const lastTd = row.locator('td:last-child span');
+        if ((await lastTd.count()) > 0) {
+          await expect(lastTd.first()).toHaveText('-');
+        }
+        break;
+      }
     }
   });
 
   test('sidebar highlights the Logs link', async ({ page }) => {
-    const logsNav = page.locator('nav a').filter({ hasText: 'Logs' });
-    await expect(logsNav).toHaveClass(/bg-blue-500/);
+    const logsNav = page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Logs' });
+    await expect(logsNav).toHaveAttribute('data-active', 'true');
   });
 });

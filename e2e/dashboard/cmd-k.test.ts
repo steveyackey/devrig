@@ -89,35 +89,35 @@ test.describe('Cmd+K Command Palette', () => {
     // This test ensures basic navigation works regardless of Cmd+K implementation
 
     // Navigate to Traces via sidebar
-    await page.locator('nav a').filter({ hasText: 'Traces' }).click();
+    await page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Traces' }).click();
     await expect(page.getByRole('heading', { name: 'Traces' })).toBeVisible();
 
     // Navigate to Logs via sidebar
-    await page.locator('nav a').filter({ hasText: 'Logs' }).click();
+    await page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Logs' }).click();
     await expect(page.getByRole('heading', { name: 'Logs' })).toBeVisible();
 
     // Navigate to Metrics via sidebar
-    await page.locator('nav a').filter({ hasText: 'Metrics' }).click();
+    await page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Metrics' }).click();
     await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible();
 
     // Navigate to Status via sidebar
-    await page.locator('nav a').filter({ hasText: 'Status' }).click();
+    await page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Status' }).click();
     await expect(page.getByRole('heading', { name: 'System Status' })).toBeVisible();
   });
 
   test('sidebar highlights the active route correctly when navigating', async ({ page }) => {
-    const navLinks = page.locator('nav a');
+    const navLinks = page.locator('[data-testid="sidebar-nav-item"]');
 
     // Click Logs
     await navLinks.filter({ hasText: 'Logs' }).click();
-    await expect(navLinks.filter({ hasText: 'Logs' })).toHaveClass(/bg-blue-500/);
-    // Other links should not have active class
-    await expect(navLinks.filter({ hasText: 'Metrics' })).not.toHaveClass(/bg-blue-500/);
+    await expect(navLinks.filter({ hasText: 'Logs' })).toHaveAttribute('data-active', 'true');
+    // Other links should not have active attribute
+    await expect(navLinks.filter({ hasText: 'Metrics' })).not.toHaveAttribute('data-active', 'true');
 
     // Click Metrics
     await navLinks.filter({ hasText: 'Metrics' }).click();
-    await expect(navLinks.filter({ hasText: 'Metrics' })).toHaveClass(/bg-blue-500/);
-    await expect(navLinks.filter({ hasText: 'Logs' })).not.toHaveClass(/bg-blue-500/);
+    await expect(navLinks.filter({ hasText: 'Metrics' })).toHaveAttribute('data-active', 'true');
+    await expect(navLinks.filter({ hasText: 'Logs' })).not.toHaveAttribute('data-active', 'true');
   });
 
   test('keyboard navigation with arrow keys works in palette', async ({ page }) => {

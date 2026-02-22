@@ -60,12 +60,21 @@ function storePreference(theme: Theme) {
 function applyThemeToDocument(theme: Theme) {
   if (typeof document === 'undefined') return;
   const root = document.documentElement;
+  const body = document.body;
+  // Set data-theme attribute for CSS variable overrides
+  root.setAttribute('data-theme', theme);
+  body.setAttribute('data-theme', theme);
+  // Set class on both html and body (tests check body class)
   if (theme === 'dark') {
     root.classList.add('dark');
     root.classList.remove('light');
+    body.classList.add('dark');
+    body.classList.remove('light');
   } else {
     root.classList.add('light');
     root.classList.remove('dark');
+    body.classList.add('light');
+    body.classList.remove('dark');
   }
 }
 

@@ -177,7 +177,7 @@ export async function updateConfig(content: string, hash: string): Promise<Confi
   return response.json();
 }
 
-export function connectWebSocket(onEvent: (event: TelemetryEvent) => void): () => void {
+export function connectWebSocket(onEvent: (event: TelemetryEvent) => void, onOpen?: () => void): () => void {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws`;
 
@@ -192,6 +192,7 @@ export function connectWebSocket(onEvent: (event: TelemetryEvent) => void): () =
 
     ws.onopen = () => {
       console.log('[devrig] WebSocket connected');
+      onOpen?.();
     };
 
     ws.onmessage = (event) => {

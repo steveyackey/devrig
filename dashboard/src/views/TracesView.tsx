@@ -1,5 +1,6 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { fetchTraces, fetchStatus, type TraceSummary, type TelemetryEvent } from '../api';
+import { Badge, Skeleton } from '../components/ui';
 
 interface TracesViewProps {
   onEvent?: TelemetryEvent | null;
@@ -43,7 +44,6 @@ const TracesView: Component<TracesViewProps> = (props) => {
     }
   };
 
-  // Initial load and auto-refresh
   createEffect(() => {
     loadTraces();
     loadServices();
@@ -51,11 +51,9 @@ const TracesView: Component<TracesViewProps> = (props) => {
     onCleanup(() => clearInterval(interval));
   });
 
-  // React to WebSocket trace updates
   createEffect(() => {
     const event = props.onEvent;
     if (event && event.type === 'TraceUpdate') {
-      // Refresh traces when we get a new trace update
       loadTraces();
     }
   });
@@ -87,21 +85,21 @@ const TracesView: Component<TracesViewProps> = (props) => {
   };
 
   return (
-    <div class="flex flex-col h-full">
+    <div data-testid="traces-view" class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-6 py-4 border-b border-zinc-700/50">
-        <h2 class="text-lg font-semibold text-zinc-100">Traces</h2>
-        <p class="text-sm text-zinc-500 mt-0.5">Distributed trace overview</p>
+      <div class="px-6 py-4 border-b border-border">
+        <h2 class="text-lg font-semibold text-text-primary">Traces</h2>
+        <p class="text-sm text-text-muted mt-0.5">Distributed trace overview</p>
       </div>
 
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-zinc-700/50 flex items-center gap-3 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-2">
-          <label class="text-xs text-zinc-500 uppercase tracking-wider">Service</label>
+          <label class="text-xs text-text-muted uppercase tracking-wider">Service</label>
           <select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
-            class="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-blue-500 min-w-[140px]"
+            class="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[140px]"
           >
             <option value="">All Services</option>
             <For each={services()}>
@@ -111,11 +109,11 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-zinc-500 uppercase tracking-wider">Status</label>
+          <label class="text-xs text-text-muted uppercase tracking-wider">Status</label>
           <select
             value={filterStatus()}
             onChange={(e) => setFilterStatus(e.currentTarget.value)}
-            class="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-blue-500 min-w-[120px]"
+            class="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent min-w-[120px]"
           >
             <option value="">All</option>
             <option value="Ok">Ok</option>
@@ -124,19 +122,19 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-zinc-500 uppercase tracking-wider">Min Duration</label>
+          <label class="text-xs text-text-muted uppercase tracking-wider">Min Duration</label>
           <input
             type="number"
             placeholder="ms"
             value={filterMinDuration()}
             onInput={(e) => setFilterMinDuration(e.currentTarget.value)}
-            class="bg-zinc-800 border border-zinc-700 rounded-md px-3 py-1.5 text-sm text-zinc-200 focus:outline-none focus:border-blue-500 w-24"
+            class="bg-surface-2 border border-border rounded-md px-3 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent w-24"
           />
         </div>
 
         <button
           type="submit"
-          class="bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium px-4 py-1.5 rounded-md"
+          class="bg-accent hover:bg-accent-hover text-white text-sm font-medium px-4 py-1.5 rounded-md transition-colors"
         >
           Search
         </button>
@@ -150,12 +148,12 @@ const TracesView: Component<TracesViewProps> = (props) => {
             setLoading(true);
             loadTraces();
           }}
-          class="text-zinc-400 hover:text-zinc-200 text-sm px-3 py-1.5"
+          class="text-text-secondary hover:text-text-primary text-sm px-3 py-1.5"
         >
           Clear
         </button>
 
-        <div class="ml-auto text-xs text-zinc-600">
+        <div data-testid="traces-count" class="ml-auto text-xs text-text-muted">
           {traces().length} trace{traces().length !== 1 ? 's' : ''}
         </div>
       </form>
@@ -164,10 +162,10 @@ const TracesView: Component<TracesViewProps> = (props) => {
       <div class="flex-1 overflow-auto">
         <Show when={error()}>
           <div class="px-6 py-8 text-center">
-            <p class="text-red-400 text-sm">{error()}</p>
+            <p class="text-error text-sm">{error()}</p>
             <button
               onClick={() => { setLoading(true); loadTraces(); }}
-              class="mt-2 text-blue-400 hover:text-blue-300 text-sm"
+              class="mt-2 text-accent hover:text-accent-hover text-sm"
             >
               Retry
             </button>
@@ -175,21 +173,17 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </Show>
 
         <Show when={loading() && traces().length === 0}>
-          <div class="px-6 py-12 text-center text-zinc-500 text-sm">
-            Loading traces...
+          <div class="px-6 py-4 space-y-2">
+            <For each={[1, 2, 3, 4, 5]}>
+              {() => <Skeleton class="h-10 w-full" />}
+            </For>
           </div>
         </Show>
 
-        <Show when={!loading() && !error() && traces().length === 0}>
-          <div class="px-6 py-12 text-center text-zinc-500 text-sm">
-            No traces found. Waiting for telemetry data...
-          </div>
-        </Show>
-
-        <Show when={traces().length > 0}>
+        <Show when={!loading() || traces().length > 0}>
           <table class="w-full">
             <thead class="sticky top-0 z-10">
-              <tr class="bg-zinc-800/90 backdrop-blur text-xs text-zinc-500 uppercase tracking-wider">
+              <tr class="bg-surface-2/90 backdrop-blur text-xs text-text-muted uppercase tracking-wider">
                 <th class="text-left px-6 py-2.5 font-medium">Trace ID</th>
                 <th class="text-left px-4 py-2.5 font-medium">Operation</th>
                 <th class="text-left px-4 py-2.5 font-medium">Services</th>
@@ -200,53 +194,49 @@ const TracesView: Component<TracesViewProps> = (props) => {
               </tr>
             </thead>
             <tbody>
+              <Show when={!loading() && !error() && traces().length === 0}>
+                <tr><td colspan="7" class="px-6 py-12 text-center text-text-muted text-sm">No traces found. Waiting for telemetry data...</td></tr>
+              </Show>
               <For each={traces()}>
                 {(trace) => (
                   <tr
-                    class="border-b border-zinc-800/50 hover:bg-zinc-800/50 cursor-pointer"
+                    data-testid="trace-row"
+                    class="border-b border-border/30 hover:bg-surface-2/50 cursor-pointer transition-colors animate-fade-in"
                     onClick={() => { window.location.hash = `/traces/${trace.trace_id}`; }}
                   >
                     <td class="px-6 py-3">
-                      <span class="font-mono text-sm text-blue-400 hover:text-blue-300">
+                      <span data-testid="trace-id" class="font-mono text-sm text-accent hover:text-accent-hover">
                         {truncateId(trace.trace_id)}
                       </span>
                     </td>
-                    <td class="px-4 py-3 text-sm text-zinc-300 max-w-[200px] truncate">
+                    <td class="px-4 py-3 text-sm text-text-secondary max-w-[200px] truncate">
                       {trace.root_operation || '(unknown)'}
                     </td>
                     <td class="px-4 py-3">
                       <div class="flex flex-wrap gap-1">
                         <For each={trace.services}>
                           {(svc) => (
-                            <span class="inline-block bg-zinc-700/50 text-zinc-300 text-xs px-2 py-0.5 rounded">
-                              {svc}
-                            </span>
+                            <Badge variant="default">{svc}</Badge>
                           )}
                         </For>
                       </div>
                     </td>
                     <td class="px-4 py-3 text-right">
                       <span class={`text-sm font-mono ${
-                        trace.duration_ms > 1000 ? 'text-yellow-400' : 'text-zinc-300'
+                        trace.duration_ms > 1000 ? 'text-warning' : 'text-text-secondary'
                       }`}>
                         {formatDuration(trace.duration_ms)}
                       </span>
                     </td>
-                    <td class="px-4 py-3 text-right text-sm text-zinc-400">
+                    <td class="px-4 py-3 text-right text-sm text-text-muted">
                       {trace.span_count}
                     </td>
                     <td class="px-4 py-3 text-center">
-                      {trace.has_error ? (
-                        <span class="inline-block bg-red-500/15 text-red-400 text-xs font-medium px-2 py-0.5 rounded-full border border-red-500/20">
-                          Error
-                        </span>
-                      ) : (
-                        <span class="inline-block bg-green-500/15 text-green-400 text-xs font-medium px-2 py-0.5 rounded-full border border-green-500/20">
-                          Ok
-                        </span>
-                      )}
+                      <Badge data-testid="trace-status-badge" variant={trace.has_error ? 'error' : 'success'}>
+                        {trace.has_error ? 'Error' : 'Ok'}
+                      </Badge>
                     </td>
-                    <td class="px-6 py-3 text-right text-xs text-zinc-500 font-mono">
+                    <td class="px-6 py-3 text-right text-xs text-text-muted font-mono">
                       {formatTime(trace.start_time)}
                     </td>
                   </tr>

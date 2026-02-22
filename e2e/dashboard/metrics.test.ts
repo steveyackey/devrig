@@ -2,10 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Metrics View', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/#/metrics');
-    await page.waitForResponse((resp) =>
+    const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/metrics') && resp.status() === 200,
     );
+    await page.goto('/#/metrics');
+    await responsePromise;
   });
 
   test('displays the metrics heading', async ({ page }) => {
@@ -41,45 +42,42 @@ test.describe('Metrics View', () => {
   });
 
   test('metric rows render with name, type badge, and value', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="metric-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
       const firstRow = rows.first();
 
-      // Metric name in monospace
-      const metricName = firstRow.locator('.font-mono').first();
+      // Metric name
+      const metricName = firstRow.locator('[data-testid="metric-name"]');
       await expect(metricName).toBeVisible();
 
       // Type badge (Counter, Gauge, or Histogram)
-      const typeBadge = firstRow.locator('.rounded');
-      await expect(typeBadge.first()).toBeVisible();
-      const badgeText = await typeBadge.first().textContent();
+      const typeBadge = firstRow.locator('[data-testid="metric-type-badge"]');
+      await expect(typeBadge).toBeVisible();
+      const badgeText = await typeBadge.textContent();
       expect(['Counter', 'Gauge', 'Histogram']).toContain(badgeText!.trim());
 
       // Numeric value
-      const valueCell = firstRow.locator('td.text-right .font-mono');
+      const valueCell = firstRow.locator('[data-testid="metric-value"]');
       await expect(valueCell).toBeVisible();
     }
   });
 
   test('type badges have correct color coding', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="metric-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
-      // Check that type badges use colored backgrounds
-      const counterBadges = page.locator('.bg-blue-500\\/20');
-      const gaugeBadges = page.locator('.bg-green-500\\/20');
-      const histogramBadges = page.locator('.bg-purple-500\\/20');
+      const typeBadges = page.locator('[data-testid="metric-type-badge"]');
+      const badgeCount = await typeBadges.count();
 
-      const totalTyped =
-        (await counterBadges.count()) +
-        (await gaugeBadges.count()) +
-        (await histogramBadges.count());
-
-      // At least some metric type badges should have colors
-      expect(totalTyped).toBeGreaterThanOrEqual(0);
+      for (let i = 0; i < Math.min(badgeCount, 5); i++) {
+        const badge = typeBadges.nth(i);
+        const classes = await badge.getAttribute('class');
+        // Each badge should have a background color class
+        expect(classes).toMatch(/bg-/);
+      }
     }
   });
 
@@ -149,7 +147,7 @@ test.describe('Metrics View', () => {
   });
 
   test('metric count is displayed in filter bar', async ({ page }) => {
-    const countText = page.locator('form .text-zinc-600').last();
+    const countText = page.locator('[data-testid="metrics-count"]');
     await expect(countText).toBeVisible();
     const text = await countText.textContent();
     expect(text).toMatch(/\d+ metrics?/);
@@ -166,13 +164,13 @@ test.describe('Metrics View', () => {
     await responsePromise;
 
     // Should show empty state or zero count
-    const countText = page.locator('form .text-zinc-600').last();
+    const countText = page.locator('[data-testid="metrics-count"]');
     const text = await countText.textContent();
     expect(text).toMatch(/0 metrics/);
   });
 
   test('sidebar highlights the Metrics link', async ({ page }) => {
-    const metricsNav = page.locator('nav a').filter({ hasText: 'Metrics' });
-    await expect(metricsNav).toHaveClass(/bg-blue-500/);
+    const metricsNav = page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Metrics' });
+    await expect(metricsNav).toHaveAttribute('data-active', 'true');
   });
 });

@@ -2,14 +2,18 @@ import { Component, createSignal, createEffect, onCleanup, Show, Switch, Match }
 import { connectWebSocket, type TelemetryEvent } from './api';
 import Sidebar from './components/Sidebar';
 import StatusBar from './components/StatusBar';
+import CommandPalette from './components/CommandPalette';
 import TracesView from './views/TracesView';
 import TraceDetail from './views/TraceDetail';
 import LogsView from './views/LogsView';
 import MetricsView from './views/MetricsView';
 import StatusView from './views/StatusView';
 import ConfigView from './views/ConfigView';
+import { ToastProvider } from './components/ui';
+import { initTheme } from './lib/theme';
 
 const App: Component = () => {
+  initTheme();
   const [route, setRoute] = createSignal(getHashRoute());
   const [latestEvent, setLatestEvent] = createSignal<TelemetryEvent | null>(null);
 
@@ -38,10 +42,14 @@ const App: Component = () => {
 
   // WebSocket connection
   createEffect(() => {
-    const cleanup = connectWebSocket((event) => {
-      (window as any).__devrig_ws_connected = true;
-      setLatestEvent(event);
-    });
+    const cleanup = connectWebSocket(
+      (event) => {
+        setLatestEvent(event);
+      },
+      () => {
+        (window as any).__devrig_ws_connected = true;
+      },
+    );
 
     (window as any).__devrig_ws_connected = false;
 
@@ -72,40 +80,44 @@ const App: Component = () => {
   };
 
   return (
-    <div class="flex h-screen bg-zinc-900 text-zinc-200 font-sans">
-      {/* Sidebar */}
-      <Sidebar currentRoute={route()} />
+    <>
+      <div data-testid="app-layout" class="flex h-screen bg-surface-0 text-text-primary font-sans">
+        {/* Sidebar */}
+        <Sidebar currentRoute={route()} />
 
-      {/* Main area */}
-      <div class="flex flex-col flex-1 min-w-0">
-        {/* View content */}
-        <main class="flex-1 overflow-hidden bg-zinc-900">
-          <Switch fallback={<TracesView onEvent={latestEvent()} />}>
-            <Match when={routeSegment() === 'traces'}>
-              <TracesView onEvent={latestEvent()} />
-            </Match>
-            <Match when={routeSegment() === 'trace-detail'}>
-              <TraceDetail traceId={traceDetailId()} />
-            </Match>
-            <Match when={routeSegment() === 'logs'}>
-              <LogsView onEvent={latestEvent()} />
-            </Match>
-            <Match when={routeSegment() === 'metrics'}>
-              <MetricsView onEvent={latestEvent()} />
-            </Match>
-            <Match when={routeSegment() === 'status'}>
-              <StatusView />
-            </Match>
-            <Match when={routeSegment() === 'config'}>
-              <ConfigView />
-            </Match>
-          </Switch>
-        </main>
+        {/* Main area */}
+        <div class="flex flex-col flex-1 min-w-0">
+          {/* View content */}
+          <main data-testid="main-content" class="flex-1 overflow-hidden bg-surface-0">
+            <Switch fallback={<TracesView onEvent={latestEvent()} />}>
+              <Match when={routeSegment() === 'traces'}>
+                <TracesView onEvent={latestEvent()} />
+              </Match>
+              <Match when={routeSegment() === 'trace-detail'}>
+                <TraceDetail traceId={traceDetailId()} />
+              </Match>
+              <Match when={routeSegment() === 'logs'}>
+                <LogsView onEvent={latestEvent()} />
+              </Match>
+              <Match when={routeSegment() === 'metrics'}>
+                <MetricsView onEvent={latestEvent()} />
+              </Match>
+              <Match when={routeSegment() === 'status'}>
+                <StatusView />
+              </Match>
+              <Match when={routeSegment() === 'config'}>
+                <ConfigView />
+              </Match>
+            </Switch>
+          </main>
 
-        {/* Status bar */}
-        <StatusBar />
+          {/* Status bar */}
+          <StatusBar />
+        </div>
       </div>
-    </div>
+      <CommandPalette />
+      <ToastProvider />
+    </>
   );
 };
 

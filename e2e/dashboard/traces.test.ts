@@ -2,10 +2,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Traces View', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto('/#/traces');
-    await page.waitForResponse((resp) =>
+    const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/traces') && resp.status() === 200,
     );
+    await page.goto('/#/traces');
+    await responsePromise;
   });
 
   test('displays the traces heading', async ({ page }) => {
@@ -48,18 +49,18 @@ test.describe('Traces View', () => {
   });
 
   test('trace rows render with trace ID, service tags, and status badges', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
       const firstRow = rows.first();
 
-      // Trace ID is a blue monospace link
-      const traceId = firstRow.locator('.font-mono.text-blue-400');
+      // Trace ID
+      const traceId = firstRow.locator('[data-testid="trace-id"]');
       await expect(traceId).toBeVisible();
 
       // Status badge should show either Ok or Error
-      const statusBadge = firstRow.locator('.rounded-full');
+      const statusBadge = firstRow.locator('[data-testid="trace-status-badge"]');
       await expect(statusBadge).toBeVisible();
       const badgeText = await statusBadge.textContent();
       expect(['Ok', 'Error']).toContain(badgeText!.trim());
@@ -67,18 +68,17 @@ test.describe('Traces View', () => {
   });
 
   test('waterfall renders on trace detail navigation', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
-      // Click the first trace row to navigate to detail
-      await rows.first().click();
-      await page.waitForURL(/\/#\/traces\/.+/);
-
-      // Wait for the trace detail API to respond
-      await page.waitForResponse((resp) =>
+      // Set up response listener before click
+      const detailResponse = page.waitForResponse((resp) =>
         resp.url().match(/\/api\/traces\/[^/]+$/) !== null && resp.status() === 200,
       );
+      await rows.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+      await detailResponse;
 
       // The trace detail page should show the waterfall
       await expect(page.getByRole('heading', { name: 'Trace Detail' })).toBeVisible();
@@ -87,8 +87,8 @@ test.describe('Traces View', () => {
       const spansTab = page.getByRole('button', { name: /Spans \(/ });
       await expect(spansTab).toBeVisible();
 
-      // Waterfall bars should be present (the timeline bar containers)
-      const waterfallBars = page.locator('.relative.h-6');
+      // Waterfall bars should be present
+      const waterfallBars = page.locator('[data-testid="waterfall-bar"]');
       const barCount = await waterfallBars.count();
       expect(barCount).toBeGreaterThan(0);
     }
@@ -108,7 +108,7 @@ test.describe('Traces View', () => {
     await responsePromise;
 
     // All visible status badges should be Error (or no results)
-    const badges = page.locator('tbody .rounded-full');
+    const badges = page.locator('[data-testid="trace-status-badge"]');
     const count = await badges.count();
     for (let i = 0; i < count; i++) {
       await expect(badges.nth(i)).toHaveText('Error');
@@ -132,19 +132,20 @@ test.describe('Traces View', () => {
   });
 
   test('span detail panel opens when clicking a span in waterfall', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
       // Navigate to trace detail
-      await rows.first().click();
-      await page.waitForURL(/\/#\/traces\/.+/);
-      await page.waitForResponse((resp) =>
+      const detailResponse = page.waitForResponse((resp) =>
         resp.url().match(/\/api\/traces\/[^/]+$/) !== null && resp.status() === 200,
       );
+      await rows.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+      await detailResponse;
 
       // Click on a span row in the waterfall
-      const spanRows = page.locator('.cursor-pointer').filter({ has: page.locator('.relative.h-6') });
+      const spanRows = page.locator('[data-testid="waterfall-row"]');
       const spanCount = await spanRows.count();
 
       if (spanCount > 0) {
@@ -163,15 +164,16 @@ test.describe('Traces View', () => {
   });
 
   test('trace detail shows tabs for Spans, Logs, and Metrics', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
-      await rows.first().click();
-      await page.waitForURL(/\/#\/traces\/.+/);
-      await page.waitForResponse((resp) =>
+      const detailResponse = page.waitForResponse((resp) =>
         resp.url().match(/\/api\/traces\/[^/]+$/) !== null && resp.status() === 200,
       );
+      await rows.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+      await detailResponse;
 
       // All three tabs should be present
       await expect(page.getByRole('button', { name: /Spans \(/ })).toBeVisible();
@@ -181,7 +183,7 @@ test.describe('Traces View', () => {
   });
 
   test('back to traces link navigates away from detail', async ({ page }) => {
-    const rows = page.locator('tbody tr');
+    const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
     if (rowCount > 0) {
@@ -197,8 +199,7 @@ test.describe('Traces View', () => {
   });
 
   test('trace count is displayed in filter bar', async ({ page }) => {
-    // Should show something like "5 traces" or "0 traces"
-    const countText = page.locator('form .text-zinc-600').last();
+    const countText = page.locator('[data-testid="traces-count"]');
     await expect(countText).toBeVisible();
     const text = await countText.textContent();
     expect(text).toMatch(/\d+ traces?/);

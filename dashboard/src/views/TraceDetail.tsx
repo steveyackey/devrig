@@ -8,6 +8,7 @@ import {
   type StoredMetric,
   type RelatedResponse,
 } from '../api';
+import { Badge, Skeleton, Card, CardHeader, CardContent } from '../components/ui';
 
 interface TraceDetailProps {
   traceId: string;
@@ -45,12 +46,10 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
   };
 
   createEffect(() => {
-    // Re-run when traceId changes
     const _id = props.traceId;
     loadData();
   });
 
-  // Build the span tree
   const spanTree = createMemo((): SpanNode[] => {
     const data = traceData();
     if (!data || data.spans.length === 0) return [];
@@ -59,12 +58,10 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     const byId = new Map<string, SpanNode>();
     const roots: SpanNode[] = [];
 
-    // Create nodes
     for (const span of spans) {
       byId.set(span.span_id, { span, children: [], depth: 0 });
     }
 
-    // Build tree
     for (const span of spans) {
       const node = byId.get(span.span_id)!;
       if (span.parent_span_id && byId.has(span.parent_span_id)) {
@@ -75,11 +72,9 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
       }
     }
 
-    // Calculate depths and flatten
     const setDepths = (nodes: SpanNode[], depth: number) => {
       for (const node of nodes) {
         node.depth = depth;
-        // Sort children by start time
         node.children.sort((a, b) =>
           new Date(a.span.start_time).getTime() - new Date(b.span.start_time).getTime()
         );
@@ -87,7 +82,6 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
       }
     };
 
-    // Sort roots by start time
     roots.sort((a, b) =>
       new Date(a.span.start_time).getTime() - new Date(b.span.start_time).getTime()
     );
@@ -96,7 +90,6 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     return roots;
   });
 
-  // Flatten tree for rendering
   const flattenedSpans = createMemo((): SpanNode[] => {
     const result: SpanNode[] = [];
     const flatten = (nodes: SpanNode[]) => {
@@ -109,7 +102,6 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     return result;
   });
 
-  // Calculate timeline bounds
   const timelineBounds = createMemo(() => {
     const data = traceData();
     if (!data || data.spans.length === 0) return { min: 0, max: 1 };
@@ -141,66 +133,58 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
   const statusColor = (status: string): string => {
     switch (status) {
-      case 'Error': return 'text-red-400';
-      case 'Ok': return 'text-green-400';
-      default: return 'text-zinc-400';
+      case 'Error': return 'text-error';
+      case 'Ok': return 'text-success';
+      default: return 'text-text-muted';
     }
   };
 
-  const statusBgColor = (status: string): string => {
+  const barGradient = (status: string): string => {
     switch (status) {
-      case 'Error': return 'bg-red-500/80';
-      case 'Ok': return 'bg-blue-500/80';
-      default: return 'bg-zinc-500/80';
+      case 'Error': return 'bg-gradient-to-r from-error/80 to-error/50';
+      case 'Ok': return 'bg-gradient-to-r from-accent/80 to-accent/50';
+      default: return 'bg-gradient-to-r from-surface-3/80 to-surface-3/50';
     }
   };
 
-  const severityColor = (severity: string): string => {
+  const severityVariant = (severity: string) => {
     switch (severity) {
-      case 'Fatal': return 'bg-red-600 text-white';
-      case 'Error': return 'bg-red-500/20 text-red-400';
-      case 'Warn': return 'bg-yellow-500/20 text-yellow-400';
-      case 'Info': return 'bg-blue-500/20 text-blue-400';
-      case 'Debug': return 'bg-zinc-600/20 text-zinc-400';
-      case 'Trace': return 'bg-zinc-700/20 text-zinc-500';
-      default: return 'bg-zinc-700/20 text-zinc-400';
+      case 'Fatal': return 'fatal' as const;
+      case 'Error': return 'error' as const;
+      case 'Warn': return 'warning' as const;
+      case 'Info': return 'info' as const;
+      case 'Debug': return 'debug' as const;
+      case 'Trace': return 'trace' as const;
+      default: return 'default' as const;
     }
   };
 
   return (
     <div class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-6 py-4 border-b border-zinc-700/50 flex items-center gap-4">
+      <div class="px-6 py-4 border-b border-border flex items-center gap-4">
         <a
           href="#/traces"
-          class="text-zinc-400 hover:text-zinc-200 text-sm flex items-center gap-1"
+          class="text-text-muted hover:text-text-primary text-sm flex items-center gap-1"
         >
           <span>{'\u2190'}</span> Back to Traces
         </a>
-        <div class="h-4 border-l border-zinc-700" />
+        <div class="h-4 border-l border-border" />
         <div>
-          <h2 class="text-lg font-semibold text-zinc-100 flex items-center gap-2">
+          <h2 class="text-lg font-semibold text-text-primary flex items-center gap-2">
             Trace Detail
             <Show when={traceData()}>
               {(data) => {
                 const hasError = data().spans.some(s => s.status === 'Error');
-                return hasError ? (
-                  <span class="text-xs bg-red-500/15 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">
-                    Error
-                  </span>
-                ) : (
-                  <span class="text-xs bg-green-500/15 text-green-400 px-2 py-0.5 rounded-full border border-green-500/20">
-                    Ok
-                  </span>
-                );
+                return <Badge variant={hasError ? 'error' : 'success'}>{hasError ? 'Error' : 'Ok'}</Badge>;
               }}
             </Show>
           </h2>
-          <p class="text-xs text-zinc-500 font-mono mt-0.5">{props.traceId}</p>
+          <p class="text-xs text-text-muted font-mono mt-0.5">{props.traceId}</p>
         </div>
 
         <Show when={traceData()}>
-          <div class="ml-auto flex items-center gap-4 text-sm text-zinc-400">
+          <div class="ml-auto flex items-center gap-4 text-sm text-text-muted">
             <span>{traceData()!.spans.length} span{traceData()!.spans.length !== 1 ? 's' : ''}</span>
             <span>
               {formatDuration(
@@ -213,18 +197,21 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
       {/* Loading / Error states */}
       <Show when={loading()}>
-        <div class="flex-1 flex items-center justify-center text-zinc-500 text-sm">
-          Loading trace...
+        <div class="flex-1 p-6 space-y-3">
+          <Skeleton class="h-8 w-48" />
+          <For each={[1, 2, 3, 4]}>
+            {() => <Skeleton class="h-10 w-full" />}
+          </For>
         </div>
       </Show>
 
       <Show when={error()}>
         <div class="flex-1 flex items-center justify-center">
           <div class="text-center">
-            <p class="text-red-400 text-sm">{error()}</p>
+            <p class="text-error text-sm">{error()}</p>
             <button
               onClick={loadData}
-              class="mt-2 text-blue-400 hover:text-blue-300 text-sm"
+              class="mt-2 text-accent hover:text-accent-hover text-sm"
             >
               Retry
             </button>
@@ -238,33 +225,33 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {/* Span waterfall */}
           <div class="flex-1 overflow-auto">
             {/* Tabs */}
-            <div class="flex border-b border-zinc-700/50 px-6">
+            <div class="flex border-b border-border px-6">
               <button
                 onClick={() => setActiveTab('spans')}
-                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px ${
+                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                   activeTab() === 'spans'
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}
               >
                 Spans ({traceData()!.spans.length})
               </button>
               <button
                 onClick={() => setActiveTab('logs')}
-                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px ${
+                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                   activeTab() === 'logs'
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}
               >
                 Logs ({related()?.logs.length ?? 0})
               </button>
               <button
                 onClick={() => setActiveTab('metrics')}
-                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px ${
+                class={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
                   activeTab() === 'metrics'
-                    ? 'border-blue-500 text-blue-400'
-                    : 'border-transparent text-zinc-500 hover:text-zinc-300'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-text-muted hover:text-text-secondary'
                 }`}
               >
                 Metrics ({related()?.metrics.length ?? 0})
@@ -275,7 +262,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
             <Show when={activeTab() === 'spans'}>
               <div class="px-2 py-2">
                 <For each={flattenedSpans()} fallback={
-                  <div class="px-6 py-8 text-center text-zinc-500 text-sm">No spans found.</div>
+                  <div class="px-6 py-8 text-center text-text-muted text-sm">No spans found.</div>
                 }>
                   {(node) => {
                     const bounds = timelineBounds();
@@ -288,8 +275,9 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
                     return (
                       <div
-                        class={`flex items-center hover:bg-zinc-800/60 cursor-pointer rounded px-2 py-1 ${
-                          isSelected ? 'bg-zinc-800 ring-1 ring-blue-500/30' : ''
+                        data-testid="waterfall-row"
+                        class={`flex items-center hover:bg-surface-2/60 cursor-pointer rounded px-2 py-1 transition-colors animate-fade-in ${
+                          isSelected ? 'bg-surface-2 ring-1 ring-accent/30' : ''
                         }`}
                         onClick={() => setSelectedSpan(isSelected ? null : node.span)}
                       >
@@ -299,21 +287,21 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                           style={{ width: '280px', "padding-left": `${node.depth * 20}px` }}
                         >
                           <Show when={node.depth > 0}>
-                            <span class="text-zinc-700 text-xs select-none">{'\u2514'}</span>
+                            <span class="text-border text-xs select-none">{'\u2514'}</span>
                           </Show>
-                          <span class="text-xs text-zinc-500 truncate">{node.span.service_name}</span>
-                          <span class="text-zinc-700 text-xs">/</span>
+                          <span class="text-xs text-text-muted truncate">{node.span.service_name}</span>
+                          <span class="text-border text-xs">/</span>
                           <span class={`text-xs truncate ${
-                            node.span.status === 'Error' ? 'text-red-400' : 'text-zinc-300'
+                            node.span.status === 'Error' ? 'text-error' : 'text-text-secondary'
                           }`}>
                             {node.span.operation_name}
                           </span>
                         </div>
 
                         {/* Timeline bar area */}
-                        <div class="flex-1 relative h-6 bg-zinc-800/30 rounded overflow-hidden">
+                        <div data-testid="waterfall-bar" class="flex-1 relative h-6 bg-surface-2/30 rounded overflow-hidden">
                           <div
-                            class={`absolute top-1 bottom-1 rounded-sm ${statusBgColor(node.span.status)}`}
+                            class={`absolute top-1 bottom-1 rounded-sm ${barGradient(node.span.status)}`}
                             style={{
                               left: `${leftPct}%`,
                               width: `${widthPct}%`,
@@ -321,7 +309,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                             }}
                           />
                           <span
-                            class="absolute top-0.5 text-[10px] text-zinc-400 font-mono whitespace-nowrap"
+                            class="absolute top-0.5 text-[10px] text-text-muted font-mono whitespace-nowrap"
                             style={{ left: `${Math.min(leftPct + widthPct + 1, 85)}%` }}
                           >
                             {formatDuration(node.span.duration_ms)}
@@ -338,14 +326,14 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
             <Show when={activeTab() === 'logs'}>
               <div class="overflow-auto">
                 <Show when={related()?.logs.length === 0}>
-                  <div class="px-6 py-8 text-center text-zinc-500 text-sm">
+                  <div class="px-6 py-8 text-center text-text-muted text-sm">
                     No related logs found for this trace.
                   </div>
                 </Show>
                 <table class="w-full">
                   <Show when={(related()?.logs.length ?? 0) > 0}>
                     <thead>
-                      <tr class="text-xs text-zinc-500 uppercase tracking-wider bg-zinc-800/50">
+                      <tr class="text-xs text-text-muted uppercase tracking-wider bg-surface-2/50">
                         <th class="text-left px-4 py-2 font-medium">Time</th>
                         <th class="text-left px-4 py-2 font-medium">Severity</th>
                         <th class="text-left px-4 py-2 font-medium">Service</th>
@@ -356,17 +344,17 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                   <tbody>
                     <For each={related()?.logs ?? []}>
                       {(log) => (
-                        <tr class="border-b border-zinc-800/30 hover:bg-zinc-800/40">
-                          <td class="px-4 py-2 text-xs font-mono text-zinc-500 whitespace-nowrap">
+                        <tr class="border-b border-border/30 hover:bg-surface-2/40">
+                          <td class="px-4 py-2 text-xs font-mono text-text-muted whitespace-nowrap">
                             {new Date(log.timestamp).toLocaleTimeString()}
                           </td>
                           <td class="px-4 py-2">
-                            <span class={`text-xs font-medium px-2 py-0.5 rounded ${severityColor(log.severity)}`}>
+                            <Badge variant={severityVariant(log.severity)}>
                               {log.severity}
-                            </span>
+                            </Badge>
                           </td>
-                          <td class="px-4 py-2 text-xs text-zinc-400">{log.service_name}</td>
-                          <td class="px-4 py-2 text-sm text-zinc-300 font-mono max-w-md truncate">
+                          <td class="px-4 py-2 text-xs text-text-muted">{log.service_name}</td>
+                          <td class="px-4 py-2 text-sm text-text-secondary font-mono max-w-md truncate">
                             {log.body}
                           </td>
                         </tr>
@@ -381,14 +369,14 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
             <Show when={activeTab() === 'metrics'}>
               <div class="overflow-auto">
                 <Show when={related()?.metrics.length === 0}>
-                  <div class="px-6 py-8 text-center text-zinc-500 text-sm">
+                  <div class="px-6 py-8 text-center text-text-muted text-sm">
                     No related metrics found for this trace.
                   </div>
                 </Show>
                 <table class="w-full">
                   <Show when={(related()?.metrics.length ?? 0) > 0}>
                     <thead>
-                      <tr class="text-xs text-zinc-500 uppercase tracking-wider bg-zinc-800/50">
+                      <tr class="text-xs text-text-muted uppercase tracking-wider bg-surface-2/50">
                         <th class="text-left px-4 py-2 font-medium">Time</th>
                         <th class="text-left px-4 py-2 font-medium">Service</th>
                         <th class="text-left px-4 py-2 font-medium">Name</th>
@@ -401,21 +389,19 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                   <tbody>
                     <For each={related()?.metrics ?? []}>
                       {(metric) => (
-                        <tr class="border-b border-zinc-800/30 hover:bg-zinc-800/40">
-                          <td class="px-4 py-2 text-xs font-mono text-zinc-500 whitespace-nowrap">
+                        <tr class="border-b border-border/30 hover:bg-surface-2/40">
+                          <td class="px-4 py-2 text-xs font-mono text-text-muted whitespace-nowrap">
                             {new Date(metric.timestamp).toLocaleTimeString()}
                           </td>
-                          <td class="px-4 py-2 text-xs text-zinc-400">{metric.service_name}</td>
-                          <td class="px-4 py-2 text-sm text-zinc-300 font-mono">{metric.metric_name}</td>
+                          <td class="px-4 py-2 text-xs text-text-muted">{metric.service_name}</td>
+                          <td class="px-4 py-2 text-sm text-text-secondary font-mono">{metric.metric_name}</td>
                           <td class="px-4 py-2">
-                            <span class="text-xs bg-zinc-700/50 text-zinc-400 px-2 py-0.5 rounded">
-                              {metric.metric_type}
-                            </span>
+                            <Badge variant="default">{metric.metric_type}</Badge>
                           </td>
-                          <td class="px-4 py-2 text-right text-sm font-mono text-zinc-300">
+                          <td class="px-4 py-2 text-right text-sm font-mono text-text-secondary">
                             {metric.value.toFixed(2)}
                           </td>
-                          <td class="px-4 py-2 text-xs text-zinc-500">{metric.unit ?? '-'}</td>
+                          <td class="px-4 py-2 text-xs text-text-muted">{metric.unit ?? '-'}</td>
                         </tr>
                       )}
                     </For>
@@ -428,18 +414,18 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {/* Span detail panel */}
           <Show when={selectedSpan()}>
             {(span) => (
-              <div class="w-96 border-l border-zinc-700/50 overflow-auto bg-zinc-900/50 shrink-0">
-                <div class="px-4 py-3 border-b border-zinc-700/50 flex items-center justify-between">
-                  <h3 class="text-sm font-semibold text-zinc-200">Span Details</h3>
+              <Card class="w-96 border-l border-border overflow-auto shrink-0 rounded-none">
+                <CardHeader class="flex flex-row items-center justify-between">
+                  <h3 class="text-sm font-semibold text-text-primary">Span Details</h3>
                   <button
                     onClick={() => setSelectedSpan(null)}
-                    class="text-zinc-500 hover:text-zinc-300 text-sm"
+                    class="text-text-muted hover:text-text-primary text-sm"
                   >
                     {'\u2715'}
                   </button>
-                </div>
+                </CardHeader>
 
-                <div class="p-4 space-y-4">
+                <CardContent class="space-y-4">
                   {/* Core info */}
                   <div class="space-y-2">
                     <DetailRow label="Service" value={span().service_name} />
@@ -448,7 +434,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                     <DetailRow label="Parent Span" value={span().parent_span_id ?? '(root)'} mono />
                     <DetailRow label="Kind" value={span().kind} />
                     <div class="flex items-center justify-between">
-                      <span class="text-xs text-zinc-500">Status</span>
+                      <span class="text-xs text-text-muted">Status</span>
                       <span class={`text-xs font-medium ${statusColor(span().status)}`}>
                         {span().status}
                         {span().status_message ? `: ${span().status_message}` : ''}
@@ -470,15 +456,15 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                   {/* Attributes */}
                   <Show when={span().attributes.length > 0}>
                     <div>
-                      <h4 class="text-xs text-zinc-500 uppercase tracking-wider mb-2">
+                      <h4 class="text-xs text-text-muted uppercase tracking-wider mb-2">
                         Attributes ({span().attributes.length})
                       </h4>
-                      <div class="bg-zinc-800/50 rounded-lg border border-zinc-700/30 divide-y divide-zinc-700/30">
+                      <div class="bg-surface-2/50 rounded-lg border border-border divide-y divide-border">
                         <For each={span().attributes}>
                           {([key, value]) => (
                             <div class="px-3 py-2 flex gap-2">
-                              <span class="text-xs text-zinc-500 shrink-0 font-mono">{key}</span>
-                              <span class="text-xs text-zinc-300 font-mono break-all ml-auto text-right">
+                              <span class="text-xs text-text-muted shrink-0 font-mono">{key}</span>
+                              <span class="text-xs text-text-secondary font-mono break-all ml-auto text-right">
                                 {value}
                               </span>
                             </div>
@@ -487,8 +473,8 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                       </div>
                     </div>
                   </Show>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
           </Show>
         </div>
@@ -499,9 +485,9 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
 const DetailRow: Component<{ label: string; value: string; mono?: boolean }> = (props) => (
   <div class="flex items-center justify-between gap-2">
-    <span class="text-xs text-zinc-500 shrink-0">{props.label}</span>
+    <span class="text-xs text-text-muted shrink-0">{props.label}</span>
     <span
-      class={`text-xs text-zinc-300 truncate text-right ${props.mono ? 'font-mono' : ''}`}
+      class={`text-xs text-text-secondary truncate text-right ${props.mono ? 'font-mono' : ''}`}
       title={props.value}
     >
       {props.value}
