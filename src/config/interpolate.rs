@@ -215,6 +215,7 @@ mod tests {
                 port: Some(Port::Auto),
                 env: BTreeMap::new(),
                 depends_on: vec![],
+                restart: None,
             },
         );
 

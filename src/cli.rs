@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use clap_complete::aot::Shell;
 use std::path::PathBuf;
 
 #[derive(Debug, Parser)]
@@ -59,6 +60,58 @@ pub enum Commands {
     Reset {
         /// Infrastructure service name
         infra: String,
+    },
+
+    /// Validate the configuration file
+    Validate,
+
+    /// Show and filter service logs
+    Logs {
+        /// Services to show logs for (all if empty)
+        services: Vec<String>,
+
+        /// Follow log output (live tail)
+        #[arg(short = 'F', long)]
+        follow: bool,
+
+        /// Show last N lines
+        #[arg(long)]
+        tail: Option<usize>,
+
+        /// Show logs since duration (e.g. "5m", "1h")
+        #[arg(long)]
+        since: Option<String>,
+
+        /// Include only lines matching regex
+        #[arg(short = 'g', long)]
+        grep: Option<String>,
+
+        /// Exclude lines matching regex
+        #[arg(short = 'v', long)]
+        exclude: Option<String>,
+
+        /// Minimum log level (trace, debug, info, warn, error)
+        #[arg(short = 'l', long)]
+        level: Option<String>,
+
+        /// Output format: text or json
+        #[arg(long, default_value = "text")]
+        format: String,
+
+        /// Write output to file
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+
+        /// Show timestamps
+        #[arg(short = 't', long)]
+        timestamps: bool,
+    },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
     },
 
     /// Manage the k3d cluster

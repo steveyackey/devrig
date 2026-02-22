@@ -1,4 +1,5 @@
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::aot::generate;
 use devrig::cli::{Cli, Commands};
 use devrig::commands;
 use devrig::config::resolve::resolve_config;
@@ -32,6 +33,34 @@ async fn main() {
         }
         Commands::Reset { infra } => {
             commands::reset::run(cli.global.config_file.as_deref(), &infra)
+        }
+        Commands::Validate => commands::validate::run(cli.global.config_file.as_deref()),
+        Commands::Logs {
+            services,
+            follow: _,
+            tail,
+            since,
+            grep,
+            exclude,
+            level,
+            format,
+            output,
+            timestamps,
+        } => commands::logs::run(
+            cli.global.config_file.as_deref(),
+            services,
+            tail,
+            since,
+            grep,
+            exclude,
+            level,
+            format,
+            output,
+            timestamps,
+        ),
+        Commands::Completions { shell } => {
+            generate(shell, &mut Cli::command(), "devrig", &mut std::io::stdout());
+            Ok(())
         }
         Commands::Cluster { command } => match command {
             devrig::cli::ClusterCommands::Create => {

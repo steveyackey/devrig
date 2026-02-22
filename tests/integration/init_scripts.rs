@@ -51,19 +51,30 @@ POSTGRES_PASSWORD = "devrig"
         "Postgres should be reachable on port {port}"
     );
 
-    // Wait for state file
+    // Wait for state file (generous timeout for parallel CI with heavy Docker load)
     let state_dir = project.dir.path().join(".devrig");
     let state_file = state_dir.join("state.json");
     let start = std::time::Instant::now();
-    while start.elapsed() < Duration::from_secs(10) {
+    while start.elapsed() < Duration::from_secs(30) {
         if state_file.exists() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        // If child already exited, no point waiting further
+        if child.try_wait().ok().flatten().is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
     }
 
     // Verify init_completed is true
-    let state_json = std::fs::read_to_string(&state_file).expect("state.json should exist");
+    let state_json = std::fs::read_to_string(&state_file).unwrap_or_else(|e| {
+        // Capture child stderr for diagnostics on failure
+        let status = child.try_wait().ok().flatten();
+        panic!(
+            "state.json should exist: {e}; child status: {status:?}; state_dir exists: {}",
+            state_dir.exists()
+        );
+    });
     assert!(
         state_json.contains("\"init_completed\": true")
             || state_json.contains("\"init_completed\":true"),

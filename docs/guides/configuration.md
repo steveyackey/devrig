@@ -100,6 +100,38 @@ The `path` field is resolved relative to the config file location, not the
 current working directory. If omitted, the service runs in the directory
 containing `devrig.toml`.
 
+### Restart configuration
+
+Each service can have a `[services.<name>.restart]` section to control
+restart behavior on crashes:
+
+```toml
+[services.api.restart]
+policy = "on-failure"        # "always", "on-failure", or "never"
+max_restarts = 10            # Max restarts in runtime phase
+startup_max_restarts = 3     # Max restarts during startup grace period
+startup_grace_ms = 2000      # Duration (ms) considered "startup phase"
+initial_delay_ms = 500       # Initial backoff delay before first restart
+max_delay_ms = 30000         # Maximum backoff delay
+```
+
+| Field                  | Type    | Default      | Description                               |
+|------------------------|---------|--------------|-------------------------------------------|
+| `policy`               | string  | `on-failure` | When to restart: `always`, `on-failure`, `never` |
+| `max_restarts`         | integer | `10`         | Max restarts during runtime                |
+| `startup_max_restarts` | integer | `3`          | Max restarts during startup grace period   |
+| `startup_grace_ms`     | integer | `2000`       | Startup phase duration in milliseconds     |
+| `initial_delay_ms`     | integer | `500`        | Initial backoff delay in milliseconds      |
+| `max_delay_ms`         | integer | `30000`      | Maximum backoff delay in milliseconds      |
+
+Restart policies:
+- **`on-failure`** (default): Restart only if the process exits with a non-zero code.
+- **`always`**: Restart regardless of exit code, including clean exits.
+- **`never`**: Never restart. The service stays down after any exit.
+
+If omitted, the service uses sensible defaults (on-failure with exponential
+backoff).
+
 ### Dependencies
 
 The `depends_on` list controls startup order. Dependencies can reference
@@ -571,6 +603,61 @@ running.
 
 Generate a starter `devrig.toml` based on project type detection.
 
+### `devrig validate`
+
+Validate the configuration file and report errors with rich diagnostics.
+Uses rustc-style error messages with source spans, labels, and "did you
+mean?" suggestions for typos.
+
+```bash
+devrig validate
+devrig validate -f devrig.staging.toml
+```
+
+### `devrig logs [services...] [options]`
+
+Show and filter service logs from the JSONL log file.
+
+```bash
+devrig logs                         # All logs
+devrig logs api web                 # Only api and web
+devrig logs --tail 100              # Last 100 lines
+devrig logs --since 5m              # Last 5 minutes
+devrig logs --grep "ERROR"          # Lines matching regex
+devrig logs --exclude "health"      # Exclude lines matching regex
+devrig logs --level warn            # Minimum log level
+devrig logs --format json           # Output as JSONL
+devrig logs -o logs.txt             # Write to file
+devrig logs -t                      # Show timestamps
+```
+
+| Flag          | Short | Description                                     |
+|---------------|-------|-------------------------------------------------|
+| `--follow`    | `-F`  | Follow log output (live tail)                   |
+| `--tail N`    |       | Show last N lines                               |
+| `--since`     |       | Show logs since duration (e.g. `5m`, `1h`, `30s`) |
+| `--grep`      | `-g`  | Include only lines matching regex                |
+| `--exclude`   | `-v`  | Exclude lines matching regex                     |
+| `--level`     | `-l`  | Minimum log level (trace, debug, info, warn, error) |
+| `--format`    |       | Output format: `text` (default) or `json`        |
+| `--output`    | `-o`  | Write output to file                             |
+| `--timestamps`| `-t`  | Show timestamps in output                        |
+
+### `devrig completions <shell>`
+
+Generate shell completions for bash, zsh, fish, elvish, or powershell.
+
+```bash
+# Bash
+devrig completions bash > ~/.local/share/bash-completion/completions/devrig
+
+# Zsh
+devrig completions zsh > ~/.zfunc/_devrig
+
+# Fish
+devrig completions fish > ~/.config/fish/completions/devrig.fish
+```
+
 ## Complete example
 
 ```toml
@@ -658,18 +745,25 @@ With this configuration:
 
 ## Validation rules
 
-devrig validates the configuration before starting any services:
+devrig validates the configuration before starting any services. Errors are
+displayed with rich diagnostics powered by miette, including source spans,
+labels, and "did you mean?" suggestions for typos.
+
+Run `devrig validate` to check your config without starting services.
 
 1. **`[project]` is required** -- The file must contain a `[project]` section
    with a `name` field.
 2. **`command` is required** -- Every service must have a non-empty `command`.
 3. **`image` is required** -- Every infra must have a non-empty `image`.
 4. **Dependencies must exist** -- Every entry in `depends_on` must reference
-   a defined service, infra, or compose service name.
+   a defined service, infra, or compose service name. Typos trigger a "did
+   you mean?" suggestion if a close match exists.
 5. **No duplicate ports** -- Two services or infra cannot declare the same
    fixed port.
 6. **No cycles** -- The dependency graph must be acyclic.
 7. **Compose file is non-empty** -- If `[compose]` is present, `file` must
    be specified.
+8. **Restart policy is valid** -- If `[services.<name>.restart]` is present,
+   `policy` must be one of `always`, `on-failure`, or `never`.
 
 All validation errors are reported together so you can fix them in one pass.

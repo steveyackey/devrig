@@ -8,8 +8,12 @@ mod cluster_lifecycle;
 mod cluster_network;
 #[path = "integration/cluster_registry.rs"]
 mod cluster_registry;
+#[path = "integration/completions.rs"]
+mod completions;
 #[path = "integration/compose_interop.rs"]
 mod compose_interop;
+#[path = "integration/config_diff.rs"]
+mod config_diff;
 #[path = "integration/config_file_flag.rs"]
 mod config_file_flag;
 #[path = "integration/crash_recovery.rs"]
@@ -42,5 +46,7 @@ mod reset_command;
 mod service_discovery;
 #[path = "integration/start_stop.rs"]
 mod start_stop;
+#[path = "integration/validate_command.rs"]
+mod validate_command;
 #[path = "integration/volume_cleanup.rs"]
 mod volume_cleanup;

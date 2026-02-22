@@ -185,6 +185,7 @@ mod tests {
                     port: None,
                     env: BTreeMap::new(),
                     depends_on: deps.into_iter().map(|d| d.to_string()).collect(),
+                    restart: None,
                 },
             );
         }

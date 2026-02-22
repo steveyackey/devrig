@@ -127,6 +127,7 @@ mod tests {
             port: port.map(Port::Fixed),
             env: BTreeMap::new(),
             depends_on: Vec::new(),
+            restart: None,
         }
     }
 

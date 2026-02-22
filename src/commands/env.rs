@@ -13,7 +13,7 @@ pub fn run(config_path: Option<&Path>, service_name: &str) -> Result<()> {
         None => crate::config::resolve::resolve_config(None)?,
     };
 
-    let mut config = config::load_config(&config_path)?;
+    let (mut config, _source) = config::load_config(&config_path)?;
 
     if !config.services.contains_key(service_name) {
         bail!(

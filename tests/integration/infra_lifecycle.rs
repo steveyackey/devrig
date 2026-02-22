@@ -117,7 +117,7 @@ port = {port}
 ready_check = {{ type = "tcp" }}
 
 [services.checker]
-command = "env"
+command = "env && sleep 60"
 depends_on = ["redis"]
 "#
     ));

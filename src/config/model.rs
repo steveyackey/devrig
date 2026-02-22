@@ -23,7 +23,7 @@ pub struct ProjectConfig {
     pub name: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct ServiceConfig {
     #[serde(default)]
     pub path: Option<String>,
@@ -34,9 +34,51 @@ pub struct ServiceConfig {
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub restart: Option<RestartConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+fn default_restart_policy() -> String {
+    "on-failure".to_string()
+}
+
+fn default_max_restarts() -> u32 {
+    10
+}
+
+fn default_startup_max_restarts() -> u32 {
+    3
+}
+
+fn default_startup_grace_ms() -> u64 {
+    2000
+}
+
+fn default_initial_delay_ms() -> u64 {
+    500
+}
+
+fn default_max_delay_ms() -> u64 {
+    30000
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct RestartConfig {
+    #[serde(default = "default_restart_policy")]
+    pub policy: String,
+    #[serde(default = "default_max_restarts")]
+    pub max_restarts: u32,
+    #[serde(default = "default_startup_max_restarts")]
+    pub startup_max_restarts: u32,
+    #[serde(default = "default_startup_grace_ms")]
+    pub startup_grace_ms: u64,
+    #[serde(default = "default_initial_delay_ms")]
+    pub initial_delay_ms: u64,
+    #[serde(default = "default_max_delay_ms")]
+    pub max_delay_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct InfraConfig {
     pub image: String,
     #[serde(default)]
@@ -55,7 +97,7 @@ pub struct InfraConfig {
     pub depends_on: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ReadyCheck {
     #[serde(rename = "pg_isready")]
@@ -128,7 +170,7 @@ pub struct ClusterDeployConfig {
     pub depends_on: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Port {
     Fixed(u16),
     Auto,
@@ -839,5 +881,83 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         assert!(config.cluster.is_none());
+    }
+
+    // --- v0.4 RestartConfig tests ---
+
+    #[test]
+    fn parse_restart_config_all_fields() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [services.api]
+            command = "cargo run"
+            port = 3000
+
+            [services.api.restart]
+            policy = "always"
+            max_restarts = 5
+            startup_max_restarts = 2
+            startup_grace_ms = 3000
+            initial_delay_ms = 1000
+            max_delay_ms = 60000
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let restart = config.services["api"].restart.as_ref().unwrap();
+        assert_eq!(restart.policy, "always");
+        assert_eq!(restart.max_restarts, 5);
+        assert_eq!(restart.startup_max_restarts, 2);
+        assert_eq!(restart.startup_grace_ms, 3000);
+        assert_eq!(restart.initial_delay_ms, 1000);
+        assert_eq!(restart.max_delay_ms, 60000);
+    }
+
+    #[test]
+    fn parse_restart_config_defaults() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [services.api]
+            command = "cargo run"
+
+            [services.api.restart]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let restart = config.services["api"].restart.as_ref().unwrap();
+        assert_eq!(restart.policy, "on-failure");
+        assert_eq!(restart.max_restarts, 10);
+        assert_eq!(restart.startup_max_restarts, 3);
+        assert_eq!(restart.startup_grace_ms, 2000);
+        assert_eq!(restart.initial_delay_ms, 500);
+        assert_eq!(restart.max_delay_ms, 30000);
+    }
+
+    #[test]
+    fn parse_restart_config_absent() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [services.api]
+            command = "cargo run"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(config.services["api"].restart.is_none());
+    }
+
+    #[test]
+    fn service_config_partial_eq() {
+        let a = ServiceConfig {
+            path: None,
+            command: "echo hi".to_string(),
+            port: Some(Port::Fixed(3000)),
+            env: BTreeMap::new(),
+            depends_on: vec![],
+            restart: None,
+        };
+        let b = a.clone();
+        assert_eq!(a, b);
     }
 }

@@ -65,7 +65,7 @@ spec:
     )
     .unwrap();
 
-    let config = devrig::config::load_config(&project.config_path).unwrap();
+    let (config, _source) = devrig::config::load_config(&project.config_path).unwrap();
     let identity =
         devrig::identity::ProjectIdentity::from_config(&config, &project.config_path).unwrap();
     let slug = identity.slug.clone();

@@ -9,7 +9,7 @@ use std::path::PathBuf;
 
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{error, info, warn};
@@ -61,10 +61,15 @@ impl Orchestrator {
     /// Loads and parses the config, validates it, and computes the project
     /// identity and state directory.
     pub fn from_config(config_path: PathBuf) -> Result<Self> {
-        let config = config::load_config(&config_path)
+        let (config, source) = config::load_config(&config_path)
             .with_context(|| format!("loading config from {}", config_path.display()))?;
 
-        if let Err(errors) = validate(&config) {
+        let filename = config_path
+            .file_name()
+            .map(|f| f.to_string_lossy().to_string())
+            .unwrap_or_else(|| "devrig.toml".to_string());
+
+        if let Err(errors) = validate(&config, &source, &filename) {
             let mut msg = String::from("Configuration errors:\n");
             for err in &errors {
                 msg.push_str(&format!("  - {}\n", err));
@@ -478,10 +483,44 @@ impl Orchestrator {
         if !service_names.is_empty() {
             let max_name_len = launch_order.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
 
-            let (log_tx, log_rx) = mpsc::channel::<LogLine>(1024);
-            let log_writer = LogWriter::new(log_rx, max_name_len);
+            // Supervisors send to log_tx (broadcast). A fan-out task distributes
+            // to the terminal writer and the JSONL file writer.
+            let (log_tx, _) = broadcast::channel::<LogLine>(4096);
+            let (display_tx, display_rx) = mpsc::channel::<LogLine>(1024);
+
+            let log_writer = LogWriter::new(display_rx, max_name_len);
             self.tracker.spawn(async move {
                 log_writer.run().await;
+            });
+
+            // JSONL log file writer
+            let logs_dir = self.state_dir.join("logs");
+            let _ = std::fs::create_dir_all(&logs_dir);
+            let jsonl_path = logs_dir.join("current.jsonl");
+            let jsonl_file = std::fs::File::create(&jsonl_path).ok();
+
+            // Fan-out task: subscribes to broadcast, forwards to display + JSONL
+            let mut fan_rx = log_tx.subscribe();
+            self.tracker.spawn(async move {
+                let mut jsonl_writer = jsonl_file.map(std::io::BufWriter::new);
+                loop {
+                    match fan_rx.recv().await {
+                        Ok(line) => {
+                            // Write to JSONL file
+                            if let Some(ref mut w) = jsonl_writer {
+                                use std::io::Write;
+                                if let Ok(json) = serde_json::to_string(&line) {
+                                    let _ = writeln!(w, "{}", json);
+                                    let _ = w.flush();
+                                }
+                            }
+                            // Send to terminal display
+                            let _ = display_tx.send(line).await;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => break,
+                        Err(broadcast::error::RecvError::Lagged(_)) => continue,
+                    }
+                }
             });
 
             for name in &service_names {
@@ -511,12 +550,17 @@ impl Orchestrator {
                     base.join(p)
                 });
 
+                let policy = match &svc.restart {
+                    Some(cfg) => RestartPolicy::from_config(cfg),
+                    None => RestartPolicy::default(),
+                };
+
                 let supervisor = ServiceSupervisor::new(
                     name.clone(),
                     svc.command.clone(),
                     working_dir,
                     env,
-                    RestartPolicy::default(),
+                    policy,
                     log_tx.clone(),
                     self.cancel.clone(),
                 );

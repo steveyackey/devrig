@@ -8,7 +8,7 @@ use crate::identity::ProjectIdentity;
 
 pub async fn run_create(config_file: Option<&Path>) -> Result<()> {
     let config_path = resolve_config(config_file)?;
-    let config = config::load_config(&config_path)?;
+    let (config, _source) = config::load_config(&config_path)?;
     let identity = ProjectIdentity::from_config(&config, &config_path)?;
 
     let cluster_config = config
@@ -41,7 +41,7 @@ pub async fn run_create(config_file: Option<&Path>) -> Result<()> {
 
 pub async fn run_delete(config_file: Option<&Path>) -> Result<()> {
     let config_path = resolve_config(config_file)?;
-    let config = config::load_config(&config_path)?;
+    let (config, _source) = config::load_config(&config_path)?;
     let identity = ProjectIdentity::from_config(&config, &config_path)?;
 
     let cluster_config = config
