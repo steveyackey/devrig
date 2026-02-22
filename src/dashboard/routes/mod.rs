@@ -31,6 +31,7 @@ pub fn api_router(state: DashboardState) -> Router {
         .route("/api/traces/{trace_id}/related", get(traces::get_related))
         .route("/api/logs", get(logs::list_logs))
         .route("/api/metrics", get(metrics::list_metrics))
+        .route("/api/metrics/series", get(metrics::get_metric_series))
         .route("/api/status", get(status::get_status))
         .route(
             "/api/config",

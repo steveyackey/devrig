@@ -5,7 +5,7 @@ Local development orchestrator. Rust CLI + SolidJS dashboard.
 ## Build & Run
 
 ```bash
-cd dashboard && npm run build    # build dashboard frontend
+cd dashboard && bun run build    # build dashboard frontend
 touch src/dashboard/static_files.rs && cargo build  # re-embed frontend into binary
 cargo run -- start               # start from devrig.toml
 ```
@@ -18,17 +18,17 @@ file to force recompile).
 ## Tests
 
 ```bash
-cd e2e && npx playwright test    # 79 dashboard E2E tests (requires running devrig)
-cd e2e && npm run screenshots    # regenerate docs/images/ screenshots (on-demand, seeds OTLP data)
+cd e2e && bunx playwright test    # 79 dashboard E2E tests (requires running devrig)
+cd e2e && bun run screenshots    # regenerate docs/images/ screenshots (on-demand, seeds OTLP data)
 ```
 
 Screenshot tests are excluded from the default test run. They seed telemetry
 via OTLP HTTP, then capture each view. To update screenshots after UI changes:
 
 ```bash
-cd dashboard && npm run build
+cd dashboard && bun run build
 touch src/dashboard/static_files.rs && cargo build
-cd e2e && npm run screenshots
+cd e2e && bun run screenshots
 ```
 
 ## Project Structure
@@ -44,3 +44,7 @@ cd e2e && npm run screenshots
 - Biome for frontend linting (not ESLint)
 - Dashboard state served from `.devrig/state.json`
 - OTLP HTTP default port: 4318, gRPC: 4317, dashboard: 4000
+
+## Package Manager
+
+Use **bun**, not npm. All package management and script running uses bun.

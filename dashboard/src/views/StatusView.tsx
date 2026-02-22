@@ -34,14 +34,14 @@ const StatusView: Component = () => {
 
   return (
     <div data-testid="status-view" class="flex flex-col h-full">
-      <div class="px-6 py-5 border-b border-border flex items-center justify-between">
+      <div class="px-7 py-6 border-b border-border flex items-center justify-between">
         <div>
-          <h2 class="text-lg font-semibold text-text-primary">System Status</h2>
-          <p class="text-sm text-text-muted mt-0.5">Telemetry pipeline overview</p>
+          <h2 class="text-xl font-semibold text-text-primary">System Status</h2>
+          <p class="text-sm text-text-secondary mt-0.5">Telemetry pipeline overview</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={lastRefresh()}>
-            <span class="text-xs text-text-muted">Last refreshed: {lastRefresh()}</span>
+            <span class="text-xs text-text-secondary">Last refreshed: {lastRefresh()}</span>
           </Show>
           <Button variant="outline" size="sm" onClick={() => { setLoading(true); loadStatus(); }}>
             Refresh
@@ -49,7 +49,7 @@ const StatusView: Component = () => {
         </div>
       </div>
 
-      <div class="flex-1 overflow-auto p-6">
+      <div class="flex-1 overflow-auto p-7">
         <Show when={error()}>
           <div class="mb-6 bg-error/10 border border-error/20 rounded-lg p-4 text-center">
             <p class="text-error text-sm">{error()}</p>
@@ -66,8 +66,8 @@ const StatusView: Component = () => {
 
         <Show when={status()}>
           {(data) => (
-            <div class="space-y-6 animate-fade-in">
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div class="space-y-8 animate-fade-in">
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
                   label="Traces"
                   value={formatNumber(data().trace_count)}
@@ -107,17 +107,17 @@ const StatusView: Component = () => {
               </div>
 
               <Card>
-                <div class="px-5 py-4 border-b border-border">
+                <div class="px-6 py-5 border-b border-border">
                   <h3 class="text-sm font-semibold text-text-primary">
                     Services ({serviceList().length || data().services.length})
                   </h3>
-                  <p class="text-xs text-text-muted mt-0.5">
+                  <p class="text-xs text-text-secondary mt-0.5">
                     Configured services and their ports
                   </p>
                 </div>
 
                 <Show when={serviceList().length === 0 && data().services.length === 0}>
-                  <div class="px-5 py-8 text-center text-text-muted text-sm">
+                  <div class="px-5 py-8 text-center text-text-secondary text-sm">
                     No services reporting yet.
                   </div>
                 </Show>
@@ -128,7 +128,7 @@ const StatusView: Component = () => {
                       {(svc) => {
                         const isReporting = () => data().services.includes(svc.name);
                         return (
-                          <div data-testid="service-row" class="px-5 py-4 flex items-center gap-3 hover:bg-surface-2/40 transition-colors">
+                          <div data-testid="service-row" class="px-6 py-5 flex items-center gap-4 hover:bg-surface-2/40 transition-colors">
                             <span
                               data-testid="service-indicator"
                               class={`inline-block w-2 h-2 rounded-full ${isReporting() ? 'bg-success animate-pulse-live' : 'bg-surface-3'}`}
@@ -169,7 +169,7 @@ const StatusView: Component = () => {
                   <div class="divide-y divide-border">
                     <For each={data().services}>
                       {(service) => (
-                        <div data-testid="service-row" class="px-5 py-4 flex items-center gap-3 hover:bg-surface-2/40 transition-colors">
+                        <div data-testid="service-row" class="px-6 py-5 flex items-center gap-4 hover:bg-surface-2/40 transition-colors">
                           <span data-testid="service-indicator" class="inline-block w-2 h-2 rounded-full bg-success animate-pulse-live" />
                           <span class="text-sm text-text-primary font-mono">{service}</span>
                           <div class="ml-auto flex gap-2">
@@ -188,7 +188,7 @@ const StatusView: Component = () => {
               </Card>
 
               <div class="text-center">
-                <p class="text-xs text-text-muted">
+                <p class="text-xs text-text-secondary">
                   Auto-refreshes every 5 seconds
                 </p>
               </div>
@@ -211,12 +211,12 @@ const StatCard: Component<{
 }> = (props) => {
   const Icon = props.icon;
   return (
-    <div data-testid="stat-card" class={`rounded-lg border p-6 bg-gradient-to-br ${props.gradient} ${props.borderColor}`}>
+    <div data-testid="stat-card" class={`rounded-lg border p-7 bg-gradient-to-br ${props.gradient} ${props.borderColor}`}>
       <div class="flex items-center justify-between mb-3">
-        <span data-testid="stat-card-label" class="text-xs text-text-muted uppercase tracking-wider font-medium">{props.label}</span>
+        <span data-testid="stat-card-label" class="text-xs text-text-secondary uppercase tracking-wider font-medium">{props.label}</span>
         <Icon size={20} class={props.iconColor} />
       </div>
-      <div data-testid="stat-card-value" class={`text-2xl font-semibold ${props.valueColor} font-mono`}>{props.value}</div>
+      <div data-testid="stat-card-value" class={`text-3xl font-semibold ${props.valueColor} font-mono`}>{props.value}</div>
     </div>
   );
 };

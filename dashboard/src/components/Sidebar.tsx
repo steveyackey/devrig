@@ -54,22 +54,22 @@ const Sidebar: Component<SidebarProps> = (props) => {
   });
 
   return (
-    <aside data-testid="sidebar" class="w-56 bg-surface-1 border-r border-border flex flex-col h-full shrink-0">
+    <aside data-testid="sidebar" class="w-60 bg-surface-1 border-r border-border flex flex-col h-full shrink-0">
       {/* Header */}
-      <div class="px-5 py-6 border-b border-border">
+      <div class="px-5 py-7 border-b border-border">
         <div class="flex items-center gap-2">
           <div data-testid="sidebar-logo" class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
             DR
           </div>
           <div>
             <h1 class="text-sm font-semibold text-text-primary">DevRig</h1>
-            <p class="text-xs text-text-muted">Observability</p>
+            <p class="text-xs text-text-secondary">Observability</p>
           </div>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav class="flex-1 px-3 py-4 space-y-1.5">
+      <nav class="flex-1 px-3 py-5 space-y-2">
         {navItems.map((item, index) => {
           const isActive = createMemo(() => activeIndex() === index);
           const Icon = item.icon;
@@ -79,13 +79,13 @@ const Sidebar: Component<SidebarProps> = (props) => {
               href={item.route}
               aria-current={isActive() ? 'page' : undefined}
               data-active={isActive() ? 'true' : undefined}
-              class={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
+              class={`flex items-center gap-3 px-3.5 py-3 rounded-lg text-sm font-medium transition-colors ${
                 isActive()
                   ? 'bg-accent/15 text-accent border border-accent/20'
                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-2 border border-transparent'
               }`}
             >
-              <Icon size={18} class={isActive() ? 'text-accent' : 'text-text-muted'} />
+              <Icon size={18} class={isActive() ? 'text-accent' : 'text-text-secondary'} />
               <span>{item.label}</span>
             </a>
           );
@@ -93,12 +93,12 @@ const Sidebar: Component<SidebarProps> = (props) => {
       </nav>
 
       {/* Footer */}
-      <div class="px-4 py-4 border-t border-border flex items-center justify-between">
-        <p class="text-xs text-text-muted">v0.1.0</p>
+      <div class="px-5 py-5 border-t border-border flex items-center justify-between">
+        <p class="text-xs text-text-secondary">v0.1.0</p>
         <button
           data-testid="theme-toggle"
           onClick={toggleTheme}
-          class="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+          class="p-2 rounded-md text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
           aria-label={theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {theme() === 'dark' ? <Sun size={16} /> : <Moon size={16} />}

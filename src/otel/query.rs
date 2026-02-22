@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 use super::storage::TelemetryStore;
-use super::types::{LogSeverity, SpanStatus, StoredLog, StoredMetric, StoredSpan};
+use super::types::{LogSeverity, MetricType, SpanStatus, StoredLog, StoredMetric, StoredSpan};
 
 // -----------------------------------------------------------------------
 // Query parameters
@@ -35,6 +35,33 @@ pub struct MetricQuery {
     pub service: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub limit: Option<usize>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct MetricSeriesQuery {
+    pub name: String,
+    pub service: Option<String>,
+    pub since: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MetricSeriesPoint {
+    pub t: i64,  // unix milliseconds
+    pub v: f64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MetricSeries {
+    pub metric_name: String,
+    pub service_name: String,
+    pub metric_type: MetricType,
+    pub unit: Option<String>,
+    pub points: Vec<MetricSeriesPoint>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct MetricSeriesResponse {
+    pub series: Vec<MetricSeries>,
 }
 
 // -----------------------------------------------------------------------
@@ -275,6 +302,64 @@ impl TelemetryStore {
             services: self.service_names(),
             trace_count: self.trace_index().len(),
         }
+    }
+
+    /// Query metric time-series grouped by metric_name + service_name.
+    pub fn query_metric_series(&self, query: &MetricSeriesQuery) -> MetricSeriesResponse {
+        let since = query.since.unwrap_or_else(|| Utc::now() - chrono::Duration::minutes(5));
+
+        // Group metrics by (metric_name, service_name)
+        let mut groups: HashMap<(String, String), Vec<&StoredMetric>> = HashMap::new();
+
+        for m in self.metrics() {
+            if m.metric_name != query.name {
+                continue;
+            }
+            if let Some(ref svc) = query.service {
+                if &m.service_name != svc {
+                    continue;
+                }
+            }
+            if m.timestamp < since {
+                continue;
+            }
+            groups
+                .entry((m.metric_name.clone(), m.service_name.clone()))
+                .or_default()
+                .push(m);
+        }
+
+        let mut series: Vec<MetricSeries> = groups
+            .into_iter()
+            .map(|((metric_name, service_name), mut metrics)| {
+                // Sort chronologically
+                metrics.sort_by_key(|m| m.timestamp);
+
+                let metric_type = metrics.first().map(|m| m.metric_type).unwrap_or(MetricType::Gauge);
+                let unit = metrics.first().and_then(|m| m.unit.clone());
+
+                let points: Vec<MetricSeriesPoint> = metrics
+                    .iter()
+                    .map(|m| MetricSeriesPoint {
+                        t: m.timestamp.timestamp_millis(),
+                        v: m.value,
+                    })
+                    .collect();
+
+                MetricSeries {
+                    metric_name,
+                    service_name,
+                    metric_type,
+                    unit,
+                    points,
+                }
+            })
+            .collect();
+
+        // Sort series by service_name for consistent ordering
+        series.sort_by(|a, b| a.service_name.cmp(&b.service_name));
+
+        MetricSeriesResponse { series }
     }
 
     /// Get related telemetry for a trace: logs and metrics from the same services

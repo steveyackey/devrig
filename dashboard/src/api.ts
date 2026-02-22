@@ -53,6 +53,23 @@ export interface StoredMetric {
   unit: string | null;
 }
 
+export interface MetricSeriesPoint {
+  t: number;
+  v: number;
+}
+
+export interface MetricSeries {
+  metric_name: string;
+  service_name: string;
+  metric_type: "Gauge" | "Counter" | "Histogram";
+  unit: string | null;
+  points: MetricSeriesPoint[];
+}
+
+export interface MetricSeriesResponse {
+  series: MetricSeries[];
+}
+
 export interface StatusResponse {
   span_count: number;
   log_count: number;
@@ -143,6 +160,18 @@ export function fetchMetrics(params: MetricsParams = {}): Promise<StoredMetric[]
   if (params.limit !== undefined) query.set('limit', String(params.limit));
   const qs = query.toString();
   return fetchJson<StoredMetric[]>(`${BASE_URL}/api/metrics${qs ? '?' + qs : ''}`);
+}
+
+export function fetchMetricSeries(
+  name: string,
+  service?: string,
+  since?: string,
+): Promise<MetricSeriesResponse> {
+  const query = new URLSearchParams();
+  query.set('name', name);
+  if (service) query.set('service', service);
+  if (since) query.set('since', since);
+  return fetchJson<MetricSeriesResponse>(`${BASE_URL}/api/metrics/series?${query.toString()}`);
 }
 
 export function fetchStatus(): Promise<StatusResponse> {
