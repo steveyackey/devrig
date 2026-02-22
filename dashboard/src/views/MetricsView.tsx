@@ -1,4 +1,4 @@
-import { Component, createSignal, createEffect, onCleanup, For, Show, createMemo } from 'solid-js';
+import { Component, createSignal, createEffect, onCleanup, For, Show, createMemo, onMount } from 'solid-js';
 import {
   fetchMetrics,
   fetchMetricSeries,
@@ -261,16 +261,16 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
         </div>
       </form>
 
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto p-7">
         <Show when={error()}>
-          <div class="px-7 py-8 text-center">
+          <div class="py-8 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => { setLoading(true); loadMetrics(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && metrics().length === 0}>
-          <div class="px-7 py-6 space-y-4">
+          <div class="py-6 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
               <For each={[1, 2, 3]}>{() => <Skeleton class="h-28 rounded-lg" />}</For>
             </div>
@@ -278,7 +278,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
         </Show>
 
         <Show when={!loading() || metrics().length > 0}>
-          <div class="p-7 space-y-6 animate-fade-in">
+          <div class="space-y-6 animate-fade-in">
             {/* Metric Cards Grid */}
             <Show when={metricCards().length > 0}>
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -287,7 +287,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
                     <button
                       data-testid="metric-card"
                       onClick={() => handleCardClick(card.name)}
-                      class={`text-left border-2 p-6 transition-all hover:border-border-hover ${
+                      class={`text-left border-2 p-6 transition-all hover:border-border-hover overflow-hidden ${
                         selectedMetric() === card.name
                           ? 'border-accent/40 bg-accent/5'
                           : 'border-border bg-surface-1'
@@ -312,8 +312,8 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
                         </div>
                         <Show when={card.sparklineData}>
                           {(data) => (
-                            <div class="ml-2">
-                              <Sparkline data={data()} width={100} height={32} />
+                            <div class="ml-2 shrink-0 overflow-hidden">
+                              <Sparkline data={data()} width={72} height={28} />
                             </div>
                           )}
                         </Show>
@@ -335,44 +335,66 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
 
             {/* Expanded Chart Panel */}
             <Show when={selectedMetric()}>
-              <div class="border-2 border-border bg-surface-1 p-6">
-                <div class="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 class="text-sm font-semibold text-text-primary font-mono">{selectedMetric()}</h3>
-                    <p class="text-xs text-text-secondary mt-0.5">
-                      {chartSeries().length} series
-                    </p>
+              {(_metric) => {
+                let chartContainerRef: HTMLDivElement | undefined;
+                const [chartWidth, setChartWidth] = createSignal(600);
+
+                onMount(() => {
+                  if (chartContainerRef) {
+                    setChartWidth(chartContainerRef.clientWidth);
+                    const ro = new ResizeObserver((entries) => {
+                      for (const entry of entries) {
+                        setChartWidth(entry.contentRect.width);
+                      }
+                    });
+                    ro.observe(chartContainerRef);
+                    onCleanup(() => ro.disconnect());
+                  }
+                });
+
+                return (
+                  <div class="border-2 border-border bg-surface-1 p-6 overflow-hidden">
+                    <div class="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 class="text-sm font-semibold text-text-primary font-mono">{selectedMetric()}</h3>
+                        <p class="text-xs text-text-secondary mt-0.5">
+                          {chartSeries().length} series
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => { setSelectedMetric(null); setChartSeries([]); }}
+                        class="text-xs text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-surface-2"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div ref={chartContainerRef}>
+                      <Show when={chartLoading()}>
+                        <Skeleton class="h-[300px] w-full rounded" />
+                      </Show>
+                      <Show when={!chartLoading() && chartData()}>
+                        {(data) => {
+                          const type = chartSeries()[0]?.metric_type ?? 'Gauge';
+                          return (
+                            <MetricChart
+                              data={data() as any}
+                              width={chartWidth()}
+                              height={300}
+                              seriesLabels={chartSeries().map((s) => s.service_name)}
+                              chartType={chartTypeForMetric(type)}
+                            />
+                          );
+                        }}
+                      </Show>
+                      <Show when={!chartLoading() && !chartData()}>
+                        <div class="h-[300px] flex items-center justify-center text-text-secondary text-sm">
+                          No time-series data available for this metric.
+                        </div>
+                      </Show>
+                    </div>
                   </div>
-                  <button
-                    onClick={() => { setSelectedMetric(null); setChartSeries([]); }}
-                    class="text-xs text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-surface-2"
-                  >
-                    Close
-                  </button>
-                </div>
-                <Show when={chartLoading()}>
-                  <Skeleton class="h-[300px] w-full rounded" />
-                </Show>
-                <Show when={!chartLoading() && chartData()}>
-                  {(data) => {
-                    const type = chartSeries()[0]?.metric_type ?? 'Gauge';
-                    return (
-                      <MetricChart
-                        data={data() as any}
-                        width={900}
-                        height={300}
-                        seriesLabels={chartSeries().map((s) => s.service_name)}
-                        chartType={chartTypeForMetric(type)}
-                      />
-                    );
-                  }}
-                </Show>
-                <Show when={!chartLoading() && !chartData()}>
-                  <div class="h-[300px] flex items-center justify-center text-text-secondary text-sm">
-                    No time-series data available for this metric.
-                  </div>
-                </Show>
-              </div>
+                );
+              }}
             </Show>
 
             {/* Data Table */}

@@ -31,6 +31,11 @@ touch src/dashboard/static_files.rs && cargo build
 cd e2e && bun run screenshots
 ```
 
+The screenshot script (`bun run screenshots`) deletes old hashed images from
+`docs/images/` and creates new ones, then `update-readme-hashes.ts` rewrites
+README.md references. When committing, use `git add -u docs/images/` (not a
+glob) so that both the new files **and** the deletions of old files are staged.
+
 ## Project Structure
 
 - `src/` — Rust: orchestrator, dashboard server, OTel collector

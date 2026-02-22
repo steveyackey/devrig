@@ -7,21 +7,21 @@ Local development orchestrator.
 devrig includes a built-in observability dashboard that receives OpenTelemetry
 data from your services in real time.
 
-![Status Overview](docs/images/dashboard-status-66d40355.png)
+![Status Overview](docs/images/dashboard-status-08821e88.png)
 
 Drill into any trace to see the full span waterfall across services:
 
-![Traces View](docs/images/dashboard-traces-595b94e3.png)
+![Traces View](docs/images/dashboard-traces-e596caa4.png)
 
-![Trace Detail](docs/images/dashboard-trace-detail-8bc4e721.png)
+![Trace Detail](docs/images/dashboard-trace-detail-1f51514e.png)
 
 Browse and search application logs with severity filtering:
 
-![Logs View](docs/images/dashboard-logs-7ab08b80.png)
+![Logs View](docs/images/dashboard-logs-b0e2fac3.png)
 
 Explore metrics with sparkline cards and expandable time-series charts:
 
-![Metrics View](docs/images/dashboard-metrics-6917881c.png)
+![Metrics View](docs/images/dashboard-metrics-2fa3ace4.png)
 
 ## What is devrig?
 

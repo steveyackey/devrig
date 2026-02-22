@@ -120,7 +120,7 @@ const MetricChart: Component<MetricChartProps> = (props) => {
     chart = null;
   });
 
-  return <div ref={containerRef} class="uplot-container" />;
+  return <div ref={containerRef} class="uplot-container overflow-hidden" />;
 };
 
 export default MetricChart;
@@ -171,5 +171,5 @@ export const Sparkline: Component<{
     chart = null;
   });
 
-  return <div ref={containerRef} />;
+  return <div ref={containerRef} class="overflow-hidden" />;
 };

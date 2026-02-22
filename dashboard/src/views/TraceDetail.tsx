@@ -237,7 +237,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
       <Show when={!loading() && !error() && traceData()}>
         <div class="flex flex-1 overflow-hidden">
           {/* Span waterfall */}
-          <div class="flex-1 overflow-auto">
+          <div class="flex-1 overflow-auto p-7">
             <Tabs defaultValue="spans">
               <TabsList>
                 <TabsTrigger value="spans">
@@ -253,7 +253,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
 
               {/* Spans tab - Waterfall view */}
               <TabsContent value="spans">
-                <div class="px-2 py-2">
+                <div class="py-4">
                   <For each={flattenedSpans()} fallback={
                     <div class="px-7 py-8 text-center text-text-secondary text-sm">No spans found.</div>
                   }>

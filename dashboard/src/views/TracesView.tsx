@@ -159,9 +159,9 @@ const TracesView: Component<TracesViewProps> = (props) => {
       </form>
 
       {/* Table */}
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto p-7">
         <Show when={error()}>
-          <div class="px-7 py-8 text-center">
+          <div class="py-8 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button
               onClick={() => { setLoading(true); loadTraces(); }}
@@ -173,7 +173,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </Show>
 
         <Show when={loading() && traces().length === 0}>
-          <div class="px-7 py-4 space-y-2">
+          <div class="py-4 space-y-2">
             <For each={[1, 2, 3, 4, 5]}>
               {() => <Skeleton class="h-12 w-full" />}
             </For>
@@ -181,6 +181,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </Show>
 
         <Show when={!loading() || traces().length > 0}>
+          <div class="border-2 border-border overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -244,6 +245,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
               </For>
             </tbody>
           </Table>
+          </div>
         </Show>
       </div>
     </div>

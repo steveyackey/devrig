@@ -161,21 +161,22 @@ const LogsView: Component<LogsViewProps> = (props) => {
         </div>
       </form>
 
-      <div class="flex-1 overflow-auto">
+      <div class="flex-1 overflow-auto p-7">
         <Show when={error()}>
-          <div class="px-7 py-8 text-center">
+          <div class="py-8 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => { setLoading(true); loadLogs(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
         </Show>
 
         <Show when={loading() && logs().length === 0}>
-          <div class="px-7 py-4 space-y-2">
+          <div class="py-4 space-y-2">
             <For each={[1, 2, 3, 4, 5]}>{() => <Skeleton class="h-10 w-full" />}</For>
           </div>
         </Show>
 
         <Show when={!loading() || logs().length > 0}>
+          <div class="border-2 border-border overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
@@ -231,6 +232,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
               </For>
             </tbody>
           </Table>
+          </div>
         </Show>
       </div>
     </div>
