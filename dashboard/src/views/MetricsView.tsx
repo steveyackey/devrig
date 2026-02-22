@@ -206,7 +206,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
       {/* Header */}
       <div class="px-7 py-6 border-b border-border">
         <h2 class="text-xl font-semibold text-text-primary">Metrics</h2>
-        <p class="text-sm text-text-secondary mt-0.5">Telemetry metric data points</p>
+        <p class="text-sm text-text-secondary mt-1">Telemetry metric data points</p>
       </div>
 
       {/* Filter Bar */}

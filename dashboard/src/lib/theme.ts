@@ -5,8 +5,9 @@
  * Falls back to the system preference (prefers-color-scheme) when no stored
  * preference exists.
  *
- * The theme is applied by toggling a "dark" class on the <html> element,
- * which works with Tailwind CSS's `darkMode: 'class'` configuration.
+ * The theme is applied by toggling a "dark" class on the <html> element
+ * (registered via `@custom-variant` in index.css) and setting `data-theme`
+ * for CSS variable overrides (Tailwind v4 CSS-based config).
  *
  * Usage:
  *   import { theme, setTheme, toggleTheme, initTheme } from '../lib/theme';

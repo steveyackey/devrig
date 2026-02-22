@@ -226,7 +226,7 @@ const ConfigView: Component = () => {
       <div class="px-7 py-6 border-b border-border flex items-center justify-between">
         <div>
           <h2 class="text-xl font-semibold text-text-primary">Configuration</h2>
-          <p class="text-sm text-text-secondary mt-0.5">Edit devrig.toml</p>
+          <p class="text-sm text-text-secondary mt-1">Edit devrig.toml</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={statusText()}>

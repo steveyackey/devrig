@@ -92,7 +92,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
     <div data-testid="logs-view" class="flex flex-col h-full">
       <div class="px-7 py-6 border-b border-border">
         <h2 class="text-xl font-semibold text-text-primary">Logs</h2>
-        <p class="text-sm text-text-secondary mt-0.5">Application log records</p>
+        <p class="text-sm text-text-secondary mt-1">Application log records</p>
       </div>
 
       <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">

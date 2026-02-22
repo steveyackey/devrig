@@ -54,80 +54,76 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
+@layer base {
+  body {
+    background-color: var(--color-surface-0);
+    color: var(--color-text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    height: 100vh;
+  }
 
-body {
-  background-color: var(--color-surface-0);
-  color: var(--color-text-primary);
-  font-family: var(--font-sans);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  overflow: hidden;
-  height: 100vh;
-}
+  #root {
+    height: 100vh;
+    overflow: hidden;
+  }
 
-#root {
-  height: 100vh;
-  overflow: hidden;
-}
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
 
-/* Custom scrollbar */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
+  ::-webkit-scrollbar-track {
+    background: var(--color-surface-1);
+    border-radius: 4px;
+  }
 
-::-webkit-scrollbar-track {
-  background: var(--color-surface-1);
-  border-radius: 4px;
-}
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-surface-3);
+    border-radius: 4px;
+  }
 
-::-webkit-scrollbar-thumb {
-  background: var(--color-surface-3);
-  border-radius: 4px;
-}
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-muted);
+  }
 
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-text-muted);
-}
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-3) var(--color-surface-1);
+  }
 
-/* Firefox scrollbar */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-surface-3) var(--color-surface-1);
-}
+  /* Table row hover transition */
+  tr {
+    transition: background-color 0.1s ease;
+  }
 
-/* Table row hover transition */
-tr {
-  transition: background-color 0.1s ease;
-}
+  /* Smooth transitions for interactive elements */
+  button, a, input, select {
+    transition: all 0.15s ease;
+  }
 
-/* Smooth transitions for interactive elements */
-button, a, input, select {
-  transition: all 0.15s ease;
-}
+  /* Selection color */
+  ::selection {
+    background-color: var(--color-accent);
+    color: white;
+  }
 
-/* Selection color */
-::selection {
-  background-color: var(--color-accent);
-  color: white;
-}
+  /* Light theme overrides */
+  [data-theme="light"] {
+    --color-surface-0: #f8fafc;
+    --color-surface-1: #ffffff;
+    --color-surface-2: #f1f5f9;
+    --color-surface-3: #e2e8f0;
 
-/* Light theme overrides */
-[data-theme="light"] {
-  --color-surface-0: #f8fafc;
-  --color-surface-1: #ffffff;
-  --color-surface-2: #f1f5f9;
-  --color-surface-3: #e2e8f0;
+    --color-border: #e2e8f0;
+    --color-border-hover: #cbd5e1;
 
-  --color-border: #e2e8f0;
-  --color-border-hover: #cbd5e1;
-
-  --color-text-primary: #0f172a;
-  --color-text-secondary: #475569;
-  --color-text-muted: #64748b;
+    --color-text-primary: #0f172a;
+    --color-text-secondary: #475569;
+    --color-text-muted: #64748b;
+  }
 }

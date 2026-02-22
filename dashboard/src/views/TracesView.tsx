@@ -89,7 +89,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
       {/* Header */}
       <div class="px-7 py-6 border-b border-border">
         <h2 class="text-xl font-semibold text-text-primary">Traces</h2>
-        <p class="text-sm text-text-secondary mt-0.5">Distributed trace overview</p>
+        <p class="text-sm text-text-secondary mt-1">Distributed trace overview</p>
       </div>
 
       {/* Filter Bar */}

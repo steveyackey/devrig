@@ -37,7 +37,7 @@ const StatusView: Component = () => {
       <div class="px-7 py-6 border-b border-border flex items-center justify-between">
         <div>
           <h2 class="text-xl font-semibold text-text-primary">System Status</h2>
-          <p class="text-sm text-text-secondary mt-0.5">Telemetry pipeline overview</p>
+          <p class="text-sm text-text-secondary mt-1">Telemetry pipeline overview</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={lastRefresh()}>
