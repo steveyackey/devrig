@@ -1,19 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const dev = !process.env.CI;
+const ci = !!process.env.CI;
+const screenshots = !!process.env.SCREENSHOTS;
+
+// Use Vite (:5173) only for screenshots in dev — captures live source changes.
+// All other tests use the embedded server (:4000) which is 10x faster.
+const useVite = !ci && screenshots;
 
 export default defineConfig({
   testDir: './dashboard',
   fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  grepInvert: process.env.SCREENSHOTS ? undefined : /@screenshots/,
+  forbidOnly: ci,
+  grepInvert: screenshots ? undefined : /@screenshots/,
   retries: 1,
-  workers: process.env.CI ? 1 : undefined,
+  workers: ci ? 1 : undefined,
   reporter: 'html',
   timeout: 30_000,
 
   use: {
-    baseURL: dev ? 'http://localhost:5173' : 'http://localhost:4000',
+    baseURL: useVite ? 'http://localhost:5173' : 'http://localhost:4000',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     colorScheme: 'dark',
@@ -27,12 +32,12 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: dev
+    command: useVite
       ? 'cargo run -- start --dev -f devrig.run.toml'
       : 'cargo run -- start -f devrig.run.toml',
     cwd: '..',
     url: 'http://localhost:4000/api/status',
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: !ci,
     timeout: 120_000,
   },
 });
