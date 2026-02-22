@@ -18,6 +18,8 @@ mod config_diff;
 mod config_file_flag;
 #[path = "integration/crash_recovery.rs"]
 mod crash_recovery;
+#[path = "integration/dashboard_api.rs"]
+mod dashboard_api;
 #[path = "integration/dir_discovery.rs"]
 mod dir_discovery;
 #[path = "integration/env_command.rs"]
@@ -34,6 +36,8 @@ mod leaked_resources;
 mod multi_instance;
 #[path = "integration/network_tests.rs"]
 mod network_tests;
+#[path = "integration/otel_ingest.rs"]
+mod otel_ingest;
 #[path = "integration/port_collision.rs"]
 mod port_collision;
 #[path = "integration/ps_all.rs"]

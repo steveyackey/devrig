@@ -28,13 +28,25 @@ rand = "0.8"
 chrono = { version = "0.4", features = ["serde"] }
 bollard = "0.20"
 futures-util = "0.3"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 backon = "1"
 notify = "8"
 notify-debouncer-mini = "0.5"
 clap_complete = "4.5"
 strsim = "0.11"
 comfy-table = "7"
+
+# v0.5: Observability + Dashboard
+axum = { version = "0.8", features = ["ws"] }
+tower-http = { version = "0.6", features = ["cors", "compression-br"] }
+tonic = "0.12"
+prost = "0.13"
+prost-types = "0.13"
+opentelemetry-proto = { version = "0.27", features = ["gen-tonic", "trace", "metrics", "logs", "with-serde"] }
+rust-embed = { version = "8", features = ["compression", "include-exclude"] }
+mime_guess = "2"
+humantime = "2"
+dashmap = "6"
 
 [dev-dependencies]
 assert_cmd = "2"
@@ -43,7 +55,9 @@ predicates = "3"
 scopeguard = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["test-util", "macros", "rt-multi-thread"] }
+tokio-tungstenite = "0.28"
 
 [features]
-default = []
+default = ["dashboard"]
+dashboard = []
 integration = []

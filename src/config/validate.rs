@@ -122,6 +122,42 @@ pub enum ConfigDiagnostic {
         service: String,
         value: String,
     },
+
+    #[error("dashboard port {port} conflicts with {conflict_with}")]
+    #[diagnostic(code(devrig::dashboard_port_conflict))]
+    DashboardPortConflict {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("dashboard port conflict")]
+        span: SourceSpan,
+        port: u16,
+        conflict_with: String,
+    },
+
+    #[error("invalid retention duration `{value}`")]
+    #[diagnostic(
+        code(devrig::invalid_retention),
+        help("use a duration like \"1h\", \"30m\", \"5m30s\"")
+    )]
+    InvalidRetention {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("invalid duration string")]
+        span: SourceSpan,
+        value: String,
+    },
+
+    #[error("dashboard/otel ports must all be distinct (port {port} used by {a} and {b})")]
+    #[diagnostic(code(devrig::dashboard_ports_not_distinct))]
+    DashboardPortsNotDistinct {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("duplicate port")]
+        span: SourceSpan,
+        port: u16,
+        a: String,
+        b: String,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -522,11 +558,133 @@ pub fn validate(
         }
     }
 
+    // Validate dashboard config
+    if let Some(dashboard) = &config.dashboard {
+        let dash_port = dashboard.port;
+        let grpc_port = dashboard.otel.as_ref().map(|o| o.grpc_port).unwrap_or(4317);
+        let http_port = dashboard.otel.as_ref().map(|o| o.http_port).unwrap_or(4318);
+
+        // Check dashboard/otel ports are all distinct
+        if dash_port == grpc_port {
+            errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
+                src: src.clone(),
+                span: find_dashboard_span(source, "port"),
+                port: dash_port,
+                a: "dashboard.port".to_string(),
+                b: "dashboard.otel.grpc_port".to_string(),
+            });
+        }
+        if dash_port == http_port {
+            errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
+                src: src.clone(),
+                span: find_dashboard_span(source, "port"),
+                port: dash_port,
+                a: "dashboard.port".to_string(),
+                b: "dashboard.otel.http_port".to_string(),
+            });
+        }
+        if grpc_port == http_port {
+            errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
+                src: src.clone(),
+                span: find_dashboard_otel_span(source, "grpc_port"),
+                port: grpc_port,
+                a: "dashboard.otel.grpc_port".to_string(),
+                b: "dashboard.otel.http_port".to_string(),
+            });
+        }
+
+        // Check dashboard ports don't conflict with service/infra ports
+        let dash_ports = [
+            (dash_port, "dashboard.port"),
+            (grpc_port, "dashboard.otel.grpc_port"),
+            (http_port, "dashboard.otel.http_port"),
+        ];
+
+        for (dport, dname) in &dash_ports {
+            for (svc_name, svc) in &config.services {
+                if let Some(Port::Fixed(p)) = &svc.port {
+                    if p == dport {
+                        errors.push(ConfigDiagnostic::DashboardPortConflict {
+                            src: src.clone(),
+                            span: find_dashboard_span(source, "port"),
+                            port: *dport,
+                            conflict_with: format!("service `{}` ({})", svc_name, dname),
+                        });
+                    }
+                }
+            }
+            for (infra_name, infra) in &config.infra {
+                if let Some(Port::Fixed(p)) = &infra.port {
+                    if p == dport {
+                        errors.push(ConfigDiagnostic::DashboardPortConflict {
+                            src: src.clone(),
+                            span: find_dashboard_span(source, "port"),
+                            port: *dport,
+                            conflict_with: format!("infra `{}` ({})", infra_name, dname),
+                        });
+                    }
+                }
+                for (pname, port_val) in &infra.ports {
+                    if let Port::Fixed(p) = port_val {
+                        if p == dport {
+                            errors.push(ConfigDiagnostic::DashboardPortConflict {
+                                src: src.clone(),
+                                span: find_dashboard_span(source, "port"),
+                                port: *dport,
+                                conflict_with: format!(
+                                    "infra `{}` port `{}` ({})",
+                                    infra_name, pname, dname
+                                ),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validate retention string
+        if let Some(otel) = &dashboard.otel {
+            if humantime::parse_duration(&otel.retention).is_err() {
+                errors.push(ConfigDiagnostic::InvalidRetention {
+                    src: src.clone(),
+                    span: find_dashboard_otel_span(source, "retention"),
+                    value: otel.retention.clone(),
+                });
+            }
+        }
+    }
+
     if errors.is_empty() {
         Ok(())
     } else {
         Err(errors)
     }
+}
+
+/// Find the byte offset of a field in the [dashboard] section.
+fn find_dashboard_span(source: &str, field: &str) -> SourceSpan {
+    if let Some(pos) = source.find("[dashboard]") {
+        let after = &source[pos..];
+        if let Some(rel) = after.find(field) {
+            return (pos + rel, field.len()).into();
+        }
+    }
+    // Try [dashboard] as prefix (e.g. [dashboard.otel])
+    if let Some(pos) = source.find("[dashboard") {
+        return (pos, 10).into();
+    }
+    (0, 0).into()
+}
+
+/// Find the byte offset of a field in the [dashboard.otel] section.
+fn find_dashboard_otel_span(source: &str, field: &str) -> SourceSpan {
+    if let Some(pos) = source.find("[dashboard.otel]") {
+        let after = &source[pos..];
+        if let Some(rel) = after.find(field) {
+            return (pos + rel, field.len()).into();
+        }
+    }
+    find_dashboard_span(source, field)
 }
 
 #[cfg(test)]
@@ -563,6 +721,7 @@ mod tests {
             infra: BTreeMap::new(),
             compose: None,
             cluster: None,
+            dashboard: None,
             env: BTreeMap::new(),
             network: None,
         }
@@ -1141,5 +1300,112 @@ policy = "invalid"
                 policy
             );
         }
+    }
+
+    // --- v0.5 dashboard validation tests ---
+
+    #[test]
+    fn dashboard_port_conflicts_with_service() {
+        let source = r#"
+[project]
+name = "test"
+
+[services.api]
+command = "cargo run"
+port = 4000
+
+[dashboard]
+port = 4000
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::DashboardPortConflict { port: 4000, .. }
+        )));
+    }
+
+    #[test]
+    fn otel_ports_conflict_with_infra() {
+        let source = r#"
+[project]
+name = "test"
+
+[infra.custom]
+image = "custom:latest"
+port = 4317
+
+[dashboard]
+
+[dashboard.otel]
+grpc_port = 4317
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::DashboardPortConflict { port: 4317, .. }
+        )));
+    }
+
+    #[test]
+    fn retention_parse_failure() {
+        let source = r#"
+[project]
+name = "test"
+
+[dashboard]
+
+[dashboard.otel]
+retention = "not-a-duration"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs
+            .iter()
+            .any(|e| matches!(e, ConfigDiagnostic::InvalidRetention { .. })));
+    }
+
+    #[test]
+    fn valid_dashboard_config_passes() {
+        let source = r#"
+[project]
+name = "test"
+
+[services.api]
+command = "cargo run"
+port = 3000
+
+[dashboard]
+port = 4000
+
+[dashboard.otel]
+grpc_port = 4317
+http_port = 4318
+retention = "1h"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn dashboard_otel_ports_must_be_distinct() {
+        let source = r#"
+[project]
+name = "test"
+
+[dashboard]
+port = 4000
+
+[dashboard.otel]
+grpc_port = 4318
+http_port = 4318
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::DashboardPortsNotDistinct { port: 4318, .. }
+        )));
     }
 }

@@ -1,0 +1,174 @@
+import { test, expect } from '@playwright/test';
+
+test.describe('Trace Correlation', () => {
+  test('clicking a trace ID link on a log row navigates to the trace view', async ({ page }) => {
+    // Start on the logs view
+    await page.goto('/#/logs');
+    await page.waitForResponse((resp) =>
+      resp.url().includes('/api/logs') && resp.status() === 200,
+    );
+
+    // Find a log entry that has a trace link
+    const traceLinks = page.locator('tbody a[href^="#/traces/"]');
+    const linkCount = await traceLinks.count();
+
+    if (linkCount > 0) {
+      // Capture the trace ID from the link href
+      const href = await traceLinks.first().getAttribute('href');
+      expect(href).toBeTruthy();
+      const expectedTraceId = href!.replace('#/traces/', '');
+
+      // Click the trace ID link
+      await traceLinks.first().click();
+
+      // Should navigate to the trace detail view
+      await page.waitForURL(`/#/traces/${expectedTraceId}`);
+
+      // Wait for the trace detail API to respond
+      await page.waitForResponse((resp) =>
+        resp.url().includes(`/api/traces/${expectedTraceId}`) && resp.status() === 200,
+      );
+
+      // The trace detail view should be visible
+      await expect(page.getByRole('heading', { name: 'Trace Detail' })).toBeVisible();
+
+      // The trace ID should be displayed on the page
+      await expect(page.getByText(expectedTraceId)).toBeVisible();
+    }
+  });
+
+  test('trace detail view shows the full trace ID', async ({ page }) => {
+    // Navigate to traces to get a real trace ID
+    await page.goto('/#/traces');
+    await page.waitForResponse((resp) =>
+      resp.url().includes('/api/traces') && resp.status() === 200,
+    );
+
+    const rows = page.locator('tbody tr');
+    const rowCount = await rows.count();
+
+    if (rowCount > 0) {
+      // Click first trace to navigate to detail
+      await rows.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+
+      await page.waitForResponse((resp) =>
+        resp.url().match(/\/api\/traces\/[^/]+$/) !== null && resp.status() === 200,
+      );
+
+      // The full trace ID should be visible in the header as monospace text
+      const traceIdDisplay = page.locator('.font-mono.text-zinc-500').filter({
+        hasNot: page.locator('td'),
+      });
+      await expect(traceIdDisplay.first()).toBeVisible();
+    }
+  });
+
+  test('trace detail shows related logs under the Logs tab', async ({ page }) => {
+    await page.goto('/#/traces');
+    await page.waitForResponse((resp) =>
+      resp.url().includes('/api/traces') && resp.status() === 200,
+    );
+
+    const rows = page.locator('tbody tr');
+    const rowCount = await rows.count();
+
+    if (rowCount > 0) {
+      await rows.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+
+      // Wait for both trace and related data to load
+      await page.waitForResponse((resp) =>
+        resp.url().match(/\/api\/traces\/[^/]+$/) !== null && resp.status() === 200,
+      );
+      await page.waitForResponse((resp) =>
+        resp.url().includes('/related') && resp.status() === 200,
+      );
+
+      // Click the Logs tab
+      const logsTab = page.getByRole('button', { name: /Logs \(/ });
+      await logsTab.click();
+
+      // Extract the log count from the tab label
+      const tabText = await logsTab.textContent();
+      const match = tabText!.match(/Logs \((\d+)\)/);
+
+      if (match && parseInt(match[1], 10) > 0) {
+        // Related logs table should show entries
+        const logRows = page.locator('tbody tr');
+        const logCount = await logRows.count();
+        expect(logCount).toBeGreaterThan(0);
+
+        // Each related log should have a severity badge
+        const badges = page.locator('tbody .rounded');
+        await expect(badges.first()).toBeVisible();
+      } else {
+        // No related logs - empty state should show
+        await expect(
+          page.getByText('No related logs found for this trace'),
+        ).toBeVisible();
+      }
+    }
+  });
+
+  test('trace detail shows related metrics under the Metrics tab', async ({ page }) => {
+    await page.goto('/#/traces');
+    await page.waitForResponse((resp) =>
+      resp.url().includes('/api/traces') && resp.status() === 200,
+    );
+
+    const rows = page.locator('tbody tr');
+    const rowCount = await rows.count();
+
+    if (rowCount > 0) {
+      await rows.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+
+      await page.waitForResponse((resp) =>
+        resp.url().match(/\/api\/traces\/[^/]+$/) !== null && resp.status() === 200,
+      );
+      await page.waitForResponse((resp) =>
+        resp.url().includes('/related') && resp.status() === 200,
+      );
+
+      // Click the Metrics tab
+      const metricsTab = page.getByRole('button', { name: /Metrics \(/ });
+      await metricsTab.click();
+
+      const tabText = await metricsTab.textContent();
+      const match = tabText!.match(/Metrics \((\d+)\)/);
+
+      if (match && parseInt(match[1], 10) > 0) {
+        const metricRows = page.locator('tbody tr');
+        const metricCount = await metricRows.count();
+        expect(metricCount).toBeGreaterThan(0);
+      } else {
+        await expect(
+          page.getByText('No related metrics found for this trace'),
+        ).toBeVisible();
+      }
+    }
+  });
+
+  test('navigating from log trace link preserves browser history', async ({ page }) => {
+    await page.goto('/#/logs');
+    await page.waitForResponse((resp) =>
+      resp.url().includes('/api/logs') && resp.status() === 200,
+    );
+
+    const traceLinks = page.locator('tbody a[href^="#/traces/"]');
+    const linkCount = await traceLinks.count();
+
+    if (linkCount > 0) {
+      // Click the trace link
+      await traceLinks.first().click();
+      await page.waitForURL(/\/#\/traces\/.+/);
+
+      // Go back in browser history
+      await page.goBack();
+
+      // Should return to the logs view
+      await expect(page.getByRole('heading', { name: 'Logs' })).toBeVisible();
+    }
+  });
+});

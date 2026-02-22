@@ -189,6 +189,36 @@ pub fn check_all_ports_unified(config: &DevrigConfig) -> Vec<PortConflict> {
         }
     }
 
+    // Check dashboard ports
+    if let Some(dashboard) = &config.dashboard {
+        let dash_port = dashboard.port;
+        if !check_port_available(dash_port) {
+            conflicts.push(PortConflict {
+                service: "dashboard".to_string(),
+                port: dash_port,
+                owner: identify_port_owner(dash_port),
+            });
+        }
+
+        let grpc_port = dashboard.otel.as_ref().map(|o| o.grpc_port).unwrap_or(4317);
+        if !check_port_available(grpc_port) {
+            conflicts.push(PortConflict {
+                service: "otel-grpc".to_string(),
+                port: grpc_port,
+                owner: identify_port_owner(grpc_port),
+            });
+        }
+
+        let http_port = dashboard.otel.as_ref().map(|o| o.http_port).unwrap_or(4318);
+        if !check_port_available(http_port) {
+            conflicts.push(PortConflict {
+                service: "otel-http".to_string(),
+                port: http_port,
+                owner: identify_port_owner(http_port),
+            });
+        }
+    }
+
     conflicts
 }
 

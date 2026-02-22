@@ -107,6 +107,7 @@ mod tests {
             infra: BTreeMap::new(),
             compose: None,
             cluster: None,
+            dashboard: None,
             env: BTreeMap::new(),
             network: None,
         }

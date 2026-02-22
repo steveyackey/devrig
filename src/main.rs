@@ -76,6 +76,77 @@ async fn main() {
         Commands::Kubectl { args } => {
             commands::cluster::run_kubectl(cli.global.config_file.as_deref(), args).await
         }
+        Commands::Query { command } => match command {
+            devrig::cli::QueryCommands::Traces {
+                service,
+                status,
+                min_duration,
+                last: _,
+                limit,
+                format,
+            } => {
+                commands::query::run_traces(
+                    cli.global.config_file.as_deref(),
+                    service,
+                    status,
+                    min_duration,
+                    limit,
+                    format,
+                )
+                .await
+            }
+            devrig::cli::QueryCommands::Trace { trace_id, format } => {
+                commands::query::run_trace_detail(
+                    cli.global.config_file.as_deref(),
+                    trace_id,
+                    format,
+                )
+                .await
+            }
+            devrig::cli::QueryCommands::Logs {
+                service,
+                level,
+                search,
+                trace_id,
+                last: _,
+                limit,
+                format,
+            } => {
+                commands::query::run_logs(
+                    cli.global.config_file.as_deref(),
+                    service,
+                    level,
+                    search,
+                    trace_id,
+                    limit,
+                    format,
+                )
+                .await
+            }
+            devrig::cli::QueryCommands::Metrics {
+                name,
+                service,
+                last: _,
+                limit,
+                format,
+            } => {
+                commands::query::run_metrics(
+                    cli.global.config_file.as_deref(),
+                    name,
+                    service,
+                    limit,
+                    format,
+                )
+                .await
+            }
+            devrig::cli::QueryCommands::Status { format } => {
+                commands::query::run_status(cli.global.config_file.as_deref(), format).await
+            }
+            devrig::cli::QueryCommands::Related { trace_id, format } => {
+                commands::query::run_related(cli.global.config_file.as_deref(), trace_id, format)
+                    .await
+            }
+        },
     };
 
     if let Err(e) = result {

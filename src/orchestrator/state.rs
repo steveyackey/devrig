@@ -17,6 +17,8 @@ pub struct ProjectState {
     pub network_name: Option<String>,
     #[serde(default)]
     pub cluster: Option<ClusterState>,
+    #[serde(default)]
+    pub dashboard: Option<DashboardState>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,6 +59,13 @@ pub struct ComposeServiceState {
     pub container_id: String,
     pub container_name: String,
     pub port: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DashboardState {
+    pub dashboard_port: u16,
+    pub grpc_port: u16,
+    pub http_port: u16,
 }
 
 impl ProjectState {

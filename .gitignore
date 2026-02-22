@@ -8,6 +8,10 @@ pipeline/dist/
 pipeline/bun.lock
 
 
+# Dashboard frontend
+dashboard/node_modules/
+dashboard/dist/
+
 # Added by cargo
 
 /target

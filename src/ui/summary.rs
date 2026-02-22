@@ -4,6 +4,7 @@ use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use is_terminal::IsTerminal;
 use owo_colors::OwoColorize;
 
+use crate::config::model::DashboardConfig;
 use crate::identity::ProjectIdentity;
 use std::collections::BTreeMap;
 
@@ -11,6 +12,22 @@ pub struct RunningService {
     pub port: Option<u16>,
     pub port_auto: bool,
     pub status: String,
+}
+
+/// Print dashboard and OTLP endpoint info when dashboard is enabled.
+pub fn print_dashboard_info(dashboard: &DashboardConfig) {
+    let use_color = std::io::stdout().is_terminal();
+    let otel = dashboard.otel.clone().unwrap_or_default();
+
+    println!();
+    if use_color {
+        println!("  {}", "Dashboard".bold());
+    } else {
+        println!("  Dashboard");
+    }
+    println!("    URL:       http://localhost:{}", dashboard.port);
+    println!("    OTLP gRPC: localhost:{}", otel.grpc_port);
+    println!("    OTLP HTTP: localhost:{}", otel.http_port);
 }
 
 pub fn print_startup_summary(

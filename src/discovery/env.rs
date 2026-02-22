@@ -75,7 +75,23 @@ pub fn build_service_env(
     }
     env.insert("HOST".to_string(), "localhost".to_string());
 
-    // 5. Apply service-specific env (overrides auto-generated)
+    // 5. Inject OTel env vars when dashboard is enabled
+    if let Some(ref dash) = config.dashboard {
+        if dash.enabled.unwrap_or(true) {
+            let otel = dash.otel.clone().unwrap_or_default();
+            env.insert(
+                "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
+                format!("http://localhost:{}", otel.http_port),
+            );
+            env.insert("OTEL_SERVICE_NAME".to_string(), service_name.to_string());
+            env.insert(
+                "DEVRIG_DASHBOARD_URL".to_string(),
+                format!("http://localhost:{}", dash.port),
+            );
+        }
+    }
+
+    // 6. Apply service-specific env (overrides auto-generated)
     if let Some(svc_config) = config.services.get(service_name) {
         for (k, v) in &svc_config.env {
             env.insert(k.clone(), v.clone());
@@ -99,6 +115,7 @@ mod tests {
             infra: BTreeMap::new(),
             compose: None,
             cluster: None,
+            dashboard: None,
             env: BTreeMap::new(),
             network: None,
         }

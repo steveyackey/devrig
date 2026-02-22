@@ -1,0 +1,16 @@
+{
+  "name": "devrig-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright E2E tests for the DevRig dashboard",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report"
+  },
+  "dependencies": {
+    "@playwright/test": "^1.50.0"
+  }
+}

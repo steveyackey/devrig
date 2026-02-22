@@ -109,6 +109,21 @@ pub fn build_template_vars(
         vars.insert("cluster.name".to_string(), cluster_name);
     }
 
+    // dashboard.port, dashboard.otel.grpc_port, dashboard.otel.http_port
+    if let Some(dashboard) = &config.dashboard {
+        vars.insert("dashboard.port".to_string(), dashboard.port.to_string());
+        if let Some(otel) = &dashboard.otel {
+            vars.insert(
+                "dashboard.otel.grpc_port".to_string(),
+                otel.grpc_port.to_string(),
+            );
+            vars.insert(
+                "dashboard.otel.http_port".to_string(),
+                otel.http_port.to_string(),
+            );
+        }
+    }
+
     vars
 }
 
@@ -259,6 +274,7 @@ mod tests {
             infra,
             compose: None,
             cluster: None,
+            dashboard: None,
             env: BTreeMap::new(),
             network: None,
         };
@@ -279,6 +295,37 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_template_vars() {
+        use crate::config::model::{DashboardConfig, OtelConfig};
+        let config = DevrigConfig {
+            project: ProjectConfig {
+                name: "myapp".to_string(),
+            },
+            services: BTreeMap::new(),
+            infra: BTreeMap::new(),
+            compose: None,
+            cluster: None,
+            dashboard: Some(DashboardConfig {
+                port: 5000,
+                enabled: None,
+                otel: Some(OtelConfig {
+                    grpc_port: 14317,
+                    http_port: 14318,
+                    ..OtelConfig::default()
+                }),
+            }),
+            env: BTreeMap::new(),
+            network: None,
+        };
+
+        let resolved_ports = HashMap::new();
+        let vars = build_template_vars(&config, &resolved_ports);
+        assert_eq!(vars.get("dashboard.port").unwrap(), "5000");
+        assert_eq!(vars.get("dashboard.otel.grpc_port").unwrap(), "14317");
+        assert_eq!(vars.get("dashboard.otel.http_port").unwrap(), "14318");
+    }
+
+    #[test]
     fn cluster_name_template_var() {
         let mut config = DevrigConfig {
             project: ProjectConfig {
@@ -294,6 +341,7 @@ mod tests {
                 registry: false,
                 deploy: BTreeMap::new(),
             }),
+            dashboard: None,
             env: BTreeMap::new(),
             network: None,
         };

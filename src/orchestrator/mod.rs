@@ -472,6 +472,60 @@ impl Orchestrator {
         }
 
         // ================================================================
+        // Phase 4.5: Dashboard + OTel collector
+        // ================================================================
+        let mut dashboard_state: Option<state::DashboardState> = None;
+        let mut _otel_collector: Option<crate::otel::OtelCollector> = None;
+
+        let dashboard_enabled = self
+            .config
+            .dashboard
+            .as_ref()
+            .is_some_and(|d| d.enabled.unwrap_or(true));
+
+        if dashboard_enabled {
+            let dash_config = self.config.dashboard.as_ref().unwrap();
+            let otel_config = dash_config.otel.clone().unwrap_or_default();
+            let dash_port = dash_config.port;
+
+            let collector = crate::otel::OtelCollector::new(&otel_config);
+            collector
+                .start(self.cancel.clone())
+                .await
+                .context("starting OTel collector")?;
+            info!(
+                grpc_port = otel_config.grpc_port,
+                http_port = otel_config.http_port,
+                "OTel collector started"
+            );
+
+            let store = collector.store();
+            let events_tx = collector.events_tx();
+
+            let dash_cancel = self.cancel.clone();
+            self.tracker.spawn(async move {
+                if let Err(e) = crate::dashboard::server::start_dashboard_server(
+                    dash_port,
+                    store,
+                    events_tx,
+                    dash_cancel,
+                )
+                .await
+                {
+                    warn!(error = %e, "Dashboard server failed");
+                }
+            });
+            info!(port = dash_port, "Dashboard server started");
+
+            dashboard_state = Some(state::DashboardState {
+                dashboard_port: dash_port,
+                grpc_port: otel_config.grpc_port,
+                http_port: otel_config.http_port,
+            });
+            _otel_collector = Some(collector);
+        }
+
+        // ================================================================
         // Phase 5: Spawn service supervisors
         // ================================================================
         let service_names: Vec<String> = launch_order
@@ -540,6 +594,15 @@ impl Orchestrator {
                             format!("http://localhost:{}", port),
                         );
                     }
+                }
+
+                // Inject OTel env vars when dashboard/collector is running
+                if let Some(ref ds) = dashboard_state {
+                    env.insert(
+                        "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
+                        format!("http://localhost:{}", ds.http_port),
+                    );
+                    env.insert("OTEL_SERVICE_NAME".to_string(), name.clone());
                 }
 
                 let working_dir = svc.path.as_ref().map(|p| {
@@ -611,6 +674,7 @@ impl Orchestrator {
             compose_services: compose_states.clone(),
             network_name: network_name.clone(),
             cluster: cluster_state.clone(),
+            dashboard: dashboard_state.clone(),
         };
         project_state
             .save(&self.state_dir)
@@ -677,6 +741,33 @@ impl Orchestrator {
                     },
                 );
             }
+        }
+
+        if let Some(ref ds) = dashboard_state {
+            summary_services.insert(
+                "[dashboard]".to_string(),
+                RunningService {
+                    port: Some(ds.dashboard_port),
+                    port_auto: false,
+                    status: "running".to_string(),
+                },
+            );
+            summary_services.insert(
+                "[otel] grpc".to_string(),
+                RunningService {
+                    port: Some(ds.grpc_port),
+                    port_auto: false,
+                    status: "running".to_string(),
+                },
+            );
+            summary_services.insert(
+                "[otel] http".to_string(),
+                RunningService {
+                    port: Some(ds.http_port),
+                    port_auto: false,
+                    status: "running".to_string(),
+                },
+            );
         }
 
         for name in &service_names {

@@ -13,6 +13,8 @@ pub struct DevrigConfig {
     #[serde(default)]
     pub cluster: Option<ClusterConfig>,
     #[serde(default)]
+    pub dashboard: Option<DashboardConfig>,
+    #[serde(default)]
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub network: Option<NetworkConfig>,
@@ -134,6 +136,83 @@ pub struct ComposeConfig {
 pub struct NetworkConfig {
     #[serde(default)]
     pub name: Option<String>,
+}
+
+fn default_dashboard_port() -> u16 {
+    4000
+}
+
+fn default_grpc_port() -> u16 {
+    4317
+}
+
+fn default_http_port() -> u16 {
+    4318
+}
+
+fn default_trace_buffer() -> usize {
+    10000
+}
+
+fn default_metric_buffer() -> usize {
+    50000
+}
+
+fn default_log_buffer() -> usize {
+    100000
+}
+
+fn default_retention() -> String {
+    "1h".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct DashboardConfig {
+    #[serde(default = "default_dashboard_port")]
+    pub port: u16,
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    #[serde(default)]
+    pub otel: Option<OtelConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct OtelConfig {
+    #[serde(default = "default_grpc_port")]
+    pub grpc_port: u16,
+    #[serde(default = "default_http_port")]
+    pub http_port: u16,
+    #[serde(default = "default_trace_buffer")]
+    pub trace_buffer: usize,
+    #[serde(default = "default_metric_buffer")]
+    pub metric_buffer: usize,
+    #[serde(default = "default_log_buffer")]
+    pub log_buffer: usize,
+    #[serde(default = "default_retention")]
+    pub retention: String,
+}
+
+impl Default for DashboardConfig {
+    fn default() -> Self {
+        Self {
+            port: default_dashboard_port(),
+            enabled: None,
+            otel: None,
+        }
+    }
+}
+
+impl Default for OtelConfig {
+    fn default() -> Self {
+        Self {
+            grpc_port: default_grpc_port(),
+            http_port: default_http_port(),
+            trace_buffer: default_trace_buffer(),
+            metric_buffer: default_metric_buffer(),
+            log_buffer: default_log_buffer(),
+            retention: default_retention(),
+        }
+    }
 }
 
 fn default_agents() -> u32 {
@@ -956,6 +1035,116 @@ mod tests {
             env: BTreeMap::new(),
             depends_on: vec![],
             restart: None,
+        };
+        let b = a.clone();
+        assert_eq!(a, b);
+    }
+
+    // --- v0.5 DashboardConfig tests ---
+
+    #[test]
+    fn parse_full_dashboard_config() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [dashboard]
+            port = 5000
+            enabled = true
+
+            [dashboard.otel]
+            grpc_port = 14317
+            http_port = 14318
+            trace_buffer = 5000
+            metric_buffer = 25000
+            log_buffer = 50000
+            retention = "30m"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let dash = config.dashboard.unwrap();
+        assert_eq!(dash.port, 5000);
+        assert_eq!(dash.enabled, Some(true));
+        let otel = dash.otel.unwrap();
+        assert_eq!(otel.grpc_port, 14317);
+        assert_eq!(otel.http_port, 14318);
+        assert_eq!(otel.trace_buffer, 5000);
+        assert_eq!(otel.metric_buffer, 25000);
+        assert_eq!(otel.log_buffer, 50000);
+        assert_eq!(otel.retention, "30m");
+    }
+
+    #[test]
+    fn parse_minimal_dashboard_port_only() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [dashboard]
+            port = 9000
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let dash = config.dashboard.unwrap();
+        assert_eq!(dash.port, 9000);
+        assert!(dash.enabled.is_none());
+        assert!(dash.otel.is_none());
+    }
+
+    #[test]
+    fn parse_dashboard_with_otel_subsection() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [dashboard]
+
+            [dashboard.otel]
+            trace_buffer = 20000
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let dash = config.dashboard.unwrap();
+        assert_eq!(dash.port, 4000); // default
+        let otel = dash.otel.unwrap();
+        assert_eq!(otel.grpc_port, 4317); // default
+        assert_eq!(otel.http_port, 4318); // default
+        assert_eq!(otel.trace_buffer, 20000);
+        assert_eq!(otel.metric_buffer, 50000); // default
+        assert_eq!(otel.log_buffer, 100000); // default
+        assert_eq!(otel.retention, "1h"); // default
+    }
+
+    #[test]
+    fn parse_empty_dashboard_all_defaults() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [dashboard]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let dash = config.dashboard.unwrap();
+        assert_eq!(dash.port, 4000);
+        assert!(dash.enabled.is_none());
+        assert!(dash.otel.is_none());
+    }
+
+    #[test]
+    fn existing_config_without_dashboard_still_parses() {
+        let toml = r#"
+            [project]
+            name = "test"
+            [services.api]
+            command = "echo hi"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        assert!(config.dashboard.is_none());
+    }
+
+    #[test]
+    fn dashboard_config_partial_eq() {
+        let a = DashboardConfig {
+            port: 4000,
+            enabled: Some(true),
+            otel: Some(OtelConfig::default()),
         };
         let b = a.clone();
         assert_eq!(a, b);

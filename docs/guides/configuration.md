@@ -407,6 +407,121 @@ list compose service names in `depends_on`.
 - `devrig stop` leaves compose containers running (managed by compose)
 - `devrig delete` runs `docker compose down --remove-orphans`
 
+## Dashboard
+
+The optional `[dashboard]` section enables the built-in web dashboard and
+OpenTelemetry collector. When present, `devrig start` launches a local
+dashboard server and OTLP receivers that collect traces, logs, and metrics
+from your services.
+
+### `[dashboard]` section
+
+```toml
+[dashboard]
+port = 4000
+enabled = true
+```
+
+| Field     | Type    | Default | Description                                |
+|-----------|---------|---------|--------------------------------------------|
+| `port`    | integer | `4000`  | HTTP port for the dashboard web UI and API |
+| `enabled` | boolean | `true`  | Whether to start the dashboard             |
+
+When `enabled` is omitted or set to `true`, the dashboard starts
+automatically with `devrig start`. Set `enabled = false` to disable the
+dashboard while keeping the configuration in place.
+
+### `[dashboard.otel]` section
+
+The `[dashboard.otel]` sub-section configures the OpenTelemetry collector
+that receives telemetry from your services:
+
+```toml
+[dashboard.otel]
+grpc_port = 4317
+http_port = 4318
+trace_buffer = 10000
+metric_buffer = 50000
+log_buffer = 100000
+retention = "1h"
+```
+
+| Field          | Type    | Default  | Description                                  |
+|----------------|---------|----------|----------------------------------------------|
+| `grpc_port`    | integer | `4317`   | OTLP gRPC receiver port                      |
+| `http_port`    | integer | `4318`   | OTLP HTTP receiver port                      |
+| `trace_buffer` | integer | `10000`  | Maximum number of spans stored in memory      |
+| `metric_buffer`| integer | `50000`  | Maximum number of metric data points stored   |
+| `log_buffer`   | integer | `100000` | Maximum number of log records stored           |
+| `retention`    | string  | `"1h"`   | How long to keep telemetry data (e.g. `"1h"`, `"30m"`, `"2h30m"`) |
+
+The `retention` field accepts any duration string supported by the
+`humantime` crate. Telemetry older than the retention period is
+automatically swept from memory every 30 seconds. If the buffer fills
+before the retention period, the oldest entries are evicted first.
+
+### Auto-injected environment variables
+
+When the dashboard is enabled, devrig automatically injects the following
+environment variables into every service process:
+
+| Variable                       | Example value                      | Description                          |
+|--------------------------------|------------------------------------|--------------------------------------|
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | `http://localhost:4317`            | OTLP gRPC endpoint for SDK auto-config |
+| `OTEL_SERVICE_NAME`            | `api`                              | Set to the service name from config  |
+| `DEVRIG_DASHBOARD_URL`         | `http://localhost:4000`            | Dashboard URL for reference          |
+
+These variables allow OpenTelemetry SDKs to auto-discover the collector
+without manual configuration. Most OTLP-compatible libraries (Go, Python,
+Node.js, Rust) will automatically send telemetry to the endpoint specified
+by `OTEL_EXPORTER_OTLP_ENDPOINT`.
+
+### Dashboard configuration example
+
+```toml
+[project]
+name = "myapp"
+
+[dashboard]
+port = 4000
+enabled = true
+
+[dashboard.otel]
+grpc_port = 4317
+http_port = 4318
+trace_buffer = 20000
+metric_buffer = 100000
+log_buffer = 200000
+retention = "2h"
+
+[infra.postgres]
+image = "postgres:16-alpine"
+port = 5432
+[infra.postgres.env]
+POSTGRES_USER = "devrig"
+POSTGRES_PASSWORD = "devrig"
+[infra.postgres.ready_check]
+type = "pg_isready"
+
+[services.api]
+path = "./api"
+command = "cargo watch -x run"
+port = 3000
+depends_on = ["postgres"]
+[services.api.env]
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+```
+
+With this configuration, `devrig start` will:
+
+1. Start Postgres as a Docker container.
+2. Launch the dashboard on `http://localhost:4000`.
+3. Start OTLP receivers on ports 4317 (gRPC) and 4318 (HTTP).
+4. Start the `api` service with `OTEL_EXPORTER_OTLP_ENDPOINT`,
+   `OTEL_SERVICE_NAME`, and `DEVRIG_DASHBOARD_URL` injected automatically.
+5. Telemetry from the API service will appear in the dashboard and be
+   queryable via `devrig query` commands.
+
 ## `[env]` section
 
 The optional `[env]` section defines environment variables that are passed
