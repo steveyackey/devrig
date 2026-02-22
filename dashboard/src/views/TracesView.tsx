@@ -87,15 +87,20 @@ const TracesView: Component<TracesViewProps> = (props) => {
   return (
     <div data-testid="traces-view" class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-7 py-6 border-b border-border">
-        <h2 class="text-xl font-semibold text-text-primary">Traces</h2>
-        <p class="text-sm text-text-secondary mt-1">Distributed trace overview</p>
+      <div class="px-8 py-6 border-b-2 border-border">
+        <h2
+          class="font-display text-4xl text-accent tracking-[0.1em] uppercase"
+          style={{ "text-shadow": "2px 2px 0 rgba(0,0,0,0.5)" }}
+        >
+          Traces
+        </h2>
+        <p class="font-label text-[10px] text-text-secondary uppercase tracking-[0.1em] mt-1">Distributed trace overview</p>
       </div>
 
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
+      <form onSubmit={handleSearch} class="px-7 py-4 border-b-2 border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Service</label>
           <Select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
@@ -109,7 +114,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Status</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Status</label>
           <Select
             value={filterStatus()}
             onChange={(e) => setFilterStatus(e.currentTarget.value)}
@@ -122,7 +127,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Min Duration</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Min Duration</label>
           <Input
             type="number"
             placeholder="ms"

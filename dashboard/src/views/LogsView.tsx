@@ -90,14 +90,19 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
   return (
     <div data-testid="logs-view" class="flex flex-col h-full">
-      <div class="px-7 py-6 border-b border-border">
-        <h2 class="text-xl font-semibold text-text-primary">Logs</h2>
-        <p class="text-sm text-text-secondary mt-1">Application log records</p>
+      <div class="px-8 py-6 border-b-2 border-border">
+        <h2
+          class="font-display text-4xl text-accent tracking-[0.1em] uppercase"
+          style={{ "text-shadow": "2px 2px 0 rgba(0,0,0,0.5)" }}
+        >
+          Logs
+        </h2>
+        <p class="font-label text-[10px] text-text-secondary uppercase tracking-[0.1em] mt-1">Application log records</p>
       </div>
 
-      <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
+      <form onSubmit={handleSearch} class="px-7 py-4 border-b-2 border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Service</label>
           <Select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
@@ -111,7 +116,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Severity</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Severity</label>
           <Select
             value={filterSeverity()}
             onChange={(e) => setFilterSeverity(e.currentTarget.value)}
@@ -125,7 +130,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Search</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Search</label>
           <Input
             type="text"
             placeholder="Search log body..."

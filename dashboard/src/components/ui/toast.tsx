@@ -19,9 +19,9 @@ export function showToast(message: string, variant: Toast['variant'] = 'info') {
 }
 
 const variantStyles = {
-  success: 'border-success/30 bg-success/10 text-success',
-  error: 'border-error/30 bg-error/10 text-error',
-  info: 'border-info/30 bg-info/10 text-info',
+  success: 'border-2 border-success/30 bg-surface-1 text-success',
+  error: 'border-2 border-error/30 bg-surface-1 text-error',
+  info: 'border-2 border-accent/30 bg-surface-1 text-accent',
 };
 
 const ToastProvider: Component = () => {
@@ -31,7 +31,7 @@ const ToastProvider: Component = () => {
         {(toast) => (
           <div
             class={cn(
-              'rounded-lg border px-4 py-3 text-sm shadow-lg animate-slide-up',
+              'border px-4 py-3 text-sm shadow-lg animate-slide-up font-label',
               variantStyles[toast.variant]
             )}
           >

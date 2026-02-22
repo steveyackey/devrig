@@ -6,7 +6,7 @@ export interface CardProps extends JSX.HTMLAttributes<HTMLDivElement> {}
 const Card: Component<CardProps> = (props) => {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
-    <div class={cn('rounded-lg border border-border bg-surface-1 shadow-sm', local.class)} {...rest}>
+    <div class={cn('border-2 border-border bg-surface-1', local.class)} {...rest}>
       {local.children}
     </div>
   );
@@ -15,7 +15,7 @@ const Card: Component<CardProps> = (props) => {
 const CardHeader: Component<CardProps> = (props) => {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
-    <div class={cn('px-6 py-5 border-b border-border', local.class)} {...rest}>
+    <div class={cn('px-6 py-5 border-b-2 border-border', local.class)} {...rest}>
       {local.children}
     </div>
   );

@@ -156,7 +156,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
   const barGradient = (status: string): string => {
     switch (status) {
       case 'Error': return 'bg-gradient-to-r from-error/80 to-error/50';
-      case 'Ok': return 'bg-gradient-to-r from-accent/80 to-accent/50';
+      case 'Ok': return 'bg-gradient-to-r from-accent/60 to-accent/30';
       default: return 'bg-gradient-to-r from-surface-3/80 to-surface-3/50';
     }
   };
@@ -176,16 +176,16 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
   return (
     <div class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-7 py-5 border-b border-border flex items-center gap-4">
+      <div class="px-8 py-5 border-b-2 border-border flex items-center gap-4">
         <a
           href="#/traces"
-          class="text-text-muted hover:text-text-primary text-sm flex items-center gap-1"
+          class="text-text-muted hover:text-accent font-label text-[9px] uppercase tracking-[0.08em] flex items-center gap-1"
         >
           <span>{'\u2190'}</span> Back to Traces
         </a>
         <div class="h-4 border-l border-border" />
         <div>
-          <h2 class="text-lg font-semibold text-text-primary flex items-center gap-2">
+          <h2 class="font-display text-2xl text-accent tracking-[0.1em] uppercase flex items-center gap-2">
             Trace Detail
             <Show when={traceData()}>
               {(data) => {
@@ -408,9 +408,9 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {/* Span detail panel */}
           <Show when={selectedSpan()}>
             {(span) => (
-              <Card class="w-96 border-l border-border overflow-auto shrink-0 rounded-none">
+              <Card class="w-96 border-l-2 border-border overflow-auto shrink-0">
                 <CardHeader class="flex flex-row items-center justify-between">
-                  <h3 class="text-sm font-semibold text-text-primary">Span Details</h3>
+                  <h3 class="font-display text-lg text-accent tracking-[0.1em] uppercase">Span Details</h3>
                   <button
                     onClick={() => setSelectedSpan(null)}
                     class="text-text-muted hover:text-text-primary text-sm"
@@ -450,10 +450,10 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                   {/* Attributes */}
                   <Show when={span().attributes.length > 0}>
                     <div>
-                      <h4 class="text-xs text-text-secondary uppercase tracking-wider mb-2">
+                      <h4 class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em] mb-2">
                         Attributes ({span().attributes.length})
                       </h4>
-                      <div class="bg-surface-2/50 rounded-lg border border-border divide-y divide-border">
+                      <div class="bg-surface-2/50 border border-border divide-y divide-border">
                         <For each={span().attributes}>
                           {([key, value]) => (
                             <div class="px-3 py-2 flex gap-2">

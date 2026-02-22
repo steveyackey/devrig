@@ -34,20 +34,20 @@ const darkTheme = EditorView.theme(
       borderTop: '1px solid var(--color-border)',
     },
     '.cm-searchMatch': {
-      backgroundColor: '#fbbf2440',
-      outline: '1px solid #fbbf2480',
+      backgroundColor: 'rgba(255, 214, 0, 0.15)',
+      outline: '1px solid rgba(255, 214, 0, 0.3)',
     },
     '.cm-searchMatch.cm-searchMatch-selected': {
-      backgroundColor: 'rgba(99, 102, 241, 0.25)',
+      backgroundColor: 'rgba(255, 214, 0, 0.25)',
     },
     '.cm-activeLine': {
-      backgroundColor: 'rgba(26, 34, 54, 0.5)',
+      backgroundColor: 'rgba(30, 30, 26, 0.5)',
     },
     '.cm-selectionMatch': {
-      backgroundColor: 'rgba(36, 48, 73, 0.5)',
+      backgroundColor: 'rgba(42, 42, 36, 0.5)',
     },
     '&.cm-focused .cm-matchingBracket, &.cm-focused .cm-nonmatchingBracket': {
-      backgroundColor: 'rgba(36, 48, 73, 0.8)',
+      backgroundColor: 'rgba(42, 42, 36, 0.8)',
     },
     '.cm-gutters': {
       backgroundColor: 'var(--color-surface-0)',
@@ -55,7 +55,7 @@ const darkTheme = EditorView.theme(
       border: 'none',
     },
     '.cm-activeLineGutter': {
-      backgroundColor: 'rgba(26, 34, 54, 0.5)',
+      backgroundColor: 'rgba(30, 30, 26, 0.5)',
     },
     '.cm-foldPlaceholder': {
       backgroundColor: 'transparent',
@@ -223,10 +223,15 @@ const ConfigView: Component = () => {
 
   return (
     <div class="flex flex-col h-full">
-      <div class="px-7 py-6 border-b border-border flex items-center justify-between">
+      <div class="px-8 py-6 border-b-2 border-border flex items-center justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-text-primary">Configuration</h2>
-          <p class="text-sm text-text-secondary mt-1">Edit devrig.toml</p>
+          <h2
+            class="font-display text-4xl text-accent tracking-[0.1em] uppercase"
+            style={{ "text-shadow": "2px 2px 0 rgba(0,0,0,0.5)" }}
+          >
+            Configuration
+          </h2>
+          <p class="font-label text-[10px] text-text-secondary uppercase tracking-[0.1em] mt-1">Edit devrig.toml</p>
         </div>
         <div class="flex items-center gap-3">
           <Show when={statusText()}>

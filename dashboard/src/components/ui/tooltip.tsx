@@ -17,7 +17,7 @@ const Tooltip: Component<TooltipProps> = (props) => {
       <KTooltip.Portal>
         <KTooltip.Content
           class={cn(
-            'z-50 rounded-md bg-surface-2 border border-border px-3 py-1.5 text-xs text-text-primary shadow-md animate-fade-in',
+            'z-50 bg-surface-2 border border-border px-3 py-1.5 text-xs text-text-primary shadow-md animate-fade-in',
             props.class
           )}
         >

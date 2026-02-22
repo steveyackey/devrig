@@ -13,8 +13,8 @@ interface MetricChartProps {
 
 // Color palette for multi-series
 const SERIES_COLORS = [
-  '#818cf8', // indigo (accent)
-  '#34d399', // emerald (success)
+  '#FFD600', // yellow (accent)
+  '#4ADE80', // green (success)
   '#60a5fa', // blue (info)
   '#fbbf24', // amber (warning)
   '#f87171', // red (error)
@@ -80,13 +80,13 @@ const MetricChart: Component<MetricChartProps> = (props) => {
           stroke: textColor,
           grid: { stroke: gridColor, width: 1 },
           ticks: { stroke: borderColor, width: 1 },
-          font: '11px Inter, system-ui, sans-serif',
+          font: '11px JetBrains Mono, monospace',
         },
         {
           stroke: textColor,
           grid: { stroke: gridColor, width: 1 },
           ticks: { stroke: borderColor, width: 1 },
-          font: '11px Inter, system-ui, sans-serif',
+          font: '11px JetBrains Mono, monospace',
           size: 60,
         },
       ],
@@ -137,7 +137,7 @@ export const Sparkline: Component<{
 
   onMount(() => {
     if (!containerRef) return;
-    const color = props.color || '#818cf8';
+    const color = props.color || '#FFD600';
     chart = new uPlot(
       {
         width: props.width,

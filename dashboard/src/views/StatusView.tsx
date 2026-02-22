@@ -1,5 +1,5 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
-import { Activity, ScrollText, BarChart3, Minus, ExternalLink } from 'lucide-solid';
+import { ExternalLink } from 'lucide-solid';
 import { fetchStatus, fetchServices, type StatusResponse, type ServiceInfo } from '../api';
 import { Badge, Card, Skeleton, Button } from '../components/ui';
 
@@ -34,16 +34,25 @@ const StatusView: Component = () => {
 
   return (
     <div data-testid="status-view" class="flex flex-col h-full">
-      <div class="px-7 py-6 border-b border-border flex items-center justify-between">
+      <div class="px-8 py-6 border-b-2 border-border flex items-start justify-between">
         <div>
-          <h2 class="text-xl font-semibold text-text-primary">System Status</h2>
-          <p class="text-sm text-text-secondary mt-1">Telemetry pipeline overview</p>
+          <h2
+            class="font-display text-4xl text-accent tracking-[0.1em] uppercase"
+            style={{ "text-shadow": "2px 2px 0 rgba(0,0,0,0.5)" }}
+          >
+            System Status
+          </h2>
+          <p class="font-label text-[10px] text-text-secondary uppercase tracking-[0.1em] mt-1">
+            Telemetry pipeline overview
+          </p>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-4">
           <Show when={lastRefresh()}>
-            <span class="text-xs text-text-secondary">Last refreshed: {lastRefresh()}</span>
+            <span class="font-label text-[9px] text-text-secondary uppercase tracking-[0.08em]">
+              Last refresh: {lastRefresh()}
+            </span>
           </Show>
-          <Button variant="outline" size="sm" onClick={() => { setLoading(true); loadStatus(); }}>
+          <Button variant="default" size="sm" onClick={() => { setLoading(true); loadStatus(); }}>
             Refresh
           </Button>
         </div>
@@ -51,7 +60,7 @@ const StatusView: Component = () => {
 
       <div class="flex-1 overflow-auto p-7">
         <Show when={error()}>
-          <div class="mb-6 bg-error/10 border border-error/20 rounded-lg p-4 text-center">
+          <div class="mb-6 border-2 border-error/30 bg-error/5 p-4 text-center">
             <p class="text-error text-sm">{error()}</p>
             <button onClick={() => { setLoading(true); loadStatus(); }} class="mt-2 text-accent hover:text-accent-hover text-sm">Retry</button>
           </div>
@@ -59,89 +68,67 @@ const StatusView: Component = () => {
 
         <Show when={loading() && !status()}>
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-            <For each={[1, 2, 3, 4]}>{() => <Skeleton class="h-24 rounded-lg" />}</For>
+            <For each={[1, 2, 3, 4]}>{() => <Skeleton class="h-28" />}</For>
           </div>
-          <Skeleton class="h-48 rounded-lg" />
+          <Skeleton class="h-48" />
         </Show>
 
         <Show when={status()}>
           {(data) => (
-            <div class="space-y-8 animate-fade-in">
-              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard
-                  label="Traces"
-                  value={formatNumber(data().trace_count)}
-                  icon={Activity}
-                  gradient="from-accent/10 to-accent/5"
-                  iconColor="text-accent"
-                  valueColor="text-accent"
-                  borderColor="border-accent/20"
-                />
-                <StatCard
-                  label="Spans"
-                  value={formatNumber(data().span_count)}
-                  icon={Minus}
-                  gradient="from-info/10 to-info/5"
-                  iconColor="text-info"
-                  valueColor="text-info"
-                  borderColor="border-info/20"
-                />
-                <StatCard
-                  label="Logs"
-                  value={formatNumber(data().log_count)}
-                  icon={ScrollText}
-                  gradient="from-success/10 to-success/5"
-                  iconColor="text-success"
-                  valueColor="text-success"
-                  borderColor="border-success/20"
-                />
-                <StatCard
-                  label="Metrics"
-                  value={formatNumber(data().metric_count)}
-                  icon={BarChart3}
-                  gradient="from-[#a855f7]/10 to-[#a855f7]/5"
-                  iconColor="text-[#a855f7]"
-                  valueColor="text-[#a855f7]"
-                  borderColor="border-[#a855f7]/20"
-                />
+            <div class="space-y-7 animate-fade-in">
+              {/* Stat Cards */}
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <StatCard label="Traces" value={formatNumber(data().trace_count)} unit="distributed" />
+                <StatCard label="Spans" value={formatNumber(data().span_count)} unit="total" />
+                <StatCard label="Logs" value={formatNumber(data().log_count)} unit="records" />
+                <StatCard label="Metrics" value={formatNumber(data().metric_count)} unit="points" />
               </div>
 
-              <Card>
-                <div class="px-6 py-5 border-b border-border">
-                  <h3 class="text-sm font-semibold text-text-primary">
+              {/* Services */}
+              <div class="border-2 border-border bg-surface-1">
+                <div class="px-6 py-4 border-b border-border flex items-center justify-between">
+                  <h3
+                    class="font-display text-[22px] text-accent tracking-[0.1em] uppercase"
+                  >
                     Services ({serviceList().length || data().services.length})
                   </h3>
-                  <p class="text-xs text-text-secondary mt-0.5">
+                  <span class="font-label text-[9px] text-text-muted uppercase tracking-[0.08em]">
                     Configured services and their ports
-                  </p>
+                  </span>
                 </div>
 
                 <Show when={serviceList().length === 0 && data().services.length === 0}>
-                  <div class="px-5 py-8 text-center text-text-secondary text-sm">
+                  <div class="px-6 py-8 text-center text-text-secondary text-sm">
                     No services reporting yet.
                   </div>
                 </Show>
 
                 <Show when={serviceList().length > 0}>
-                  <div class="divide-y divide-border">
+                  <div>
                     <For each={serviceList()}>
                       {(svc) => {
                         const isReporting = () => data().services.includes(svc.name);
                         return (
-                          <div data-testid="service-row" class="px-6 py-5 flex items-center gap-4 hover:bg-surface-2/40 transition-colors">
+                          <div
+                            data-testid="service-row"
+                            class="px-6 py-3.5 flex items-center gap-3.5 border-b border-border last:border-b-0 hover:bg-accent/[0.03] transition-colors"
+                          >
                             <span
                               data-testid="service-indicator"
-                              class={`inline-block w-2 h-2 rounded-full ${isReporting() ? 'bg-success animate-pulse-live' : 'bg-surface-3'}`}
+                              class={`inline-block w-2 h-2 rounded-full border-solid ${
+                                isReporting() ? 'bg-success animate-pulse-live' : 'bg-surface-3'
+                              }`}
+                              style={isReporting() ? { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' } : {}}
                             />
-                            <span class="text-sm text-text-primary font-mono">{svc.name}</span>
-                            <Badge variant="default" class="text-[10px] px-1.5 py-0">{svc.kind}</Badge>
+                            <span class="font-display text-lg text-text-primary tracking-[0.06em] uppercase">{svc.name}</span>
+                            <Badge variant="default">{svc.kind}</Badge>
                             <Show when={svc.port}>
                               <a
                                 data-testid="service-port-link"
                                 href={`http://localhost:${svc.port}`}
                                 target="_blank"
                                 rel="noopener"
-                                class="inline-flex items-center gap-1 text-xs font-mono text-accent hover:text-accent-hover transition-colors"
+                                class="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-accent transition-colors"
                               >
                                 :{svc.port}
                                 <ExternalLink size={10} />
@@ -150,11 +137,11 @@ const StatusView: Component = () => {
                                 <span class="text-[10px] text-text-muted">(auto)</span>
                               </Show>
                             </Show>
-                            <div class="ml-auto flex gap-2">
-                              <a href="#/traces" class="text-xs text-text-muted hover:text-accent transition-colors">
+                            <div class="ml-auto flex gap-2.5">
+                              <a href="#/traces" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
                                 Traces
                               </a>
-                              <a href="#/logs" class="text-xs text-text-muted hover:text-accent transition-colors">
+                              <a href="#/logs" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
                                 Logs
                               </a>
                             </div>
@@ -166,17 +153,24 @@ const StatusView: Component = () => {
                 </Show>
 
                 <Show when={serviceList().length === 0 && data().services.length > 0}>
-                  <div class="divide-y divide-border">
+                  <div>
                     <For each={data().services}>
                       {(service) => (
-                        <div data-testid="service-row" class="px-6 py-5 flex items-center gap-4 hover:bg-surface-2/40 transition-colors">
-                          <span data-testid="service-indicator" class="inline-block w-2 h-2 rounded-full bg-success animate-pulse-live" />
-                          <span class="text-sm text-text-primary font-mono">{service}</span>
-                          <div class="ml-auto flex gap-2">
-                            <a href="#/traces" class="text-xs text-text-muted hover:text-accent transition-colors">
+                        <div
+                          data-testid="service-row"
+                          class="px-6 py-3.5 flex items-center gap-3.5 border-b border-border last:border-b-0 hover:bg-accent/[0.03] transition-colors"
+                        >
+                          <span
+                            data-testid="service-indicator"
+                            class="inline-block w-2 h-2 rounded-full border-solid bg-success animate-pulse-live"
+                            style={{ "box-shadow": '0 0 6px rgba(74,222,128,0.3)' }}
+                          />
+                          <span class="font-display text-lg text-text-primary tracking-[0.06em] uppercase">{service}</span>
+                          <div class="ml-auto flex gap-2.5">
+                            <a href="#/traces" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
                               Traces
                             </a>
-                            <a href="#/logs" class="text-xs text-text-muted hover:text-accent transition-colors">
+                            <a href="#/logs" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
                               Logs
                             </a>
                           </div>
@@ -185,10 +179,10 @@ const StatusView: Component = () => {
                     </For>
                   </div>
                 </Show>
-              </Card>
+              </div>
 
               <div class="text-center">
-                <p class="text-xs text-text-secondary">
+                <p class="font-label text-[9px] text-text-muted uppercase tracking-[0.08em]">
                   Auto-refreshes every 5 seconds
                 </p>
               </div>
@@ -203,20 +197,26 @@ const StatusView: Component = () => {
 const StatCard: Component<{
   label: string;
   value: string;
-  icon: Component<{ size?: number; class?: string }>;
-  gradient: string;
-  iconColor: string;
-  valueColor: string;
-  borderColor: string;
+  unit: string;
 }> = (props) => {
-  const Icon = props.icon;
   return (
-    <div data-testid="stat-card" class={`rounded-lg border p-7 bg-gradient-to-br ${props.gradient} ${props.borderColor}`}>
-      <div class="flex items-center justify-between mb-3">
-        <span data-testid="stat-card-label" class="text-xs text-text-secondary uppercase tracking-wider font-medium">{props.label}</span>
-        <Icon size={20} class={props.iconColor} />
+    <div data-testid="stat-card" class="bg-surface-1 p-6 border-2 border-border relative hover:border-border-hover transition-colors">
+      <div class="absolute top-2.5 right-3 flex items-center gap-1 font-label text-[9px] text-success tracking-[0.06em]">
+        <span class="text-[8px]" aria-hidden="true">&#9650;</span> OK
       </div>
-      <div data-testid="stat-card-value" class={`text-3xl font-semibold ${props.valueColor} font-mono`}>{props.value}</div>
+      <div data-testid="stat-card-label" class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em] mb-1.5">
+        {props.label}
+      </div>
+      <div
+        data-testid="stat-card-value"
+        class="font-display text-[56px] leading-none text-accent"
+        style={{ "text-shadow": "1px 1px 0 rgba(0,0,0,0.5)" }}
+      >
+        {props.value}
+      </div>
+      <div class="font-label text-[9px] text-text-secondary mt-1">
+        {props.unit}
+      </div>
     </div>
   );
 };

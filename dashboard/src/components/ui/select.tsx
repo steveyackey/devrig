@@ -8,7 +8,7 @@ const Select: Component<SelectProps> = (props) => {
   return (
     <select
       class={cn(
-        'bg-surface-2 border border-border rounded-md px-3.5 py-2 text-sm text-text-primary',
+        'bg-surface-1 border-2 border-border px-3.5 py-2 text-sm text-text-primary',
         'focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30',
         local.class
       )}

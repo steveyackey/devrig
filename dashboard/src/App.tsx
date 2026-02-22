@@ -81,12 +81,12 @@ const App: Component = () => {
 
   return (
     <>
-      <div data-testid="app-layout" class="flex h-screen bg-surface-0 text-text-primary font-sans">
+      <div data-testid="app-layout" class="flex h-screen bg-surface-0 text-text-primary font-sans max-[960px]:flex-col">
         {/* Sidebar */}
         <Sidebar currentRoute={route()} />
 
         {/* Main area */}
-        <div class="flex flex-col flex-1 min-w-0">
+        <div class="flex flex-col flex-1 min-w-0 stencil-bg">
           {/* View content */}
           <main data-testid="main-content" class="flex-1 overflow-hidden bg-surface-0">
             <Switch fallback={<StatusView />}>

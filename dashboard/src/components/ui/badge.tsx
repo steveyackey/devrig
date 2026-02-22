@@ -3,22 +3,22 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/cn';
 
 const badgeVariants = cva(
-  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium transition-colors',
+  'inline-flex items-center px-2 py-0.5 text-[9px] font-label uppercase tracking-wider transition-colors',
   {
     variants: {
       variant: {
-        default: 'bg-surface-2 text-text-secondary border border-border',
-        success: 'bg-success/15 text-success border border-success/20',
-        error: 'bg-error/15 text-error border border-error/20',
-        warning: 'bg-warning/15 text-warning border border-warning/20',
-        info: 'bg-info/15 text-info border border-info/20',
-        accent: 'bg-accent/15 text-accent border border-accent/20',
-        counter: 'bg-info/15 text-info border border-info/20',
-        gauge: 'bg-success/15 text-success border border-success/20',
-        histogram: 'bg-[#a855f7]/15 text-[#a855f7] border border-[#a855f7]/20',
-        fatal: 'bg-error text-white',
-        debug: 'bg-surface-3/50 text-text-secondary border border-border',
-        trace: 'bg-surface-2/50 text-text-muted border border-border',
+        default: 'text-text-muted border border-border',
+        success: 'text-success border border-success/30',
+        error: 'text-error border border-error/30',
+        warning: 'text-warning border border-warning/30',
+        info: 'text-info border border-info/30',
+        accent: 'text-accent border border-accent/30',
+        counter: 'text-info border border-info/30',
+        gauge: 'text-success border border-success/30',
+        histogram: 'text-[#a855f7] border border-[#a855f7]/30',
+        fatal: 'bg-error/20 text-error border border-error/30',
+        debug: 'text-text-secondary border border-border',
+        trace: 'text-text-muted border border-border',
       },
     },
     defaultVariants: {

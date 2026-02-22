@@ -8,7 +8,7 @@ const Skeleton: Component<SkeletonProps> = (props) => {
   return (
     <div
       class={cn(
-        'rounded-md bg-gradient-to-r from-surface-2 via-surface-3 to-surface-2 bg-[length:400%_100%] animate-skeleton',
+        'bg-gradient-to-r from-surface-2 via-surface-3 to-surface-2 bg-[length:400%_100%] animate-skeleton',
         local.class
       )}
       {...rest}

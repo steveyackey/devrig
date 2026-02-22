@@ -89,11 +89,11 @@ const CommandPalette: Component = () => {
 
         {/* Dialog */}
         <div
-          class="relative w-full max-w-md bg-surface-1 border border-border rounded-xl shadow-2xl animate-slide-up overflow-hidden"
+          class="relative w-full max-w-md bg-surface-1 border-2 border-border shadow-2xl animate-slide-up overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Search input */}
-          <div class="px-4 py-3 border-b border-border">
+          <div class="px-4 py-3 border-b-2 border-border">
             <input
               data-testid="command-palette-input"
               type="text"
@@ -137,15 +137,15 @@ const CommandPalette: Component = () => {
           </div>
 
           {/* Footer */}
-          <div class="px-4 py-2 border-t border-border flex items-center gap-4 text-xs text-text-muted">
+          <div class="px-4 py-2 border-t-2 border-border flex items-center gap-4 text-xs text-text-muted">
             <span class="flex items-center gap-1">
-              <kbd class="px-1.5 py-0.5 bg-surface-2 rounded text-[10px]">↑↓</kbd> Navigate
+              <kbd class="px-1.5 py-0.5 bg-surface-2 border border-border text-[10px]">↑↓</kbd> Navigate
             </span>
             <span class="flex items-center gap-1">
-              <kbd class="px-1.5 py-0.5 bg-surface-2 rounded text-[10px]">↵</kbd> Select
+              <kbd class="px-1.5 py-0.5 bg-surface-2 border border-border text-[10px]">↵</kbd> Select
             </span>
             <span class="flex items-center gap-1">
-              <kbd class="px-1.5 py-0.5 bg-surface-2 rounded text-[10px]">esc</kbd> Close
+              <kbd class="px-1.5 py-0.5 bg-surface-2 border border-border text-[10px]">esc</kbd> Close
             </span>
           </div>
         </div>

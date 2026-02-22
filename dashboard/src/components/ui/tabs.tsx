@@ -8,7 +8,7 @@ const TabsList: Component<{ class?: string; children: JSX.Element }> = (props) =
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
     <KTabs.List
-      class={cn('flex border-b border-border px-7', local.class)}
+      class={cn('flex border-b-2 border-border px-7', local.class)}
       {...rest}
     >
       {local.children}
@@ -22,7 +22,7 @@ const TabsTrigger: Component<{ value: string; class?: string; children: JSX.Elem
     <KTabs.Trigger
       value={local.value}
       class={cn(
-        'px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+        'px-4 py-2.5 font-display text-base tracking-[0.1em] uppercase border-b-2 -mb-px transition-colors',
         'data-[selected]:border-accent data-[selected]:text-accent',
         'border-transparent text-text-muted hover:text-text-secondary',
         local.class

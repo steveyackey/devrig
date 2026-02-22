@@ -204,15 +204,20 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
   return (
     <div data-testid="metrics-view" class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-7 py-6 border-b border-border">
-        <h2 class="text-xl font-semibold text-text-primary">Metrics</h2>
-        <p class="text-sm text-text-secondary mt-1">Telemetry metric data points</p>
+      <div class="px-8 py-6 border-b-2 border-border">
+        <h2
+          class="font-display text-4xl text-accent tracking-[0.1em] uppercase"
+          style={{ "text-shadow": "2px 2px 0 rgba(0,0,0,0.5)" }}
+        >
+          Metrics
+        </h2>
+        <p class="font-label text-[10px] text-text-secondary uppercase tracking-[0.1em] mt-1">Telemetry metric data points</p>
       </div>
 
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-7 py-5 border-b border-border flex items-center gap-4 flex-wrap">
+      <form onSubmit={handleSearch} class="px-7 py-4 border-b-2 border-border flex items-center gap-4 flex-wrap">
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Metric Name</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Metric Name</label>
           <Input
             type="text"
             placeholder="Filter by name..."
@@ -223,7 +228,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
-          <label class="text-xs text-text-secondary uppercase tracking-wider">Service</label>
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Service</label>
           <Select
             value={filterService()}
             onChange={(e) => setFilterService(e.currentTarget.value)}
@@ -282,9 +287,9 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
                     <button
                       data-testid="metric-card"
                       onClick={() => handleCardClick(card.name)}
-                      class={`text-left rounded-lg border p-6 transition-all hover:border-accent/40 hover:bg-surface-2/50 ${
+                      class={`text-left border-2 p-6 transition-all hover:border-border-hover ${
                         selectedMetric() === card.name
-                          ? 'border-accent/50 bg-accent/5 ring-1 ring-accent/20'
+                          ? 'border-accent/40 bg-accent/5'
                           : 'border-border bg-surface-1'
                       }`}
                     >
@@ -330,7 +335,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
 
             {/* Expanded Chart Panel */}
             <Show when={selectedMetric()}>
-              <div class="rounded-lg border border-border bg-surface-1 p-6">
+              <div class="border-2 border-border bg-surface-1 p-6">
                 <div class="flex items-center justify-between mb-4">
                   <div>
                     <h3 class="text-sm font-semibold text-text-primary font-mono">{selectedMetric()}</h3>
@@ -371,60 +376,51 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
             </Show>
 
             {/* Data Table */}
-            <Show when={metrics().length > 0}>
-              <div class="rounded-lg border border-border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead class="text-left">Time</TableHead>
-                      <TableHead class="text-left">Service</TableHead>
-                      <TableHead class="text-left">Metric Name</TableHead>
-                      <TableHead class="text-left">Type</TableHead>
-                      <TableHead class="text-right">Value</TableHead>
-                      <TableHead class="text-left">Unit</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <tbody>
-                    <Show when={!loading() && !error() && metrics().length === 0}>
-                      <tr><td colspan="6" class="px-5 py-12 text-center text-text-secondary text-sm">No metrics found. Adjust filters or wait for new data.</td></tr>
-                    </Show>
-                    <For each={metrics()}>
-                      {(metric) => (
-                        <TableRow data-testid="metric-row" class="animate-fade-in">
-                          <TableCell class="text-xs font-mono text-text-secondary whitespace-nowrap">
-                            {formatTime(metric.timestamp)}
-                          </TableCell>
-                          <TableCell class="text-sm text-text-secondary">
-                            {metric.service_name}
-                          </TableCell>
-                          <TableCell>
-                            <span data-testid="metric-name" class="text-sm text-text-secondary font-mono">{metric.metric_name}</span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge data-testid="metric-type-badge" variant={metricTypeVariant(metric.metric_type)}>
-                              {metric.metric_type}
-                            </Badge>
-                          </TableCell>
-                          <TableCell class="text-right">
-                            <span data-testid="metric-value" class="text-sm font-mono text-text-primary">{formatValue(metric.value)}</span>
-                          </TableCell>
-                          <TableCell class="text-sm text-text-secondary">
-                            {metric.unit ?? '-'}
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </For>
-                  </tbody>
-                </Table>
-              </div>
-            </Show>
-
-            {/* Empty state */}
-            <Show when={!loading() && !error() && metrics().length === 0}>
-              <div class="text-center py-16">
-                <p class="text-text-secondary text-sm">No metrics found. Adjust filters or wait for new data.</p>
-              </div>
-            </Show>
+            <div class="border-2 border-border overflow-hidden">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead class="text-left">Time</TableHead>
+                    <TableHead class="text-left">Service</TableHead>
+                    <TableHead class="text-left">Metric Name</TableHead>
+                    <TableHead class="text-left">Type</TableHead>
+                    <TableHead class="text-right">Value</TableHead>
+                    <TableHead class="text-left">Unit</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <tbody>
+                  <Show when={!loading() && !error() && metrics().length === 0}>
+                    <tr><td colspan="6" class="px-5 py-12 text-center text-text-secondary text-sm">No metrics found. Adjust filters or wait for new data.</td></tr>
+                  </Show>
+                  <For each={metrics()}>
+                    {(metric) => (
+                      <TableRow data-testid="metric-row" class="animate-fade-in">
+                        <TableCell class="text-xs font-mono text-text-secondary whitespace-nowrap">
+                          {formatTime(metric.timestamp)}
+                        </TableCell>
+                        <TableCell class="text-sm text-text-secondary">
+                          {metric.service_name}
+                        </TableCell>
+                        <TableCell>
+                          <span data-testid="metric-name" class="text-sm text-text-secondary font-mono">{metric.metric_name}</span>
+                        </TableCell>
+                        <TableCell>
+                          <Badge data-testid="metric-type-badge" variant={metricTypeVariant(metric.metric_type)}>
+                            {metric.metric_type}
+                          </Badge>
+                        </TableCell>
+                        <TableCell class="text-right">
+                          <span data-testid="metric-value" class="text-sm font-mono text-text-primary">{formatValue(metric.value)}</span>
+                        </TableCell>
+                        <TableCell class="text-sm text-text-secondary">
+                          {metric.unit ?? '-'}
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </For>
+                </tbody>
+              </Table>
+            </div>
           </div>
         </Show>
       </div>

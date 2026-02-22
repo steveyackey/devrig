@@ -12,7 +12,7 @@ const DialogContent: Component<{ class?: string; children: JSX.Element }> = (pro
       <div class="fixed inset-0 z-50 flex items-start justify-center pt-[20vh]">
         <KDialog.Content
           class={cn(
-            'w-full max-w-lg rounded-xl border border-border bg-surface-1 shadow-2xl animate-slide-up',
+            'w-full max-w-lg border-2 border-border bg-surface-1 shadow-2xl animate-slide-up',
             local.class
           )}
           {...rest}
@@ -27,7 +27,7 @@ const DialogContent: Component<{ class?: string; children: JSX.Element }> = (pro
 const DialogTitle: Component<{ class?: string; children: JSX.Element }> = (props) => {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
-    <KDialog.Title class={cn('text-lg font-semibold text-text-primary', local.class)} {...rest}>
+    <KDialog.Title class={cn('font-display text-2xl tracking-[0.1em] text-accent uppercase', local.class)} {...rest}>
       {local.children}
     </KDialog.Title>
   );

@@ -31,7 +31,7 @@ const TableBody: Component<JSX.HTMLAttributes<HTMLTableSectionElement>> = (props
 const TableRow: Component<JSX.HTMLAttributes<HTMLTableRowElement>> = (props) => {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
-    <tr class={cn('border-b border-border/30 hover:bg-surface-2/50 transition-colors', local.class)} {...rest}>
+    <tr class={cn('border-b border-border hover:bg-accent/[0.03] transition-colors', local.class)} {...rest}>
       {local.children}
     </tr>
   );
@@ -42,7 +42,7 @@ const TableHead: Component<JSX.ThHTMLAttributes<HTMLTableCellElement>> = (props)
   return (
     <th
       class={cn(
-        'bg-surface-2/90 backdrop-blur text-xs text-text-secondary uppercase tracking-wider font-medium px-5 py-4',
+        'bg-surface-1 text-[10px] font-label text-text-muted uppercase tracking-[0.15em] px-5 py-3',
         local.class
       )}
       {...rest}

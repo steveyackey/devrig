@@ -1,6 +1,5 @@
 import { Component, createSignal, createEffect, onCleanup } from 'solid-js';
 import { fetchStatus, type StatusResponse } from '../api';
-import { Badge } from './ui';
 
 const StatusBar: Component = () => {
   const [status, setStatus] = createSignal<StatusResponse | null>(null);
@@ -34,55 +33,38 @@ const StatusBar: Component = () => {
   });
 
   return (
-    <footer data-testid="status-bar" class="h-10 bg-surface-1 border-t border-border flex items-center px-5 text-xs text-text-muted gap-6 shrink-0">
-      <div class="flex items-center gap-1.5">
+    <footer data-testid="status-bar" class="h-10 bg-surface-0 border-t-2 border-border flex items-center px-6 text-[9px] font-label text-text-secondary gap-4 shrink-0">
+      <span class="flex items-center gap-1.5">
         <span
           data-testid="status-bar-ws-indicator"
-          class={`inline-block w-2 h-2 rounded-full ${
+          class={`inline-block w-1.5 h-1.5 rounded-full border-solid ${
             wsConnected() ? 'bg-success animate-pulse-live' : 'bg-surface-3'
           }`}
+          style={wsConnected() ? { "box-shadow": '0 0 4px rgba(74,222,128,0.4)' } : {}}
         />
-        <span data-testid="status-bar-ws-status">{wsConnected() ? 'Live' : 'Disconnected'}</span>
-      </div>
+        <span data-testid="status-bar-ws-status" class={wsConnected() ? 'text-success' : 'text-text-muted'}>
+          {wsConnected() ? 'Live' : 'Disconnected'}
+        </span>
+      </span>
 
       {status() && (
         <>
-          <div class="flex items-center gap-1.5">
-            <span class="text-text-muted">Traces:</span>
-            <Badge variant="default" class="text-[10px] px-1.5 py-0">
-              <span data-testid="status-bar-traces-count">{status()!.trace_count.toLocaleString()}</span>
-            </Badge>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="text-text-muted">Spans:</span>
-            <Badge variant="default" class="text-[10px] px-1.5 py-0">
-              <span data-testid="status-bar-spans-count">{status()!.span_count.toLocaleString()}</span>
-            </Badge>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="text-text-muted">Logs:</span>
-            <Badge variant="default" class="text-[10px] px-1.5 py-0">
-              <span data-testid="status-bar-logs-count">{status()!.log_count.toLocaleString()}</span>
-            </Badge>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="text-text-muted">Metrics:</span>
-            <Badge variant="default" class="text-[10px] px-1.5 py-0">
-              <span data-testid="status-bar-metrics-count">{status()!.metric_count.toLocaleString()}</span>
-            </Badge>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <span class="text-text-muted">Services:</span>
-            <Badge variant="default" class="text-[10px] px-1.5 py-0">
-              <span data-testid="status-bar-services-count">{status()!.services.length}</span>
-            </Badge>
-          </div>
+          <span class="text-accent/10" aria-hidden="true">&middot;</span>
+          <span>Traces: <span data-testid="status-bar-traces-count">{status()!.trace_count.toLocaleString()}</span></span>
+          <span class="text-accent/10" aria-hidden="true">&middot;</span>
+          <span>Spans: <span data-testid="status-bar-spans-count">{status()!.span_count.toLocaleString()}</span></span>
+          <span class="text-accent/10" aria-hidden="true">&middot;</span>
+          <span>Logs: <span data-testid="status-bar-logs-count">{status()!.log_count.toLocaleString()}</span></span>
+          <span class="text-accent/10" aria-hidden="true">&middot;</span>
+          <span>Metrics: <span data-testid="status-bar-metrics-count">{status()!.metric_count.toLocaleString()}</span></span>
+          <span class="text-accent/10" aria-hidden="true">&middot;</span>
+          <span>Services: <span data-testid="status-bar-services-count">{status()!.services.length}</span></span>
         </>
       )}
 
-      <div class="ml-auto text-text-muted">
-        {lastUpdated() && `Updated ${lastUpdated()}`}
-      </div>
+      <span class="ml-auto text-text-muted">
+        {lastUpdated()}
+      </span>
     </footer>
   );
 };
