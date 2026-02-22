@@ -21,6 +21,7 @@ pub struct DashboardState {
     pub store: Arc<RwLock<TelemetryStore>>,
     pub events_tx: broadcast::Sender<TelemetryEvent>,
     pub config_path: Option<PathBuf>,
+    pub state_dir: Option<PathBuf>,
 }
 
 pub fn api_router(state: DashboardState) -> Router {
@@ -35,6 +36,7 @@ pub fn api_router(state: DashboardState) -> Router {
             "/api/config",
             get(config::get_config).put(config::update_config),
         )
+        .route("/api/services", get(services::get_services))
         .route("/api/config/validate", post(config::validate_config))
         .with_state(state)
 }

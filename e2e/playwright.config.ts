@@ -4,6 +4,7 @@ export default defineConfig({
   testDir: './dashboard',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  grepInvert: process.env.SCREENSHOTS ? undefined : /@screenshots/,
   retries: 1,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',

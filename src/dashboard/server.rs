@@ -18,11 +18,13 @@ pub async fn start_dashboard_server(
     events_tx: broadcast::Sender<TelemetryEvent>,
     cancel: CancellationToken,
     config_path: Option<PathBuf>,
+    state_dir: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let state = DashboardState {
         store,
         events_tx,
         config_path,
+        state_dir,
     };
 
     let app = routes::api_router(state.clone())

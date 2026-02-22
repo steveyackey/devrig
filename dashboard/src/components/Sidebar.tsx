@@ -56,7 +56,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
   return (
     <aside data-testid="sidebar" class="w-56 bg-surface-1 border-r border-border flex flex-col h-full shrink-0">
       {/* Header */}
-      <div class="px-5 py-5 border-b border-border">
+      <div class="px-5 py-6 border-b border-border">
         <div class="flex items-center gap-2">
           <div data-testid="sidebar-logo" class="w-8 h-8 rounded-lg bg-accent flex items-center justify-center text-white font-bold text-sm">
             DR
@@ -69,7 +69,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
       </div>
 
       {/* Navigation */}
-      <nav class="flex-1 px-3 py-4 space-y-1">
+      <nav class="flex-1 px-3 py-4 space-y-1.5">
         {navItems.map((item, index) => {
           const isActive = createMemo(() => activeIndex() === index);
           const Icon = item.icon;
@@ -79,7 +79,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
               href={item.route}
               aria-current={isActive() ? 'page' : undefined}
               data-active={isActive() ? 'true' : undefined}
-              class={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+              class={`flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors ${
                 isActive()
                   ? 'bg-accent/15 text-accent border border-accent/20'
                   : 'text-text-secondary hover:text-text-primary hover:bg-surface-2 border border-transparent'

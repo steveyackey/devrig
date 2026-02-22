@@ -87,13 +87,13 @@ const TracesView: Component<TracesViewProps> = (props) => {
   return (
     <div data-testid="traces-view" class="flex flex-col h-full">
       {/* Header */}
-      <div class="px-6 py-4 border-b border-border">
+      <div class="px-6 py-5 border-b border-border">
         <h2 class="text-lg font-semibold text-text-primary">Traces</h2>
         <p class="text-sm text-text-muted mt-0.5">Distributed trace overview</p>
       </div>
 
       {/* Filter Bar */}
-      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-3 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-4 border-b border-border flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-muted uppercase tracking-wider">Service</label>
           <select

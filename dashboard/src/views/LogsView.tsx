@@ -90,12 +90,12 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
   return (
     <div data-testid="logs-view" class="flex flex-col h-full">
-      <div class="px-6 py-4 border-b border-border">
+      <div class="px-6 py-5 border-b border-border">
         <h2 class="text-lg font-semibold text-text-primary">Logs</h2>
         <p class="text-sm text-text-muted mt-0.5">Application log records</p>
       </div>
 
-      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-3 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-4 border-b border-border flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-muted uppercase tracking-wider">Service</label>
           <select
@@ -190,25 +190,25 @@ const LogsView: Component<LogsViewProps> = (props) => {
               <For each={logs()}>
                 {(log) => (
                   <tr data-testid="log-row" class="border-b border-border/30 hover:bg-surface-2/40 group animate-fade-in">
-                    <td class="px-4 py-2 align-top">
+                    <td class="px-4 py-3 align-top">
                       <span data-testid="log-timestamp" class="text-xs font-mono text-text-muted whitespace-nowrap">
                         {formatTime(log.timestamp)}
                       </span>
                     </td>
-                    <td class="px-3 py-2 align-top">
+                    <td class="px-3 py-3 align-top">
                       <Badge data-testid="log-severity-badge" variant={severityVariant(log.severity)}>
                         {log.severity}
                       </Badge>
                     </td>
-                    <td class="px-3 py-2 text-xs text-text-muted align-top truncate max-w-[130px]">
+                    <td class="px-3 py-3 text-xs text-text-muted align-top truncate max-w-[130px]">
                       {log.service_name}
                     </td>
-                    <td class="px-3 py-2 text-sm text-text-secondary font-mono align-top">
+                    <td class="px-3 py-3 text-sm text-text-secondary font-mono align-top">
                       <div data-testid="log-body" class="whitespace-pre-wrap break-all max-h-24 overflow-hidden group-hover:max-h-none">
                         {log.body}
                       </div>
                     </td>
-                    <td class="px-4 py-2 align-top">
+                    <td class="px-4 py-3 align-top">
                       <Show when={log.trace_id}>
                         <a
                           data-testid="log-trace-link"

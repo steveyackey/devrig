@@ -87,12 +87,12 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
 
   return (
     <div data-testid="metrics-view" class="flex flex-col h-full">
-      <div class="px-6 py-4 border-b border-border">
+      <div class="px-6 py-5 border-b border-border">
         <h2 class="text-lg font-semibold text-text-primary">Metrics</h2>
         <p class="text-sm text-text-muted mt-0.5">Telemetry metric data points</p>
       </div>
 
-      <form onSubmit={handleSearch} class="px-6 py-3 border-b border-border flex items-center gap-3 flex-wrap">
+      <form onSubmit={handleSearch} class="px-6 py-4 border-b border-border flex items-center gap-3 flex-wrap">
         <div class="flex items-center gap-2">
           <label class="text-xs text-text-muted uppercase tracking-wider">Metric Name</label>
           <input

@@ -149,6 +149,19 @@ export function fetchStatus(): Promise<StatusResponse> {
   return fetchJson<StatusResponse>(`${BASE_URL}/api/status`);
 }
 
+// ---- Services API ----
+
+export interface ServiceInfo {
+  name: string;
+  port: number | null;
+  kind: string;
+  port_auto: boolean;
+}
+
+export function fetchServices(): Promise<ServiceInfo[]> {
+  return fetchJson<ServiceInfo[]>(`${BASE_URL}/api/services`);
+}
+
 // ---- Config API ----
 
 export interface ConfigResponse {

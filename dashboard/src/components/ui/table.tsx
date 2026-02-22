@@ -42,7 +42,7 @@ const TableHead: Component<JSX.ThHTMLAttributes<HTMLTableCellElement>> = (props)
   return (
     <th
       class={cn(
-        'bg-surface-2/90 backdrop-blur text-xs text-text-muted uppercase tracking-wider font-medium px-4 py-2.5',
+        'bg-surface-2/90 backdrop-blur text-xs text-text-muted uppercase tracking-wider font-medium px-4 py-3',
         local.class
       )}
       {...rest}
@@ -55,7 +55,7 @@ const TableHead: Component<JSX.ThHTMLAttributes<HTMLTableCellElement>> = (props)
 const TableCell: Component<JSX.TdHTMLAttributes<HTMLTableCellElement>> = (props) => {
   const [local, rest] = splitProps(props, ['class', 'children']);
   return (
-    <td class={cn('px-4 py-2.5', local.class)} {...rest}>
+    <td class={cn('px-4 py-3.5', local.class)} {...rest}>
       {local.children}
     </td>
   );

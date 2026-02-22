@@ -531,6 +531,7 @@ impl Orchestrator {
 
             let dash_cancel = self.cancel.clone();
             let dash_config_path = Some(self.config_path.clone());
+            let dash_state_dir = Some(self.state_dir.clone());
             self.tracker.spawn(async move {
                 if let Err(e) = crate::dashboard::server::start_dashboard_server(
                     dash_port,
@@ -538,6 +539,7 @@ impl Orchestrator {
                     events_tx,
                     dash_cancel,
                     dash_config_path,
+                    dash_state_dir,
                 )
                 .await
                 {
