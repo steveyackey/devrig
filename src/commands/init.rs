@@ -29,14 +29,12 @@ name = "{project_name}"
 # SECRET_KEY = "$MY_SECRET_KEY" # $VAR expands from .env or host environment
 
 # -- Dashboard + OpenTelemetry --
-# Uncomment to enable the built-in dashboard and OTel collector.
-# Services automatically receive OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME.
-# Ports auto-resolve if already in use, so multiple devrig instances can coexist.
-#
-# [dashboard]
+# Built-in dashboard and OTel collector. Services automatically receive
+# OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME. Ports auto-resolve
+# if already in use, so multiple devrig instances can coexist.
+[dashboard]
 # port = 4000                    # default; auto-resolves if in use
-# [dashboard.otel]
-# retention = "1h"
+# OTel defaults: grpc_port=4317, http_port=4318, retention="1h" — customize with [dashboard.otel]
 
 # -- Services --
 [services.{service_name}]
