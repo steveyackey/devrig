@@ -12,6 +12,10 @@ pipeline/bun.lock
 dashboard/node_modules/
 dashboard/dist/
 
+# E2E / Playwright
+test-results/
+e2e/playwright-report/
+
 # Added by cargo
 
 /target
