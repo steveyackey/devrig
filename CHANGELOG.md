@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/steveyackey/devrig/compare/v0.4.1...v0.5.0) (2026-02-23)
+
+
+### Features
+
+* add [cluster.image.*] for build-only images ([1d27b8f](https://github.com/steveyackey/devrig/commit/1d27b8f29f828ddabd7c26f62ec6a070e07f37a0))
+
 ## [0.4.1](https://github.com/steveyackey/devrig/compare/v0.4.0...v0.4.1) (2026-02-23)
 
 
