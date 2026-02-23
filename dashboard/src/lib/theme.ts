@@ -2,8 +2,7 @@
  * Dark / light mode management using localStorage.
  *
  * Persists the user's preference in localStorage under the key "devrig-theme".
- * Falls back to the system preference (prefers-color-scheme) when no stored
- * preference exists.
+ * Defaults to dark when no stored preference exists.
  *
  * The theme is applied by toggling a "dark" class on the <html> element
  * (registered via `@custom-variant` in index.css) and setting `data-theme`
@@ -34,11 +33,6 @@ const STORAGE_KEY = 'devrig-theme';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function getSystemPreference(): Theme {
-  if (typeof window === 'undefined') return 'dark';
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-}
 
 function getStoredPreference(): Theme | null {
   try {
@@ -107,32 +101,17 @@ export function toggleTheme() {
 }
 
 /**
- * Initialize the theme from localStorage or system preference.
+ * Initialize the theme from localStorage, defaulting to dark.
  * Should be called once at application startup (e.g., in index.tsx or App.tsx).
  */
 export function initTheme() {
-  const initial = getStoredPreference() ?? getSystemPreference();
+  const initial = getStoredPreference() ?? 'dark';
   _setTheme(initial);
   applyThemeToDocument(initial);
-
-  // Listen for OS-level preference changes
-  if (typeof window !== 'undefined') {
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = (e: MediaQueryListEvent) => {
-      // Only follow system preference if the user hasn't explicitly chosen
-      if (!getStoredPreference()) {
-        const next = e.matches ? 'dark' : 'light';
-        _setTheme(next);
-        applyThemeToDocument(next);
-      }
-    };
-    mediaQuery.addEventListener('change', handler);
-    // No cleanup needed -- this is a singleton intended to live for the app's lifetime
-  }
 }
 
 /**
- * Remove the stored preference so the app falls back to the system preference.
+ * Remove the stored preference so the app falls back to dark (the default).
  */
 export function clearThemePreference() {
   try {
@@ -140,7 +119,6 @@ export function clearThemePreference() {
   } catch {
     // Silently ignore
   }
-  const system = getSystemPreference();
-  _setTheme(system);
-  applyThemeToDocument(system);
+  _setTheme('dark');
+  applyThemeToDocument('dark');
 }
