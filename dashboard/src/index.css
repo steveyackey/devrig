@@ -25,7 +25,7 @@
 
   --color-text-primary: #F5F5F0;
   --color-text-secondary: #9E9C95;
-  --color-text-muted: #7A7870;
+  --color-text-muted: #959390; /* was #7A7870 — failed 4.5:1 on surface-2/3 */
 
   /* Animations */
   --animate-fade-in: fade-in 0.3s ease-out;
@@ -131,15 +131,15 @@
     --color-surface-2: #E0E0D4;
     --color-surface-3: #D5D5C9;
 
-    --color-accent: #B89B1A;
-    --color-accent-hover: #9A8520;
+    --color-accent: #6B5A0A;       /* was #B89B1A — failed 3:1 on all light surfaces */
+    --color-accent-hover: #574B09;
 
     --color-border: #C8C0A0;
     --color-border-hover: #A89840;
 
     --color-text-primary: #1A1A14;
     --color-text-secondary: #4A4840;
-    --color-text-muted: #7A7870;
+    --color-text-muted: #5E5C56;   /* was inheriting dark #7A7870 — failed 4.5:1 on light surfaces */
   }
 }
 
