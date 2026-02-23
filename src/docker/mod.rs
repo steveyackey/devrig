@@ -64,9 +64,10 @@ impl DockerManager {
         prev_state: Option<&DockerState>,
         allocated_ports: &mut HashSet<u16>,
     ) -> Result<DockerState> {
-        // Pull image if needed
+        // Pull image if needed (with optional registry auth)
         if !image::check_image_exists(&self.docker, &config.image).await {
-            image::pull_image(&self.docker, &config.image).await?;
+            image::pull_image_with_auth(&self.docker, &config.image, config.registry_auth.as_ref())
+                .await?;
         }
 
         // Resolve ports

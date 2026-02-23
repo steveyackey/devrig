@@ -229,6 +229,7 @@ mod tests {
                 command: "cargo run".to_string(),
                 port: Some(Port::Auto),
                 env: BTreeMap::new(),
+                env_file: None,
                 depends_on: vec![],
                 restart: None,
             },
@@ -250,6 +251,7 @@ mod tests {
                 ready_check: None,
                 init: vec![],
                 depends_on: vec![],
+                registry_auth: None,
             },
         );
         docker_map.insert(
@@ -263,12 +265,14 @@ mod tests {
                 ready_check: None,
                 init: vec![],
                 depends_on: vec![],
+                registry_auth: None,
             },
         );
 
         let config = DevrigConfig {
             project: ProjectConfig {
                 name: "myapp".to_string(),
+                env_file: None,
             },
             services,
             docker: docker_map,
@@ -300,6 +304,7 @@ mod tests {
         let config = DevrigConfig {
             project: ProjectConfig {
                 name: "myapp".to_string(),
+                env_file: None,
             },
             services: BTreeMap::new(),
             docker: BTreeMap::new(),
@@ -330,6 +335,7 @@ mod tests {
         let mut config = DevrigConfig {
             project: ProjectConfig {
                 name: "myapp".to_string(),
+                env_file: None,
             },
             services: BTreeMap::new(),
             docker: BTreeMap::new(),
@@ -342,6 +348,7 @@ mod tests {
                 deploy: BTreeMap::new(),
                 addons: BTreeMap::new(),
                 logs: None,
+                registries: vec![],
             }),
             dashboard: None,
             env: BTreeMap::new(),

@@ -62,9 +62,9 @@ impl Orchestrator {
     /// Create an Orchestrator from a config file path.
     ///
     /// Loads and parses the config, validates it, and computes the project
-    /// identity and state directory.
+    /// identity and state directory. Performs .env loading and $VAR expansion.
     pub fn from_config(config_path: PathBuf) -> Result<Self> {
-        let (config, source) = config::load_config(&config_path)
+        let (config, source, _secret_registry) = config::load_config_with_secrets(&config_path)
             .with_context(|| format!("loading config from {}", config_path.display()))?;
 
         let filename = config_path

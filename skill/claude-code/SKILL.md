@@ -104,9 +104,10 @@ Full reference: `docs/guides/configuration.md`
 
 ### `[project]` (required)
 
-| Field  | Type   | Required | Description              |
-|--------|--------|----------|--------------------------|
-| `name` | string | Yes      | Project name for display and slug |
+| Field      | Type   | Required | Description                        |
+|------------|--------|----------|------------------------------------|
+| `name`     | string | Yes      | Project name for display and slug  |
+| `env_file` | string | No       | Path to project-level `.env` file  |
 
 ### `[env]`
 
@@ -126,6 +127,7 @@ NODE_ENV = "development"
 | `path`       | string             | No       | config dir   | Working directory relative to config file    |
 | `port`       | int or `"auto"`    | No       | (none)       | Port the service listens on                  |
 | `env`        | map                | No       | `{}`         | Service-specific env vars                    |
+| `env_file`   | string             | No       | (none)       | Per-service `.env` file path                 |
 | `depends_on` | list               | No       | `[]`         | Services/docker/compose to start before this |
 
 **Port values:** `3000` (fixed, verified available), `"auto"` (ephemeral, sticky across restarts), omitted (no management). When set, `PORT` env var is injected.
@@ -145,14 +147,15 @@ NODE_ENV = "development"
 
 | Field         | Type               | Required | Default | Description                              |
 |---------------|--------------------|----------|---------|------------------------------------------|
-| `image`       | string             | Yes      | --      | Docker image                             |
-| `port`        | int or `"auto"`    | No       | (none)  | Single port mapping (host:container)     |
-| `ports`       | map                | No       | `{}`    | Named port mappings (multi-port)         |
-| `env`         | map                | No       | `{}`    | Container env vars                       |
-| `volumes`     | list               | No       | `[]`    | Volume mounts (`"name:/path"`)           |
-| `ready_check` | table              | No       | (none)  | Health check config                      |
-| `init`        | list               | No       | `[]`    | SQL/commands after first ready           |
-| `depends_on`  | list               | No       | `[]`    | Other docker/compose dependencies        |
+| `image`         | string             | Yes      | --      | Docker image                             |
+| `port`          | int or `"auto"`    | No       | (none)  | Single port mapping (host:container)     |
+| `ports`         | map                | No       | `{}`    | Named port mappings (multi-port)         |
+| `env`           | map                | No       | `{}`    | Container env vars                       |
+| `volumes`       | list               | No       | `[]`    | Volume mounts (`"name:/path"`)           |
+| `ready_check`   | table              | No       | (none)  | Health check config                      |
+| `init`          | list               | No       | `[]`    | SQL/commands after first ready           |
+| `depends_on`    | list               | No       | `[]`    | Other docker/compose dependencies        |
+| `registry_auth` | table              | No       | (none)  | Private registry credentials (`username`, `password`) |
 
 **Ready check types:**
 
@@ -197,7 +200,7 @@ match = "started"
 | Field          | Type    | Required | Default | Description                     |
 |----------------|---------|----------|---------|---------------------------------|
 | `file`         | string  | Yes      | --      | Path to docker-compose.yml      |
-| `services`     | list    | No       | `[]`    | Services to start (all if empty)|
+| `services`     | list    | No       | `[]`    | Services to start (auto-discovered if empty) |
 | `env_file`     | string  | No       | (none)  | Env file for compose            |
 | `ready_checks` | map     | No       | `{}`    | Ready checks for compose services|
 
@@ -209,6 +212,23 @@ match = "started"
 | `agents`   | int     | `1`             | Number of agent nodes          |
 | `ports`    | list    | `[]`            | Host-to-cluster port mappings  |
 | `registry` | bool    | `true`          | Create local container registry|
+
+### `[[cluster.registries]]`
+
+Private registry auth for cluster image pulls. Each entry generates k3d `registries.yaml`.
+
+| Field      | Type   | Required | Description              |
+|------------|--------|----------|--------------------------|
+| `url`      | string | Yes      | Registry hostname        |
+| `username` | string | Yes      | Auth username            |
+| `password` | string | Yes      | Auth password            |
+
+```toml
+[[cluster.registries]]
+url = "ghcr.io"
+username = "$REGISTRY_USER"
+password = "$REGISTRY_TOKEN"
+```
 
 ### `[cluster.deploy.*]`
 
@@ -244,6 +264,29 @@ version = "26.0.0"
 | Field  | Type   | Default            | Description           |
 |--------|--------|--------------------|-----------------------|
 | `name` | string | `devrig-{slug}-net`| Custom Docker network |
+
+### Environment Variable Expansion
+
+Any env value can reference host or `.env` file variables with `$VAR` or `${VAR}`. Use `$$` for a literal `$`. Expansion runs before template interpolation (`{{ }}`), so both can be combined.
+
+**Lookup order:** `.env` file values → host process environment.
+
+```toml
+[project]
+env_file = ".env"           # Load shared secrets
+
+[env]
+SECRET_KEY = "$MY_SECRET_KEY"
+
+[services.api]
+env_file = ".env.api"       # Per-service .env
+[services.api.env]
+DATABASE_URL = "postgres://user:${DB_PASS}@localhost:{{ docker.postgres.port }}/mydb"
+```
+
+**Supported expansion locations:** `[env]`, `[services.*.env]`, `[docker.*.env]`, `docker.*.image`, `docker.*.registry_auth.*`, `cluster.registries.*`.
+
+**Secret masking:** `devrig env <service>` masks expanded secrets with `****`.
 
 ### Template Expressions
 
@@ -329,6 +372,14 @@ port = 4000
 grpc_port = 4317
 http_port = 4318
 retention = "2h"
+```
+
+### Using Private Docker Registries
+
+```toml
+[docker.my-app]
+image = "ghcr.io/org/app:latest"
+registry_auth = { username = "$REGISTRY_USER", password = "$REGISTRY_TOKEN" }
 ```
 
 ### Connecting Services to Docker Containers

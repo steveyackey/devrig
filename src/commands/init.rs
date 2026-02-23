@@ -20,11 +20,13 @@ pub fn run() -> Result<()> {
     let config = format!(
         r#"[project]
 name = "{project_name}"
+# env_file = ".env"            # Load shared secrets from a .env file
 
 # -- Global env vars shared by all services --
 # [env]
 # RUST_LOG = "debug"
 # NODE_ENV = "development"
+# SECRET_KEY = "$MY_SECRET_KEY" # $VAR expands from .env or host environment
 
 # -- Dashboard + OpenTelemetry --
 # Uncomment to enable the built-in dashboard and OTel collector.
@@ -45,8 +47,10 @@ command = "{service_command}"
 # path = "./"
 # depends_on = ["postgres"]
 #
+# env_file = ".env.{service_name}"  # Per-service .env file
+#
 # [services.{service_name}.env]
-# DATABASE_URL = "postgres://devrig:devrig@localhost:{{{{ docker.postgres.port }}}}/mydb"
+# DATABASE_URL = "postgres://user:${{DB_PASS}}@localhost:{{{{ docker.postgres.port }}}}/mydb"
 #
 # [services.{service_name}.restart]
 # policy = "on-failure"
@@ -74,13 +78,19 @@ command = "{service_command}"
 # image = "redis:7-alpine"
 # port = 6379
 # ready_check = {{ type = "cmd", command = "redis-cli ping", expect = "PONG" }}
+#
+# -- Private registry images --
+# [docker.my-app]
+# image = "ghcr.io/org/app:latest"
+# registry_auth = {{ username = "$REGISTRY_USER", password = "$REGISTRY_TOKEN" }}
 
 # -- Docker Compose integration --
 # Delegate to an existing docker-compose.yml.
+# Services are auto-discovered from the file; list specific ones to limit.
 #
 # [compose]
 # file = "docker-compose.yml"
-# services = ["redis", "postgres"]
+# services = ["redis", "postgres"]  # Optional — empty auto-discovers all
 
 # -- Kubernetes cluster (k3d) --
 # Create a local cluster with auto-build and deploy.
@@ -100,6 +110,12 @@ command = "{service_command}"
 # chart = "traefik/traefik"
 # repo = "https://traefik.github.io/charts"
 # namespace = "traefik"
+#
+# -- Private registry auth for cluster image pulls --
+# [[cluster.registries]]
+# url = "ghcr.io"
+# username = "$REGISTRY_USER"
+# password = "$REGISTRY_TOKEN"
 "#
     );
 

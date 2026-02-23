@@ -110,6 +110,7 @@ mod tests {
         DevrigConfig {
             project: ProjectConfig {
                 name: "test".to_string(),
+                env_file: None,
             },
             services: BTreeMap::new(),
             docker: BTreeMap::new(),
@@ -134,6 +135,7 @@ mod tests {
             ready_check: None,
             init: Vec::new(),
             depends_on: Vec::new(),
+            registry_auth: None,
         }
     }
 
@@ -143,6 +145,7 @@ mod tests {
             command: command.to_string(),
             port: port.map(Port::Fixed),
             env: BTreeMap::new(),
+            env_file: None,
             depends_on: Vec::new(),
             restart: None,
         }

@@ -1,8 +1,11 @@
 use anyhow::{bail, Context, Result};
+use bollard::auth::DockerCredentials;
 use bollard::models::CreateImageInfo;
 use bollard::query_parameters::CreateImageOptions;
 use bollard::Docker;
 use futures_util::StreamExt;
+
+use crate::config::model::RegistryAuth;
 
 /// Parse an image reference into (name, tag).
 /// "postgres:16" -> ("postgres", "16")
@@ -32,6 +35,39 @@ pub async fn pull_image(docker: &Docker, image: &str) -> Result<()> {
     };
 
     let mut stream = docker.create_image(Some(options), None, None);
+    while let Some(result) = stream.next().await {
+        let info: CreateImageInfo = result.context("pulling image")?;
+        if let Some(err) = &info.error_detail {
+            bail!("image pull failed for {}: {:?}", image, err);
+        }
+    }
+
+    tracing::info!(image = %image, "image pulled successfully");
+    Ok(())
+}
+
+/// Pull a single Docker image with optional registry authentication.
+pub async fn pull_image_with_auth(
+    docker: &Docker,
+    image: &str,
+    auth: Option<&RegistryAuth>,
+) -> Result<()> {
+    let (name, tag) = parse_image_ref(image);
+    tracing::info!(image = %image, "pulling image");
+
+    let options = CreateImageOptions {
+        from_image: Some(name.to_string()),
+        tag: Some(tag.to_string()),
+        ..Default::default()
+    };
+
+    let credentials = auth.map(|a| DockerCredentials {
+        username: Some(a.username.clone()),
+        password: Some(a.password.clone()),
+        ..Default::default()
+    });
+
+    let mut stream = docker.create_image(Some(options), None, credentials);
     while let Some(result) = stream.next().await {
         let info: CreateImageInfo = result.context("pulling image")?;
         if let Some(err) = &info.error_detail {

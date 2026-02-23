@@ -23,6 +23,8 @@ pub struct DevrigConfig {
 #[derive(Debug, Deserialize)]
 pub struct ProjectConfig {
     pub name: String,
+    #[serde(default)]
+    pub env_file: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -34,6 +36,8 @@ pub struct ServiceConfig {
     pub port: Option<Port>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    #[serde(default)]
+    pub env_file: Option<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
     #[serde(default)]
@@ -97,6 +101,14 @@ pub struct DockerConfig {
     pub init: Vec<String>,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    #[serde(default)]
+    pub registry_auth: Option<RegistryAuth>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+pub struct RegistryAuth {
+    pub username: String,
+    pub password: String,
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -239,6 +251,15 @@ pub struct ClusterConfig {
     pub addons: BTreeMap<String, AddonConfig>,
     #[serde(default)]
     pub logs: Option<ClusterLogsConfig>,
+    #[serde(default)]
+    pub registries: Vec<ClusterRegistryAuth>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ClusterRegistryAuth {
+    pub url: String,
+    pub username: String,
+    pub password: String,
 }
 
 fn default_true() -> bool {
@@ -1174,6 +1195,7 @@ mod tests {
             command: "echo hi".to_string(),
             port: Some(Port::Fixed(3000)),
             env: BTreeMap::new(),
+            env_file: None,
             depends_on: vec![],
             restart: None,
         };
@@ -1603,5 +1625,142 @@ mod tests {
         "#;
         let err = toml::from_str::<DevrigConfig>(toml_str).unwrap_err();
         assert!(err.to_string().contains("expected \"all\""));
+    }
+
+    // --- Secrets management config tests ---
+
+    #[test]
+    fn parse_project_env_file() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+            env_file = ".env"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.project.env_file.as_deref(), Some(".env"));
+    }
+
+    #[test]
+    fn parse_project_without_env_file() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.project.env_file.is_none());
+    }
+
+    #[test]
+    fn parse_service_env_file() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [services.api]
+            command = "cargo run"
+            env_file = ".env.api"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.services["api"].env_file.as_deref(), Some(".env.api"));
+    }
+
+    #[test]
+    fn parse_docker_registry_auth() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.my-app]
+            image = "ghcr.io/org/app:latest"
+            registry_auth = { username = "user", password = "token" }
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let auth = config.docker["my-app"].registry_auth.as_ref().unwrap();
+        assert_eq!(auth.username, "user");
+        assert_eq!(auth.password, "token");
+    }
+
+    #[test]
+    fn parse_docker_without_registry_auth() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.postgres]
+            image = "postgres:16"
+            port = 5432
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.docker["postgres"].registry_auth.is_none());
+    }
+
+    #[test]
+    fn parse_cluster_registries() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+
+            [[cluster.registries]]
+            url = "ghcr.io"
+            username = "user"
+            password = "token"
+
+            [[cluster.registries]]
+            url = "docker.io"
+            username = "ghuser"
+            password = "ghtoken"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert_eq!(cluster.registries.len(), 2);
+        assert_eq!(cluster.registries[0].url, "ghcr.io");
+        assert_eq!(cluster.registries[0].username, "user");
+        assert_eq!(cluster.registries[1].url, "docker.io");
+    }
+
+    #[test]
+    fn parse_cluster_without_registries() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert!(cluster.registries.is_empty());
+    }
+
+    #[test]
+    fn backwards_compat_existing_configs_parse() {
+        // Ensure all new fields have serde(default) and don't break old configs
+        let toml_str = r#"
+            [project]
+            name = "myapp"
+
+            [env]
+            RUST_LOG = "debug"
+
+            [docker.postgres]
+            image = "postgres:16-alpine"
+            port = 5432
+
+            [services.api]
+            command = "cargo run"
+            port = 3000
+            depends_on = ["postgres"]
+
+            [cluster]
+            registry = true
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.project.env_file.is_none());
+        assert!(config.services["api"].env_file.is_none());
+        assert!(config.docker["postgres"].registry_auth.is_none());
+        assert!(config.cluster.unwrap().registries.is_empty());
     }
 }

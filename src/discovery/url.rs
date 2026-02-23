@@ -51,6 +51,7 @@ mod tests {
             ready_check: None,
             init: Vec::new(),
             depends_on: Vec::new(),
+            registry_auth: None,
         }
     }
 

@@ -220,6 +220,32 @@ pub enum ConfigDiagnostic {
         name: String,
     },
 
+    #[error("docker `{service}` has empty registry_auth credentials after expansion")]
+    #[diagnostic(
+        code(devrig::empty_registry_auth),
+        help("ensure registry_auth username and password are non-empty (check $VAR references)")
+    )]
+    EmptyRegistryAuth {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("empty credentials")]
+        span: SourceSpan,
+        service: String,
+    },
+
+    #[error("cluster registry `{url}` has empty credentials after expansion")]
+    #[diagnostic(
+        code(devrig::empty_cluster_registry_auth),
+        help("ensure username and password are non-empty (check $VAR references)")
+    )]
+    EmptyClusterRegistryAuth {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("empty credentials")]
+        span: SourceSpan,
+        url: String,
+    },
+
     #[error("exclude_namespaces requires namespaces = \"all\"")]
     #[diagnostic(
         code(devrig::logs_exclude_requires_all),
@@ -584,6 +610,39 @@ pub fn validate(
                 span: find_field_span(source, "docker", name, "image"),
                 service: name.clone(),
             });
+        }
+    }
+
+    // Check registry_auth has non-empty credentials
+    for (name, docker_cfg) in &config.docker {
+        if let Some(auth) = &docker_cfg.registry_auth {
+            if auth.username.trim().is_empty() || auth.password.trim().is_empty() {
+                errors.push(ConfigDiagnostic::EmptyRegistryAuth {
+                    src: src.clone(),
+                    span: find_field_span(source, "docker", name, "registry_auth"),
+                    service: name.clone(),
+                });
+            }
+        }
+    }
+
+    // Check cluster registries have non-empty credentials
+    if let Some(cluster) = &config.cluster {
+        for reg in &cluster.registries {
+            if reg.url.trim().is_empty()
+                || reg.username.trim().is_empty()
+                || reg.password.trim().is_empty()
+            {
+                let span = source
+                    .find("[[cluster.registries]]")
+                    .map(|pos| (pos, 21).into())
+                    .unwrap_or_else(|| (0, 0).into());
+                errors.push(ConfigDiagnostic::EmptyClusterRegistryAuth {
+                    src: src.clone(),
+                    span,
+                    url: reg.url.clone(),
+                });
+            }
         }
     }
 
@@ -970,6 +1029,7 @@ mod tests {
                     command: command.to_string(),
                     port,
                     env: BTreeMap::new(),
+                    env_file: None,
                     depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
                     restart: None,
                 },
@@ -978,6 +1038,7 @@ mod tests {
         DevrigConfig {
             project: ProjectConfig {
                 name: "test".to_string(),
+                env_file: None,
             },
             services: svc_map,
             docker: BTreeMap::new(),
@@ -1020,6 +1081,7 @@ mod tests {
             ready_check: None,
             init: Vec::new(),
             depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+            registry_auth: None,
         }
     }
 
@@ -1400,6 +1462,7 @@ mod tests {
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[services.web]\ncommand = \"npm run dev\"\nport = 3000\ndepends_on = [\"api\"]\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1423,6 +1486,7 @@ mod tests {
             )]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"postgres\"]\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1439,6 +1503,7 @@ mod tests {
             deploy: BTreeMap::from([("api".to_string(), make_deploy("", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1459,6 +1524,7 @@ mod tests {
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1486,6 +1552,7 @@ mod tests {
             )]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.deploy.postgres]\ncontext = \"./pg\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1509,6 +1576,7 @@ mod tests {
             )]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"nonexistent\"]\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();

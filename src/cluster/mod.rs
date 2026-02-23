@@ -9,7 +9,7 @@ use std::path::{Path, PathBuf};
 use tokio::process::Command;
 use tracing::{info, warn};
 
-use crate::config::model::ClusterConfig;
+use crate::config::model::{ClusterConfig, ClusterRegistryAuth};
 
 /// Manages the lifecycle of a k3d Kubernetes cluster for a devrig project.
 pub struct K3dManager {
@@ -63,6 +63,19 @@ impl K3dManager {
         if self.config.registry {
             args.push("--registry-create".to_string());
             args.push(format!("k3d-{}-reg:0.0.0.0:0", self.cluster_name));
+        }
+
+        // If external registries are configured, generate registries.yaml
+        if !self.config.registries.is_empty() {
+            let registries_yaml = generate_registries_yaml(&self.config.registries);
+            let registries_path = self.kubeconfig_path.parent()
+                .unwrap_or_else(|| Path::new("."))
+                .join("registries.yaml");
+            std::fs::write(&registries_path, registries_yaml.as_bytes())
+                .context("writing registries.yaml")?;
+            args.push("--registry-config".to_string());
+            args.push(registries_path.to_string_lossy().to_string());
+            info!(path = %registries_path.display(), "generated registries.yaml for external registries");
         }
 
         let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
@@ -248,5 +261,73 @@ impl K3dManager {
     /// Return the project slug.
     pub fn slug(&self) -> &str {
         &self.slug
+    }
+}
+
+/// Generate a k3d registries.yaml for external registry authentication.
+///
+/// Produces YAML with `mirrors` (to route image pulls through the registry)
+/// and `configs` (to provide auth credentials) sections.
+fn generate_registries_yaml(registries: &[ClusterRegistryAuth]) -> String {
+    let mut yaml = String::new();
+    yaml.push_str("mirrors:\n");
+    for reg in registries {
+        yaml.push_str(&format!("  \"{}\":\n", reg.url));
+        yaml.push_str("    endpoint:\n");
+        yaml.push_str(&format!("      - \"https://{}\"\n", reg.url));
+    }
+    yaml.push_str("configs:\n");
+    for reg in registries {
+        yaml.push_str(&format!("  \"{}\":\n", reg.url));
+        yaml.push_str("    auth:\n");
+        yaml.push_str(&format!("      username: \"{}\"\n", reg.username));
+        yaml.push_str(&format!("      password: \"{}\"\n", reg.password));
+    }
+    yaml
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registries_yaml_single_registry() {
+        let registries = vec![ClusterRegistryAuth {
+            url: "ghcr.io".to_string(),
+            username: "user".to_string(),
+            password: "token".to_string(),
+        }];
+        let yaml = generate_registries_yaml(&registries);
+        assert!(yaml.contains("ghcr.io"));
+        assert!(yaml.contains("username: \"user\""));
+        assert!(yaml.contains("password: \"token\""));
+        assert!(yaml.contains("https://ghcr.io"));
+    }
+
+    #[test]
+    fn registries_yaml_multiple_registries() {
+        let registries = vec![
+            ClusterRegistryAuth {
+                url: "ghcr.io".to_string(),
+                username: "user1".to_string(),
+                password: "pass1".to_string(),
+            },
+            ClusterRegistryAuth {
+                url: "docker.io".to_string(),
+                username: "user2".to_string(),
+                password: "pass2".to_string(),
+            },
+        ];
+        let yaml = generate_registries_yaml(&registries);
+        assert!(yaml.contains("ghcr.io"));
+        assert!(yaml.contains("docker.io"));
+        assert!(yaml.contains("username: \"user1\""));
+        assert!(yaml.contains("username: \"user2\""));
+    }
+
+    #[test]
+    fn registries_yaml_empty() {
+        let yaml = generate_registries_yaml(&[]);
+        assert_eq!(yaml, "mirrors:\nconfigs:\n");
     }
 }

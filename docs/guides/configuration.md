@@ -20,11 +20,13 @@ The project section is **required** and defines project-level metadata.
 ```toml
 [project]
 name = "myapp"
+env_file = ".env"     # optional: load shared secrets
 ```
 
-| Field  | Type   | Required | Description                                        |
-|--------|--------|----------|----------------------------------------------------|
-| `name` | string | Yes      | Project name. Used in the slug and display output.  |
+| Field      | Type   | Required | Default | Description                                        |
+|------------|--------|----------|---------|----------------------------------------------------|
+| `name`     | string | Yes      | --      | Project name. Used in the slug and display output.  |
+| `env_file` | string | No       | (none)  | Path to a `.env` file with shared secrets.          |
 
 The project name combined with a hash of the config file path forms the
 project slug (e.g. `myapp-a1b2c3d4`), which is used for state isolation.
@@ -64,6 +66,7 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/my
 | `path`       | string             | No       | (none)  | Working directory, relative to the config file.           |
 | `port`       | integer or `"auto"`| No       | (none)  | Port the service listens on.                              |
 | `env`        | map of strings     | No       | `{}`    | Environment variables for this service.                   |
+| `env_file`   | string             | No       | (none)  | Path to a `.env` file for this service.                   |
 | `depends_on` | list of strings    | No       | `[]`    | Services, docker, or compose services to start before this.|
 
 ### Port values
@@ -191,16 +194,17 @@ type = "pg_isready"
 
 ### Docker fields
 
-| Field         | Type               | Required | Default | Description                                   |
-|---------------|--------------------|----------|---------|-----------------------------------------------|
-| `image`       | string             | Yes      | --      | Docker image (e.g. `postgres:16-alpine`).     |
-| `port`        | integer or `"auto"`| No       | (none)  | Single port mapping (host:container).         |
-| `ports`       | map of ports       | No       | `{}`    | Named port mappings for multi-port services.  |
-| `env`         | map of strings     | No       | `{}`    | Container environment variables.              |
-| `volumes`     | list of strings    | No       | `[]`    | Volume mounts (`"name:/path/in/container"`).  |
-| `ready_check` | table              | No       | (none)  | Health check configuration.                   |
-| `init`        | list of strings    | No       | `[]`    | SQL/commands to run after first ready.         |
-| `depends_on`  | list of strings    | No       | `[]`    | Other docker or compose dependencies.          |
+| Field           | Type               | Required | Default | Description                                   |
+|-----------------|--------------------|----------|---------|-----------------------------------------------|
+| `image`         | string             | Yes      | --      | Docker image (e.g. `postgres:16-alpine`).     |
+| `port`          | integer or `"auto"`| No       | (none)  | Single port mapping (host:container).         |
+| `ports`         | map of ports       | No       | `{}`    | Named port mappings for multi-port services.  |
+| `env`           | map of strings     | No       | `{}`    | Container environment variables.              |
+| `volumes`       | list of strings    | No       | `[]`    | Volume mounts (`"name:/path/in/container"`).  |
+| `ready_check`   | table              | No       | (none)  | Health check configuration.                   |
+| `init`          | list of strings    | No       | `[]`    | SQL/commands to run after first ready.         |
+| `depends_on`    | list of strings    | No       | `[]`    | Other docker or compose dependencies.          |
+| `registry_auth` | table              | No       | (none)  | Registry credentials for private images.       |
 
 ### Port values for docker
 
@@ -477,7 +481,7 @@ to native `[docker.*]` blocks.
 ```toml
 [compose]
 file = "docker-compose.yml"
-services = ["redis", "postgres"]    # Which services to start (empty = all)
+services = ["redis", "postgres"]    # Which services to start (empty = auto-discover from file)
 env_file = ".env"                   # Optional env file for compose
 
 [compose.ready_checks.redis]
@@ -491,12 +495,14 @@ expect = "PONG"
 | Field          | Type            | Required | Default | Description                             |
 |----------------|-----------------|----------|---------|-----------------------------------------|
 | `file`         | string          | Yes      | --      | Path to docker-compose.yml              |
-| `services`     | list of strings | No       | `[]`    | Specific services to start (all if empty)|
+| `services`     | list of strings | No       | `[]`    | Services to start (auto-discovered from compose file if empty) |
 | `env_file`     | string          | No       | (none)  | Env file to pass to `docker compose up` |
 | `ready_checks` | map of checks   | No       | `{}`    | Ready checks for compose services       |
 
-Compose services participate in the dependency graph -- local services can
-list compose service names in `depends_on`.
+Compose services participate in the dependency graph — local services can
+list compose service names in `depends_on`. When `services` is empty or
+omitted, devrig auto-discovers service names from the docker-compose file,
+so you don't need to list them explicitly just to use them as dependencies.
 
 ### Lifecycle
 
@@ -619,6 +625,141 @@ With this configuration, `devrig start` will:
    `OTEL_SERVICE_NAME`, and `DEVRIG_DASHBOARD_URL` injected automatically.
 5. Telemetry from the API service will appear in the dashboard and be
    queryable via `devrig query` commands.
+
+## Environment variable expansion
+
+Any string value in `env`, `docker.*.env`, `docker.*.image`,
+`docker.*.registry_auth`, or `cluster.registries` can reference environment
+variables using `$VAR` or `${VAR}` syntax:
+
+```toml
+[env]
+SECRET_KEY = "$MY_SECRET_KEY"
+
+[services.api.env]
+DATABASE_URL = "postgres://user:${DB_PASS}@localhost:{{ docker.postgres.port }}/mydb"
+```
+
+### Expansion pipeline
+
+Expansion runs after TOML parsing but **before** validation and template
+interpolation:
+
+```
+Parse TOML → Load .env files → Expand $VAR/${VAR} → Validate → Resolve {{ }} templates
+```
+
+This means `$DB_PASS` is expanded first, then `{{ docker.postgres.port }}`
+is resolved later, so both can coexist in the same value.
+
+### Lookup order
+
+1. Values from `.env` files (project-level and per-service)
+2. Host process environment (`std::env::var`)
+
+### Escaping
+
+Use `$$` to produce a literal `$` in the output:
+
+```toml
+PRICE = "$$5.00"   # becomes: $5.00
+```
+
+### Error handling
+
+Undefined variables produce a clear error with the field path:
+
+```
+Error: undefined environment variable $DB_PASS in services.api.env.DATABASE_URL
+```
+
+## `.env` file support
+
+devrig can load `.env` files at two levels:
+
+```toml
+[project]
+name = "myapp"
+env_file = ".env"              # project-wide secrets
+
+[services.api]
+command = "cargo run"
+env_file = ".env.api"          # per-service overrides
+```
+
+### File format
+
+```env
+# Comments and blank lines are ignored
+DATABASE_URL=postgres://localhost/mydb
+SECRET_KEY="quoted values work"
+API_TOKEN='single quotes too'
+```
+
+### Merge priority (lowest to highest)
+
+1. Project-level `.env` file
+2. Per-service `.env` file
+3. Explicit TOML `[env]` or `[services.*.env]` values
+
+Explicit TOML values always win over `.env` file values.
+
+## Docker registry authentication
+
+Pull images from private registries by adding `registry_auth`:
+
+```toml
+[docker.my-app]
+image = "ghcr.io/org/app:latest"
+registry_auth = { username = "$REGISTRY_USER", password = "$REGISTRY_TOKEN" }
+```
+
+Credentials support `$VAR` expansion, so secrets stay out of the TOML file.
+The username and password are passed to the Docker daemon as
+`DockerCredentials` during `docker pull`.
+
+## k3d cluster registry authentication
+
+Configure private registry access for the k3d cluster with
+`[[cluster.registries]]`:
+
+```toml
+[cluster]
+registry = true
+
+[[cluster.registries]]
+url = "ghcr.io"
+username = "$GH_USER"
+password = "$GH_TOKEN"
+
+[[cluster.registries]]
+url = "docker.io"
+username = "$DOCKER_USER"
+password = "$DOCKER_TOKEN"
+```
+
+| Field      | Type   | Required | Description                        |
+|------------|--------|----------|------------------------------------|
+| `url`      | string | Yes      | Registry hostname                  |
+| `username` | string | Yes      | Registry username (supports `$VAR`)|
+| `password` | string | Yes      | Registry password (supports `$VAR`)|
+
+devrig generates a `registries.yaml` file and passes it to `k3d cluster
+create --registry-config`. This allows pods in the cluster to pull from
+private registries.
+
+## Secret masking
+
+When `devrig env <service>` prints environment variables, any values that
+were produced by `$VAR` expansion are automatically masked with `****`.
+This prevents accidentally leaking secrets in terminal output or logs.
+
+```bash
+$ devrig env api
+DATABASE_URL=postgres://user:****@localhost:5432/mydb
+API_KEY=****
+RUST_LOG=debug
+```
 
 ## `[env]` section
 

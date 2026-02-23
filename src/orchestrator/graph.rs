@@ -184,6 +184,7 @@ mod tests {
                     command: "echo test".to_string(),
                     port: None,
                     env: BTreeMap::new(),
+                    env_file: None,
                     depends_on: deps.into_iter().map(|d| d.to_string()).collect(),
                     restart: None,
                 },
@@ -192,6 +193,7 @@ mod tests {
         DevrigConfig {
             project: ProjectConfig {
                 name: "test".to_string(),
+                env_file: None,
             },
             services: svc_map,
             docker: BTreeMap::new(),
@@ -213,6 +215,7 @@ mod tests {
             ready_check: None,
             init: Vec::new(),
             depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+            registry_auth: None,
         }
     }
 
@@ -437,6 +440,7 @@ mod tests {
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -457,6 +461,7 @@ mod tests {
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -486,6 +491,7 @@ mod tests {
             )]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -516,6 +522,7 @@ mod tests {
             )]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -551,6 +558,7 @@ mod tests {
             ]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -572,6 +580,7 @@ mod tests {
             )]),
             addons: BTreeMap::new(),
             logs: None,
+            registries: vec![],
         });
 
         let err = DependencyResolver::from_config(&config).unwrap_err();

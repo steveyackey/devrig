@@ -13,7 +13,8 @@ pub fn run(config_path: Option<&Path>, service_name: &str) -> Result<()> {
         None => crate::config::resolve::resolve_config(None)?,
     };
 
-    let (mut config, _source) = config::load_config(&config_path)?;
+    let (mut config, _source, secret_registry) =
+        config::load_config_with_secrets(&config_path)?;
 
     if !config.services.contains_key(service_name) {
         bail!(
@@ -70,7 +71,8 @@ pub fn run(config_path: Option<&Path>, service_name: &str) -> Result<()> {
     }
 
     for (key, value) in &env {
-        println!("{}={}", key, value);
+        let display_value = secret_registry.mask_value(value);
+        println!("{}={}", key, display_value);
     }
 
     Ok(())

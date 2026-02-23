@@ -1,6 +1,7 @@
 use anyhow::{bail, Context, Result};
 use serde::Deserialize;
 use std::path::Path;
+use tracing::debug;
 
 /// Represents a service reported by `docker compose ps --format json`.
 #[derive(Debug, Deserialize)]
@@ -136,4 +137,161 @@ pub async fn compose_ps(compose_file: &Path, project_name: &str) -> Result<Vec<C
     }
 
     Ok(services)
+}
+
+/// Discover service names from a docker-compose.yml file by parsing the
+/// top-level `services:` section. This avoids requiring Docker at config
+/// load time while still enabling auto-discovery of compose services as
+/// valid `depends_on` targets.
+///
+/// Returns an empty vec if the file cannot be read or has no services section.
+pub fn discover_compose_services(compose_file: &Path) -> Vec<String> {
+    let content = match std::fs::read_to_string(compose_file) {
+        Ok(c) => c,
+        Err(e) => {
+            debug!(path = %compose_file.display(), error = %e, "could not read compose file for service discovery");
+            return Vec::new();
+        }
+    };
+
+    let mut services = Vec::new();
+    let mut in_services = false;
+    let mut service_indent: Option<usize> = None;
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+
+        let indent = line.len() - line.trim_start().len();
+
+        if !in_services {
+            if indent == 0 && trimmed.starts_with("services:") {
+                in_services = true;
+            }
+            continue;
+        }
+
+        // Inside the services block
+        if indent == 0 {
+            // Hit another top-level key, done with services
+            break;
+        }
+
+        match service_indent {
+            None => {
+                // First indented line — establishes the service-name indent level
+                service_indent = Some(indent);
+                if let Some(colon_pos) = trimmed.find(':') {
+                    let name = &trimmed[..colon_pos];
+                    if !name.is_empty() {
+                        services.push(name.to_string());
+                    }
+                }
+            }
+            Some(si) if indent == si => {
+                // Same indent level — another service name
+                if let Some(colon_pos) = trimmed.find(':') {
+                    let name = &trimmed[..colon_pos];
+                    if !name.is_empty() {
+                        services.push(name.to_string());
+                    }
+                }
+            }
+            _ => {
+                // Deeper indent — properties of a service, skip
+            }
+        }
+    }
+
+    debug!(services = ?services, "discovered compose services from {}", compose_file.display());
+    services
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn discover_services_basic() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("docker-compose.yml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(
+            f,
+            "services:\n  postgres:\n    image: postgres:16\n  redis:\n    image: redis:7"
+        )
+        .unwrap();
+
+        let services = discover_compose_services(&path);
+        assert_eq!(services, vec!["postgres", "redis"]);
+    }
+
+    #[test]
+    fn discover_services_with_comments_and_blanks() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("docker-compose.yml");
+        let content = "\
+version: '3.8'
+
+services:
+  # Database
+  postgres:
+    image: postgres:16
+    ports:
+      - '5432:5432'
+
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - '1025:1025'
+
+volumes:
+  pgdata:
+";
+        std::fs::write(&path, content).unwrap();
+
+        let services = discover_compose_services(&path);
+        assert_eq!(services, vec!["postgres", "mailpit"]);
+    }
+
+    #[test]
+    fn discover_services_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("docker-compose.yml");
+        std::fs::write(&path, "").unwrap();
+
+        let services = discover_compose_services(&path);
+        assert!(services.is_empty());
+    }
+
+    #[test]
+    fn discover_services_no_services_section() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("docker-compose.yml");
+        std::fs::write(&path, "version: '3.8'\nvolumes:\n  pgdata:\n").unwrap();
+
+        let services = discover_compose_services(&path);
+        assert!(services.is_empty());
+    }
+
+    #[test]
+    fn discover_services_missing_file() {
+        let path = Path::new("/nonexistent/docker-compose.yml");
+        let services = discover_compose_services(path);
+        assert!(services.is_empty());
+    }
+
+    #[test]
+    fn discover_services_tabs_indent() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("docker-compose.yml");
+        let content = "services:\n\tdb:\n\t\timage: postgres\n\tcache:\n\t\timage: redis\n";
+        std::fs::write(&path, content).unwrap();
+
+        let services = discover_compose_services(&path);
+        assert_eq!(services, vec!["db", "cache"]);
+    }
 }
