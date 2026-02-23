@@ -28,13 +28,7 @@ Explore metrics with sparkline cards and expandable time-series charts:
 
 ## Install
 
-**cargo binstall** (recommended — downloads a prebuilt binary):
-
-```bash
-cargo binstall devrig
-```
-
-**Shell installer** (Linux/macOS):
+**Shell installer** (recommended — Linux/macOS):
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.sh | sh
@@ -46,11 +40,19 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/rele
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.ps1 | iex"
 ```
 
+These installers include a built-in updater — run `devrig update` to get the
+latest version.
+
+**cargo binstall** (prebuilt binary, no updater):
+
+```bash
+cargo binstall devrig
+```
+
 **From source:**
 
 ```bash
-git clone https://github.com/steveyackey/devrig.git
-cd devrig && cargo install --path .
+cargo install devrig
 ```
 
 ## Quickstart
@@ -98,6 +100,7 @@ The dashboard opens at `http://localhost:4000`.
 | `devrig query`       | Query traces, logs, and metrics from the OTel collector |
 | `devrig cluster`     | Manage the k3d cluster (create/delete/kubeconfig) |
 | `devrig kubectl`     | Proxy to kubectl with devrig's isolated kubeconfig |
+| `devrig update`      | Update devrig to the latest version               |
 | `devrig completions` | Generate shell completions                        |
 
 ### Global flags
