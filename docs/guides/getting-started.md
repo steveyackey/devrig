@@ -5,9 +5,6 @@ running your first set of services.
 
 ## Prerequisites
 
-- **Rust toolchain** (1.75+) with `cargo`
-- **Git** for cloning the repository
-
 Optional (checked by `devrig doctor`):
 
 - **Docker** for container-based services
@@ -17,15 +14,7 @@ Optional (checked by `devrig doctor`):
 
 ## Install
 
-### cargo binstall (recommended)
-
-Downloads a prebuilt binary for your platform:
-
-```bash
-cargo binstall devrig
-```
-
-### Shell installer (Linux/macOS)
+### Shell installer (recommended — Linux/macOS)
 
 ```bash
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.sh | sh
@@ -37,16 +26,20 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/rele
 powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.ps1 | iex"
 ```
 
+These installers include a built-in updater — run `devrig update` to get the
+latest version.
+
+### cargo binstall (prebuilt binary, no updater)
+
+```bash
+cargo binstall devrig
+```
+
 ### From source
 
 ```bash
-git clone https://github.com/steveyackey/devrig.git
-cd devrig
-cargo install --path .
+cargo install devrig
 ```
-
-This installs the `devrig` binary into `~/.cargo/bin/`. Make sure this
-directory is in your `PATH`.
 
 Verify the installation:
 
