@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/steveyackey/devrig/compare/v0.1.1...v0.1.2) (2026-02-23)
+
+
+### Bug Fixes
+
+* use crates-io-auth-action for trusted publishing OIDC exchange ([374f50c](https://github.com/steveyackey/devrig/commit/374f50ce2fccdd5b69bf59806f10eff20ce91405))
+
 ## [0.1.1](https://github.com/steveyackey/devrig/compare/v0.1.0...v0.1.1) (2026-02-23)
 
 
