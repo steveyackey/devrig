@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.4](https://github.com/steveyackey/devrig/compare/v0.1.3...v0.1.4) (2026-02-23)
+
+
+### Bug Fixes
+
+* correct binstall pkg-fmt to txz to match cargo-dist archives ([539222f](https://github.com/steveyackey/devrig/commit/539222f4d22c7fc5ef944dd37eccd74775fe3584))
+
 ## [0.1.3](https://github.com/steveyackey/devrig/compare/v0.1.2...v0.1.3) (2026-02-23)
 
 
