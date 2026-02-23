@@ -2,7 +2,22 @@ import { Component, createSignal, createEffect, onCleanup } from 'solid-js';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { tags } from '@lezer/highlight';
 import { parse as parseToml } from 'smol-toml';
+
+// Syntax highlighting — stencil yard palette
+const syntaxTheme = syntaxHighlighting(
+  HighlightStyle.define([
+    { tag: tags.string, color: '#4ADE80' },       // strings: success green
+    { tag: tags.number, color: '#fbbf24' },        // numbers: warning amber
+    { tag: tags.bool, color: '#60a5fa' },          // booleans: info blue
+    { tag: tags.null, color: '#60a5fa' },          // null: info blue
+    { tag: tags.propertyName, color: '#C8C6BE' },  // keys: text-secondary
+    { tag: tags.comment, color: '#959390' },        // comments: text-muted
+    { tag: tags.punctuation, color: '#7A7870' },   // brackets/colons: dim
+  ])
+);
 
 // Dark theme for the editor
 const darkTheme = EditorView.theme(
@@ -67,6 +82,7 @@ const ConfigEditor: Component<ConfigEditorProps> = (props) => {
         basicSetup,
         json(),
         darkTheme,
+        syntaxTheme,
         EditorView.theme({
           '&': { height: '100%' },
           '.cm-scroller': { overflow: 'auto' },

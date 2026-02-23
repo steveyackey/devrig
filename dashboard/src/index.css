@@ -142,10 +142,6 @@
     --color-text-muted: #5E5C56;   /* was inheriting dark #7A7870 — failed 4.5:1 on light surfaces */
   }
 
-  /* Light mode: barcode bars use dark ink instead of yellow (invisible on light bg) */
-  [data-theme="light"] .barcode span {
-    background: rgba(42, 35, 0, 0.22);
-  }
 }
 
 /* Subtle cross pattern overlay for main content area */
@@ -181,6 +177,10 @@
   display: block;
   background: rgba(255, 214, 0, 0.18);
   flex: 1;
+}
+
+[data-theme="light"] .barcode span {
+  background: rgba(94, 92, 86, 0.4); /* matches light mode text-muted (#5E5C56) */
 }
 
 .barcode span:nth-child(odd) { height: 100%; }
