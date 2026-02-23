@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.1](https://github.com/steveyackey/devrig/compare/v0.4.0...v0.4.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* add syntax highlighting to config editor ([b48b510](https://github.com/steveyackey/devrig/commit/b48b510d2090e10ab4491105d2c2524f9d111194))
+* default to dark mode; enable dashboard in init template ([c34fe1c](https://github.com/steveyackey/devrig/commit/c34fe1c4da469d7af1aa353b584c6dbfc982f9bd))
+* enable dashboard by default in devrig init template ([72f7d13](https://github.com/steveyackey/devrig/commit/72f7d132fba19d4354f15827b8b1e7f3f5e70479))
+* improve color contrast to meet WCAG AA ([211b56c](https://github.com/steveyackey/devrig/commit/211b56c9f3cd668192c1a20e6cf4417ae5aea15c))
+* improve dashboard text contrast and subheader legibility ([719cbbf](https://github.com/steveyackey/devrig/commit/719cbbf5a361c739064d0ffeb262bb0f855d2738))
+
 ## [0.4.0](https://github.com/steveyackey/devrig/compare/v0.3.1...v0.4.0) (2026-02-23)
 
 
