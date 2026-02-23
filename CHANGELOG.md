@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/steveyackey/devrig/compare/v0.2.0...v0.2.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* allow dirty working tree for crates.io publish ([040ba29](https://github.com/steveyackey/devrig/commit/040ba29432712a798362cbf8f8a1775f6065dd75))
+
 ## [0.2.0](https://github.com/steveyackey/devrig/compare/v0.1.5...v0.2.0) (2026-02-23)
 
 
