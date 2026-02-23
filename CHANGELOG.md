@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/steveyackey/devrig/compare/v0.1.5...v0.2.0) (2026-02-23)
+
+
+### Features
+
+* add `devrig update` command with cargo-dist updater ([154c157](https://github.com/steveyackey/devrig/commit/154c157b384605d0ab8f080b7f679ca959ef93a0))
+
+
+### Bug Fixes
+
+* build dashboard before crates.io publish so cargo install works ([f137d77](https://github.com/steveyackey/devrig/commit/f137d778e75526939b092443b71611846585ee3d))
+
 ## [0.1.5](https://github.com/steveyackey/devrig/compare/v0.1.4...v0.1.5) (2026-02-23)
 
 
