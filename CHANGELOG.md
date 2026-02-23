@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/steveyackey/devrig/compare/v0.1.0...v0.1.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* use PAT for release-please to trigger cargo-dist workflow ([0fe6e94](https://github.com/steveyackey/devrig/commit/0fe6e946e3058449e3e1a1745e4597bf09e3d15e))
+
 ## 0.1.0 (2026-02-23)
 
 
