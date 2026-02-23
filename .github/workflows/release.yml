@@ -16,6 +16,7 @@
 name: Release
 permissions:
   "contents": "write"
+  "id-token": "write"
 
 # This task will run whenever you push a git tag that looks like a version
 # like "1.0.0", "v0.1.0-prerelease.1", "my-app/0.1.0", "releases/v1.0.0", etc.
@@ -273,10 +274,25 @@ jobs:
 
           gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
 
+  # Publish to crates.io via trusted publishing (OIDC, no token needed)
+  publish-crate:
+    needs:
+      - host
+    if: ${{ always() && needs.host.result == 'success' }}
+    runs-on: "ubuntu-latest"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build dashboard stub
+        run: mkdir -p dashboard/dist
+      - name: Publish to crates.io
+        run: cargo publish
+
   announce:
     needs:
       - plan
       - host
+      - publish-crate
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!

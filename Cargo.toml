@@ -6,6 +6,16 @@ description = "Local development orchestrator"
 license = "MIT"
 repository = "https://github.com/steveyackey/devrig"
 homepage = "https://github.com/steveyackey/devrig"
+include = [
+    "/src/**/*",
+    "/skill/**/*",
+    "/dashboard/dist/**/*",
+    "/Cargo.toml",
+    "/Cargo.lock",
+    "/LICENSE",
+    "/README.md",
+    "/CHANGELOG.md",
+]
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
