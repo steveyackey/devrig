@@ -1,4 +1,4 @@
-# devrig
+# DEV RIG
 
 Local development orchestrator.
 
@@ -29,10 +29,37 @@ devrig manages your local development environment. Define your services in a
 single TOML file, and devrig starts them in dependency order, multiplexes their
 logs, assigns ports, and tears everything down cleanly on Ctrl+C.
 
+## Install
+
+**cargo binstall** (recommended — downloads a prebuilt binary):
+
+```bash
+cargo binstall devrig
+```
+
+**Shell installer** (Linux/macOS):
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.sh | sh
+```
+
+**PowerShell installer** (Windows):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.ps1 | iex"
+```
+
+**From source:**
+
+```bash
+git clone https://github.com/steveyackey/devrig.git
+cd devrig && cargo install --path .
+```
+
 ## Quickstart
 
 ```bash
-cargo install --path . && devrig init && devrig start
+devrig init && devrig start
 ```
 
 ## Minimal example

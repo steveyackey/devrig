@@ -15,10 +15,32 @@ Optional (checked by `devrig doctor`):
 - **kubectl** for cluster interaction
 - **cargo-watch** for Rust hot reload
 
-## Install from source
+## Install
+
+### cargo binstall (recommended)
+
+Downloads a prebuilt binary for your platform:
 
 ```bash
-git clone https://github.com/your-org/devrig.git
+cargo binstall devrig
+```
+
+### Shell installer (Linux/macOS)
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.sh | sh
+```
+
+### PowerShell installer (Windows)
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.ps1 | iex"
+```
+
+### From source
+
+```bash
+git clone https://github.com/steveyackey/devrig.git
 cd devrig
 cargo install --path .
 ```

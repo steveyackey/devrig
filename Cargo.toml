@@ -3,6 +3,9 @@ name = "devrig"
 version = "0.1.0"
 edition = "2021"
 description = "Local development orchestrator"
+license = "MIT"
+repository = "https://github.com/steveyackey/devrig"
+homepage = "https://github.com/steveyackey/devrig"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
@@ -73,3 +76,13 @@ windows-sys = { version = "0.59", features = [
 default = ["dashboard"]
 dashboard = []
 integration = []
+
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
