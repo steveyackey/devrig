@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5](https://github.com/steveyackey/devrig/compare/v0.1.4...v0.1.5) (2026-02-23)
+
+
+### Bug Fixes
+
+* correct binstall bin-dir to match cargo-dist archive structure ([7779241](https://github.com/steveyackey/devrig/commit/77792416080f89b21be28919134ee5851250ae2a))
+
 ## [0.1.4](https://github.com/steveyackey/devrig/compare/v0.1.3...v0.1.4) (2026-02-23)
 
 
