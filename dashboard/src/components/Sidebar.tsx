@@ -136,7 +136,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
           <button
             data-testid="theme-toggle"
             onClick={toggleTheme}
-            class="w-6 h-6 flex items-center justify-center text-accent/20 border border-accent/10 hover:text-accent hover:border-border-hover transition-colors"
+            class="w-6 h-6 flex items-center justify-center text-text-muted border border-border hover:text-accent hover:border-border-hover transition-colors"
             aria-label={theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
           >
             {theme() === 'dark' ? <Sun size={12} /> : <Moon size={12} />}
@@ -195,7 +195,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
         {/* Theme toggle in mobile bar */}
         <button
           onClick={toggleTheme}
-          class="p-2 mr-3 text-accent/20 border border-accent/10 hover:text-accent shrink-0 max-[480px]:hidden"
+          class="p-2 mr-3 text-text-muted border border-border hover:text-accent shrink-0 max-[480px]:hidden"
           aria-label={theme() === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
         >
           {theme() === 'dark' ? <Sun size={12} /> : <Moon size={12} />}

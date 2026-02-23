@@ -4,7 +4,7 @@
   --font-sans: 'JetBrains Mono', monospace;
   --font-mono: 'JetBrains Mono', monospace;
   --font-display: 'Bebas Neue', sans-serif;
-  --font-label: 'Space Mono', monospace;
+  --font-label: 'JetBrains Mono', monospace;
 
   /* Stencil Yard palette — black + yellow industrial */
   --color-surface-0: #0E0E0C;
@@ -24,7 +24,7 @@
   --color-border-hover: #5a5000;
 
   --color-text-primary: #F5F5F0;
-  --color-text-secondary: #9E9C95;
+  --color-text-secondary: #C8C6BE; /* was #9E9C95 — too dim for subheaders */
   --color-text-muted: #959390; /* was #7A7870 — failed 4.5:1 on surface-2/3 */
 
   /* Animations */
@@ -138,8 +138,13 @@
     --color-border-hover: #A89840;
 
     --color-text-primary: #1A1A14;
-    --color-text-secondary: #4A4840;
+    --color-text-secondary: #3A3830; /* darker than dark-mode secondary for light bg */
     --color-text-muted: #5E5C56;   /* was inheriting dark #7A7870 — failed 4.5:1 on light surfaces */
+  }
+
+  /* Light mode: barcode bars use dark ink instead of yellow (invisible on light bg) */
+  [data-theme="light"] .barcode span {
+    background: rgba(42, 35, 0, 0.22);
   }
 }
 
