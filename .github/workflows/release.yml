@@ -274,7 +274,7 @@ jobs:
 
           gh release edit "${{ needs.plan.outputs.tag }}" --target "$RELEASE_COMMIT" $PRERELEASE_FLAG --draft=false
 
-  # Publish to crates.io via trusted publishing (OIDC, no token needed)
+  # Publish to crates.io via trusted publishing (OIDC)
   publish-crate:
     needs:
       - host
@@ -283,10 +283,15 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - name: Authenticate with crates.io
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
       - name: Build dashboard stub
         run: mkdir -p dashboard/dist
       - name: Publish to crates.io
         run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
   announce:
     needs:
