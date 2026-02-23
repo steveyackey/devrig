@@ -9,20 +9,20 @@ use anyhow::{Context, Result};
 use bollard::Docker;
 use std::collections::HashSet;
 
-use crate::config::model::{InfraConfig, Port};
-use crate::infra::container::PortMap;
-use crate::infra::network::resource_labels;
+use crate::config::model::{DockerConfig, Port};
+use crate::docker::container::PortMap;
+use crate::docker::network::resource_labels;
 use crate::orchestrator::ports::resolve_port;
-use crate::orchestrator::state::InfraState;
+use crate::orchestrator::state::DockerState;
 
 /// Manages Docker infrastructure containers for a devrig project.
-pub struct InfraManager {
+pub struct DockerManager {
     docker: Docker,
     slug: String,
 }
 
-impl InfraManager {
-    /// Create a new InfraManager, verifying Docker daemon connectivity.
+impl DockerManager {
+    /// Create a new DockerManager, verifying Docker daemon connectivity.
     pub async fn new(slug: String) -> Result<Self> {
         let docker =
             Docker::connect_with_local_defaults().context("connecting to Docker daemon")?;
@@ -55,15 +55,15 @@ impl InfraManager {
         network::ensure_network(&self.docker, &network_name, labels).await
     }
 
-    /// Start a single infra service: pull image, create volumes, create and
+    /// Start a single docker service: pull image, create volumes, create and
     /// start container, run ready check, run init scripts if needed.
     pub async fn start_service(
         &self,
         name: &str,
-        config: &InfraConfig,
-        prev_state: Option<&InfraState>,
+        config: &DockerConfig,
+        prev_state: Option<&DockerState>,
         allocated_ports: &mut HashSet<u16>,
-    ) -> Result<InfraState> {
+    ) -> Result<DockerState> {
         // Pull image if needed
         if !image::check_image_exists(&self.docker, &config.image).await {
             image::pull_image(&self.docker, &config.image).await?;
@@ -78,7 +78,7 @@ impl InfraManager {
             let prev_port = prev_state.and_then(|s| s.port);
             let prev_auto = prev_state.map(|s| s.port_auto).unwrap_or(false);
             let resolved = resolve_port(
-                &format!("infra:{}", name),
+                &format!("docker:{}", name),
                 port_config,
                 prev_port,
                 prev_auto,
@@ -94,7 +94,7 @@ impl InfraManager {
                 .copied();
             let prev_auto = port_config.is_auto();
             let resolved = resolve_port(
-                &format!("infra:{}:{}", name, port_name),
+                &format!("docker:{}:{}", name, port_name),
                 port_config,
                 prev_port,
                 prev_auto,
@@ -167,13 +167,13 @@ impl InfraManager {
         .await?;
 
         container::start_container(&self.docker, &container_id).await?;
-        tracing::info!(infra = %name, container = %container_name, "container started");
+        tracing::info!(docker = %name, container = %container_name, "container started");
 
         // Run ready check
         if let Some(check) = &config.ready_check {
-            tracing::info!(infra = %name, "waiting for ready check");
+            tracing::info!(docker = %name, "waiting for ready check");
             ready::run_ready_check(&self.docker, &container_id, check, port, name).await?;
-            tracing::info!(infra = %name, "ready");
+            tracing::info!(docker = %name, "ready");
         }
 
         // Run init scripts (only if not already completed)
@@ -185,10 +185,10 @@ impl InfraManager {
             exec::run_init_scripts(&self.docker, &container_id, name, config).await?;
             init_completed = true;
             init_completed_at = Some(chrono::Utc::now());
-            tracing::info!(infra = %name, "init scripts completed");
+            tracing::info!(docker = %name, "init scripts completed");
         }
 
-        Ok(InfraState {
+        Ok(DockerState {
             container_id,
             container_name,
             port,
@@ -199,15 +199,15 @@ impl InfraManager {
         })
     }
 
-    /// Stop a single infra service container.
-    pub async fn stop_service(&self, state: &InfraState) -> Result<()> {
+    /// Stop a single docker service container.
+    pub async fn stop_service(&self, state: &DockerState) -> Result<()> {
         container::stop_container(&self.docker, &state.container_id, 10).await?;
         tracing::info!(container = %state.container_name, "container stopped");
         Ok(())
     }
 
-    /// Stop and remove a single infra service container.
-    pub async fn delete_service(&self, state: &InfraState) -> Result<()> {
+    /// Stop and remove a single docker service container.
+    pub async fn delete_service(&self, state: &DockerState) -> Result<()> {
         container::stop_container(&self.docker, &state.container_id, 10).await?;
         container::remove_container(&self.docker, &state.container_id, true).await?;
         tracing::info!(container = %state.container_name, "container removed");

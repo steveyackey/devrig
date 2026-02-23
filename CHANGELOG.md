@@ -67,7 +67,7 @@
 * **pipeline:** add targeted fix mode for retry attempts ([bb73d05](https://github.com/steveyackey/devrig/commit/bb73d052c7b4c3cd6abfd248fb741472835a300a))
 * unified log collection — bridge process logs to dashboard + k3d Fluent Bit addon ([eefdf94](https://github.com/steveyackey/devrig/commit/eefdf940f398c2045c8b62ec3c8a87e1f7c9ecf1))
 * **v0.1:** local process orchestration ([20ac4d9](https://github.com/steveyackey/devrig/commit/20ac4d9cea4b3eb08d358a1ce1f043e0f6a405ed))
-* **v0.2:** Infrastructure containers ([43aaf41](https://github.com/steveyackey/devrig/commit/43aaf413fe27d2bb128cbccbc2dc79a72710cf44))
+* **v0.2:** Docker containers ([43aaf41](https://github.com/steveyackey/devrig/commit/43aaf413fe27d2bb128cbccbc2dc79a72710cf44))
 * **v0.3:** k3d cluster support ([a1b64ec](https://github.com/steveyackey/devrig/commit/a1b64ecce6c81cd528eef7126c6b7d65da8b2f4d))
 * **v0.4:** Developer experience polish ([943a8c9](https://github.com/steveyackey/devrig/commit/943a8c9577550aacd1b6c320029ecefb1e948201))
 * **v0.5:** Observability + Dashboard ([d86cd72](https://github.com/steveyackey/devrig/commit/d86cd728d9576d3982b9c0ce7a707ad5dceddfa9))

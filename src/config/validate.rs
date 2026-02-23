@@ -59,7 +59,7 @@ pub enum ConfigDiagnostic {
         service: String,
     },
 
-    #[error("infra `{service}` has an empty image")]
+    #[error("docker `{service}` has an empty image")]
     #[diagnostic(code(devrig::empty_image))]
     EmptyImage {
         #[source_code]
@@ -249,7 +249,7 @@ pub enum ConfigDiagnostic {
 // Source span helpers
 // ---------------------------------------------------------------------------
 
-/// Find the byte offset of a TOML table header like `[services.api]` or `[infra.postgres]`.
+/// Find the byte offset of a TOML table header like `[services.api]` or `[docker.postgres]`.
 fn find_table_span(source: &str, section: &str, name: &str) -> SourceSpan {
     // Try patterns: [section.name], [section.name.something]
     let patterns = [
@@ -360,9 +360,9 @@ pub fn validate(
     let mut errors = Vec::new();
     let src = NamedSource::new(filename, source.to_string());
 
-    // Build the list of all available names: services + infra + compose.services + cluster.deploy
+    // Build the list of all available names: services + docker + compose.services + cluster.deploy
     let mut available: Vec<String> = config.services.keys().cloned().collect();
-    for name in config.infra.keys() {
+    for name in config.docker.keys() {
         available.push(name.clone());
     }
     if let Some(compose) = &config.compose {
@@ -396,9 +396,9 @@ pub fn validate(
         }
     }
 
-    // Check all depends_on references exist (infra)
-    for (name, infra) in &config.infra {
-        for dep in &infra.depends_on {
+    // Check all depends_on references exist (docker)
+    for (name, docker_cfg) in &config.docker {
+        for dep in &docker_cfg.depends_on {
             if !available.contains(dep) {
                 let suggestion = find_closest_match(dep, &available);
                 let advice = match suggestion {
@@ -407,7 +407,7 @@ pub fn validate(
                 };
                 errors.push(ConfigDiagnostic::MissingDependency {
                     src: src.clone(),
-                    span: find_depends_on_value(source, "infra", name, dep),
+                    span: find_depends_on_value(source, "docker", name, dep),
                     advice,
                     service: name.clone(),
                     dependency: dep.clone(),
@@ -438,15 +438,15 @@ pub fn validate(
         }
     }
 
-    // Check cluster deploy names don't conflict with service, infra, or compose names
+    // Check cluster deploy names don't conflict with service, docker, or compose names
     if let Some(cluster) = &config.cluster {
         for name in cluster.deploy.keys() {
             let mut kinds = Vec::new();
             if config.services.contains_key(name) {
                 kinds.push("service".to_string());
             }
-            if config.infra.contains_key(name) {
-                kinds.push("infra".to_string());
+            if config.docker.contains_key(name) {
+                kinds.push("docker".to_string());
             }
             if let Some(compose) = &config.compose {
                 if compose.services.contains(name) {
@@ -465,18 +465,18 @@ pub fn validate(
         }
     }
 
-    // Check no two services/infra share the same fixed port
+    // Check no two services/docker share the same fixed port
     let mut port_map: BTreeMap<u16, Vec<String>> = BTreeMap::new();
     for (name, svc) in &config.services {
         if let Some(Port::Fixed(p)) = &svc.port {
             port_map.entry(*p).or_default().push(name.clone());
         }
     }
-    for (name, infra) in &config.infra {
-        if let Some(Port::Fixed(p)) = &infra.port {
+    for (name, docker_cfg) in &config.docker {
+        if let Some(Port::Fixed(p)) = &docker_cfg.port {
             port_map.entry(*p).or_default().push(name.clone());
         }
-        for port_val in infra.ports.values() {
+        for port_val in docker_cfg.ports.values() {
             if let Port::Fixed(p) = port_val {
                 port_map.entry(*p).or_default().push(name.clone());
             }
@@ -489,7 +489,7 @@ pub fn validate(
             let section = if config.services.contains_key(first) {
                 "services"
             } else {
-                "infra"
+                "docker"
             };
             errors.push(ConfigDiagnostic::DuplicatePort {
                 src: src.clone(),
@@ -500,13 +500,13 @@ pub fn validate(
         }
     }
 
-    // Build a complete deps map from both services and infra for cycle detection
+    // Build a complete deps map from both services and docker for cycle detection
     let mut deps_map: BTreeMap<&str, &Vec<String>> = BTreeMap::new();
     for (name, svc) in &config.services {
         deps_map.insert(name.as_str(), &svc.depends_on);
     }
-    for (name, infra) in &config.infra {
-        deps_map.insert(name.as_str(), &infra.depends_on);
+    for (name, docker_cfg) in &config.docker {
+        deps_map.insert(name.as_str(), &docker_cfg.depends_on);
     }
     if let Some(cluster) = &config.cluster {
         for (name, deploy) in &cluster.deploy {
@@ -541,8 +541,8 @@ pub fn validate(
                         // Determine the section for span
                         let section = if config.services.contains_key(dep) {
                             "services"
-                        } else if config.infra.contains_key(dep) {
-                            "infra"
+                        } else if config.docker.contains_key(dep) {
+                            "docker"
                         } else {
                             "cluster.deploy"
                         };
@@ -576,12 +576,12 @@ pub fn validate(
         }
     }
 
-    // Check no infra entry has an empty image string
-    for (name, infra) in &config.infra {
-        if infra.image.trim().is_empty() {
+    // Check no docker entry has an empty image string
+    for (name, docker_cfg) in &config.docker {
+        if docker_cfg.image.trim().is_empty() {
             errors.push(ConfigDiagnostic::EmptyImage {
                 src: src.clone(),
-                span: find_field_span(source, "infra", name, "image"),
+                span: find_field_span(source, "docker", name, "image"),
                 service: name.clone(),
             });
         }
@@ -705,7 +705,7 @@ pub fn validate(
                 }
             }
 
-            // Check addon port_forward ports don't conflict with service/infra ports
+            // Check addon port_forward ports don't conflict with service/docker ports
             for port_str in addon.port_forward().keys() {
                 if let Ok(port) = port_str.parse::<u16>() {
                     // Check against service ports
@@ -721,15 +721,15 @@ pub fn validate(
                             }
                         }
                     }
-                    // Check against infra ports
-                    for (infra_name, infra) in &config.infra {
-                        if let Some(Port::Fixed(p)) = &infra.port {
+                    // Check against docker ports
+                    for (docker_name, docker_cfg) in &config.docker {
+                        if let Some(Port::Fixed(p)) = &docker_cfg.port {
                             if *p == port {
                                 errors.push(ConfigDiagnostic::AddonPortConflict {
                                     src: src.clone(),
                                     span: find_table_span(source, "cluster.addons", name),
                                     port,
-                                    conflict_with: format!("infra `{}`", infra_name),
+                                    conflict_with: format!("docker `{}`", docker_name),
                                 });
                             }
                         }
@@ -836,7 +836,7 @@ pub fn validate(
             });
         }
 
-        // Check dashboard ports don't conflict with service/infra ports
+        // Check dashboard ports don't conflict with service/docker ports
         let dash_ports = [
             (dash_port, "dashboard.port"),
             (grpc_port, "dashboard.otel.grpc_port"),
@@ -856,18 +856,18 @@ pub fn validate(
                     }
                 }
             }
-            for (infra_name, infra) in &config.infra {
-                if let Some(Port::Fixed(p)) = &infra.port {
+            for (docker_name, docker_cfg) in &config.docker {
+                if let Some(Port::Fixed(p)) = &docker_cfg.port {
                     if p == dport {
                         errors.push(ConfigDiagnostic::DashboardPortConflict {
                             src: src.clone(),
                             span: find_dashboard_span(source, "port"),
                             port: *dport,
-                            conflict_with: format!("infra `{}` ({})", infra_name, dname),
+                            conflict_with: format!("docker `{}` ({})", docker_name, dname),
                         });
                     }
                 }
-                for (pname, port_val) in &infra.ports {
+                for (pname, port_val) in &docker_cfg.ports {
                     if let Port::Fixed(p) = port_val {
                         if p == dport {
                             errors.push(ConfigDiagnostic::DashboardPortConflict {
@@ -875,8 +875,8 @@ pub fn validate(
                                 span: find_dashboard_span(source, "port"),
                                 port: *dport,
                                 conflict_with: format!(
-                                    "infra `{}` port `{}` ({})",
-                                    infra_name, pname, dname
+                                    "docker `{}` port `{}` ({})",
+                                    docker_name, pname, dname
                                 ),
                             });
                         }
@@ -953,7 +953,7 @@ fn find_dashboard_otel_span(source: &str, field: &str) -> SourceSpan {
 mod tests {
     use super::*;
     use crate::config::model::{
-        ClusterConfig, ClusterDeployConfig, ComposeConfig, InfraConfig, ProjectConfig,
+        ClusterConfig, ClusterDeployConfig, ComposeConfig, DockerConfig, ProjectConfig,
         ServiceConfig,
     };
 
@@ -980,7 +980,7 @@ mod tests {
                 name: "test".to_string(),
             },
             services: svc_map,
-            infra: BTreeMap::new(),
+            docker: BTreeMap::new(),
             compose: None,
             cluster: None,
             dashboard: None,
@@ -1009,9 +1009,9 @@ mod tests {
         s
     }
 
-    /// Helper to build an InfraConfig with minimal fields.
-    fn make_infra(image: &str, port: Option<Port>, deps: Vec<&str>) -> InfraConfig {
-        InfraConfig {
+    /// Helper to build an DockerConfig with minimal fields.
+    fn make_infra(image: &str, port: Option<Port>, deps: Vec<&str>) -> DockerConfig {
+        DockerConfig {
             image: image.to_string(),
             port,
             ports: BTreeMap::new(),
@@ -1057,11 +1057,11 @@ mod tests {
             Some(Port::Fixed(3000)),
             vec!["postres"], // typo for "postgres"
         )]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16", Some(Port::Fixed(5432)), vec![]),
         );
-        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"postres\"]\n\n[infra.postgres]\nimage = \"postgres:16\"\nport = 5432\n";
+        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"postres\"]\n\n[docker.postgres]\nimage = \"postgres:16\"\nport = 5432\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         assert_eq!(errs.len(), 1);
         match &errs[0] {
@@ -1202,21 +1202,21 @@ mod tests {
         assert!(has_cycle, "expected a DependencyCycle error for a->b->c->a");
     }
 
-    // --- v0.2 infra/compose validation tests ---
+    // --- v0.2 docker/compose validation tests ---
 
     #[test]
-    fn service_depends_on_infra_name_is_valid() {
+    fn service_depends_on_docker_name_is_valid() {
         let mut config = make_config(vec![(
             "api",
             "cargo run",
             Some(Port::Fixed(3000)),
             vec!["postgres"],
         )]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
         );
-        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"postgres\"]\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n";
+        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"postgres\"]\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
     }
 
@@ -1228,11 +1228,11 @@ mod tests {
             Some(Port::Fixed(3000)),
             vec!["nonexistent"],
         )]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
         );
-        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"nonexistent\"]\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n";
+        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"nonexistent\"]\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         assert_eq!(errs.len(), 1);
         assert!(matches!(
@@ -1248,11 +1248,11 @@ mod tests {
     #[test]
     fn infra_and_service_share_fixed_port_errors() {
         let mut config = make_config(vec![("api", "cargo run", Some(Port::Fixed(5432)), vec![])]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
         );
-        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 5432\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n";
+        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 5432\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         assert_eq!(errs.len(), 1);
         assert!(matches!(
@@ -1264,11 +1264,11 @@ mod tests {
     #[test]
     fn infra_with_empty_image_errors() {
         let mut config = make_config(vec![]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("", Some(Port::Fixed(5432)), vec![]),
         );
-        let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"\"\nport = 5432\n";
+        let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"\"\nport = 5432\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         assert_eq!(errs.len(), 1);
         assert!(matches!(
@@ -1288,15 +1288,15 @@ mod tests {
             ),
             ("worker", "cargo run --bin worker", None, vec!["redis"]),
         ]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
         );
-        config.infra.insert(
+        config.docker.insert(
             "redis".to_string(),
             make_infra("redis:7-alpine", Some(Port::Fixed(6379)), vec![]),
         );
-        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"postgres\", \"redis\"]\n\n[services.worker]\ncommand = \"cargo run --bin worker\"\ndepends_on = [\"redis\"]\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[infra.redis]\nimage = \"redis:7-alpine\"\nport = 6379\n";
+        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 3000\ndepends_on = [\"postgres\", \"redis\"]\n\n[services.worker]\ncommand = \"cargo run --bin worker\"\ndepends_on = [\"redis\"]\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[docker.redis]\nimage = \"redis:7-alpine\"\nport = 6379\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
     }
 
@@ -1319,13 +1319,13 @@ mod tests {
     }
 
     #[test]
-    fn infra_named_ports_conflict_detected() {
+    fn docker_named_ports_conflict_detected() {
         let mut config = make_config(vec![("api", "cargo run", Some(Port::Fixed(8025)), vec![])]);
         let mut mailpit = make_infra("axllent/mailpit:latest", None, vec![]);
         mailpit.ports.insert("smtp".to_string(), Port::Fixed(1025));
         mailpit.ports.insert("ui".to_string(), Port::Fixed(8025));
-        config.infra.insert("mailpit".to_string(), mailpit);
-        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 8025\n\n[infra.mailpit]\nimage = \"axllent/mailpit:latest\"\n[infra.mailpit.ports]\nsmtp = 1025\nui = 8025\n";
+        config.docker.insert("mailpit".to_string(), mailpit);
+        let source = "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"cargo run\"\nport = 8025\n\n[docker.mailpit]\nimage = \"axllent/mailpit:latest\"\n[docker.mailpit.ports]\nsmtp = 1025\nui = 8025\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         assert_eq!(errs.len(), 1);
         assert!(matches!(
@@ -1338,19 +1338,19 @@ mod tests {
     fn infra_cycle_detected() {
         let mut config = make_config(vec![]);
         config
-            .infra
+            .docker
             .insert("a".to_string(), make_infra("img-a", None, vec!["b"]));
         config
-            .infra
+            .docker
             .insert("b".to_string(), make_infra("img-b", None, vec!["a"]));
-        let source = "[project]\nname = \"test\"\n\n[infra.a]\nimage = \"img-a\"\ndepends_on = [\"b\"]\n\n[infra.b]\nimage = \"img-b\"\ndepends_on = [\"a\"]\n";
+        let source = "[project]\nname = \"test\"\n\n[docker.a]\nimage = \"img-a\"\ndepends_on = [\"b\"]\n\n[docker.b]\nimage = \"img-b\"\ndepends_on = [\"a\"]\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         let has_cycle = errs
             .iter()
             .any(|e| matches!(e, ConfigDiagnostic::DependencyCycle { .. }));
         assert!(
             has_cycle,
-            "expected a DependencyCycle error for infra a->b->a"
+            "expected a DependencyCycle error for docker a->b->a"
         );
     }
 
@@ -1408,7 +1408,7 @@ mod tests {
     #[test]
     fn cluster_deploy_depends_on_infra_is_valid() {
         let mut config = make_config(vec![]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
         );
@@ -1424,7 +1424,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
         });
-        let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"postgres\"]\n";
+        let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"postgres\"]\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
     }
 
@@ -1469,9 +1469,9 @@ mod tests {
     }
 
     #[test]
-    fn cluster_deploy_name_conflicts_with_infra_name_errors() {
+    fn cluster_deploy_name_conflicts_with_docker_name_errors() {
         let mut config = make_config(vec![]);
-        config.infra.insert(
+        config.docker.insert(
             "postgres".to_string(),
             make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
         );
@@ -1487,7 +1487,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
         });
-        let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.deploy.postgres]\ncontext = \"./pg\"\nmanifests = \"./k8s\"\n";
+        let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.deploy.postgres]\ncontext = \"./pg\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
         assert!(errs.iter().any(|e| matches!(
             e,
@@ -1605,7 +1605,7 @@ port = 4000
 [project]
 name = "test"
 
-[infra.custom]
+[docker.custom]
 image = "custom:latest"
 port = 4317
 

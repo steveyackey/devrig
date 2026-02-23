@@ -36,12 +36,12 @@ pub async fn get_services(
         });
     }
 
-    for (name, infra) in &project.infra {
+    for (name, docker_svc) in &project.docker {
         services.push(ServiceInfo {
             name: name.clone(),
-            port: infra.port,
-            kind: "infra".to_string(),
-            port_auto: infra.port_auto,
+            port: docker_svc.port,
+            kind: "docker".to_string(),
+            port_auto: docker_svc.port_auto,
         });
     }
 

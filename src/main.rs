@@ -35,11 +35,11 @@ async fn main() {
         Commands::Env { service } => {
             commands::env::run(cli.global.config_file.as_deref(), &service)
         }
-        Commands::Exec { infra, command } => {
-            commands::exec::run(cli.global.config_file.as_deref(), &infra, command).await
+        Commands::Exec { docker, command } => {
+            commands::exec::run(cli.global.config_file.as_deref(), &docker, command).await
         }
-        Commands::Reset { infra } => {
-            commands::reset::run(cli.global.config_file.as_deref(), &infra)
+        Commands::Reset { docker } => {
+            commands::reset::run(cli.global.config_file.as_deref(), &docker)
         }
         Commands::Validate => commands::validate::run(cli.global.config_file.as_deref()),
         Commands::Logs {

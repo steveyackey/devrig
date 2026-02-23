@@ -1,7 +1,7 @@
 # Compose Migration Guide
 
 devrig can manage services defined in an existing `docker-compose.yml` alongside
-native `[infra.*]` blocks and local process services. This enables incremental
+native `[docker.*]` blocks and local process services. This enables incremental
 migration from docker-compose to devrig-managed infrastructure.
 
 ## Configuration
@@ -39,7 +39,7 @@ expect = "PONG"
 
 ## Service Dependencies
 
-Services can depend on compose-managed services just like native infra:
+Services can depend on compose-managed services just like native docker containers:
 
 ```toml
 [compose]
@@ -56,7 +56,7 @@ depends_on = ["redis"]
 
 1. Start with all infrastructure in docker-compose.yml
 2. Add `[compose]` to devrig.toml referencing your compose services
-3. Gradually move services from compose to `[infra.*]` blocks
+3. Gradually move services from compose to `[docker.*]` blocks
 4. Remove compose services as they are replaced
 
 ## Lifecycle

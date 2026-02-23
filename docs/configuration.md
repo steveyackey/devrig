@@ -22,7 +22,7 @@ depends_on = ["postgres"]   # Wait for these before starting
 
 [services.api.env]
 API_KEY = "dev-secret"
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 ```
 
 ### Service Fields
@@ -33,29 +33,29 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/mya
 | `path` | No | config dir | Working directory |
 | `port` | No | none | Port number or `"auto"` |
 | `env` | No | `{}` | Environment variables |
-| `depends_on` | No | `[]` | Dependencies (services, infra, or compose) |
+| `depends_on` | No | `[]` | Dependencies (services, docker, or compose) |
 
-## Infrastructure
+## Docker Containers
 
 Docker containers managed by devrig:
 
 ```toml
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
 volumes = ["pgdata:/var/lib/postgresql/data"]
 init = ["CREATE DATABASE myapp;"]
 depends_on = []
 
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
 
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 ```
 
-### Infrastructure Fields
+### Docker Container Fields
 
 | Field | Required | Default | Description |
 |---|---|---|---|
@@ -66,7 +66,7 @@ type = "pg_isready"
 | `volumes` | No | `[]` | Volume mounts (`"name:/path"`) |
 | `ready_check` | No | none | Health check configuration |
 | `init` | No | `[]` | SQL/commands to run after first ready |
-| `depends_on` | No | `[]` | Other infra/compose dependencies |
+| `depends_on` | No | `[]` | Other docker/compose dependencies |
 
 ### Ready Check Types
 
@@ -75,7 +75,7 @@ type = "pg_isready"
 ready_check = { type = "pg_isready" }
 
 # Run a command inside the container
-[infra.redis.ready_check]
+[docker.redis.ready_check]
 type = "cmd"
 command = "redis-cli ping"
 expect = "PONG"
@@ -87,7 +87,7 @@ ready_check = { type = "http", url = "http://localhost:9000/health" }
 ready_check = { type = "tcp" }
 
 # Wait for log pattern
-[infra.es.ready_check]
+[docker.es.ready_check]
 type = "log"
 match = "started"
 ```
@@ -97,9 +97,9 @@ match = "started"
 For services that expose multiple ports:
 
 ```toml
-[infra.mailpit]
+[docker.mailpit]
 image = "axllent/mailpit:latest"
-[infra.mailpit.ports]
+[docker.mailpit.ports]
 smtp = 1025
 ui = 8025
 ```
@@ -148,21 +148,21 @@ name = "myapp"
 [env]
 RUST_LOG = "debug"
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
 volumes = ["pgdata:/var/lib/postgresql/data"]
 init = ["CREATE DATABASE myapp;"]
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 
-[infra.redis]
+[docker.redis]
 image = "redis:7-alpine"
 port = 6379
-[infra.redis.ready_check]
+[docker.redis.ready_check]
 type = "cmd"
 command = "redis-cli ping"
 expect = "PONG"
@@ -173,7 +173,7 @@ command = "cargo watch -x run"
 port = 3000
 depends_on = ["postgres", "redis"]
 [services.api.env]
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 
 [services.web]
 path = "./web"

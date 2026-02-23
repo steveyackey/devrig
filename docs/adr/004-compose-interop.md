@@ -38,7 +38,7 @@ devrig treats this like any other service command. It starts the process,
 captures its stdout/stderr, and manages its lifecycle. The Compose file remains
 the source of truth for container definitions.
 
-In future versions, devrig may add first-class `[infra.*]` blocks for native
+In future versions, devrig may add first-class `[docker.*]` blocks for native
 container management, but Compose delegation will remain supported as an escape
 hatch.
 
@@ -63,7 +63,7 @@ hatch.
 
 **Mitigations:**
 
-- Future `[infra.*]` blocks will provide native container management with
+- Future `[docker.*]` blocks will provide native container management with
   tighter integration for projects that want it.
 - Users can pass `--no-log-prefix` to `docker compose up` to avoid double
   prefixing.

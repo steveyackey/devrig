@@ -6,7 +6,7 @@ pub mod config;
 pub mod dashboard;
 pub mod discovery;
 pub mod identity;
-pub mod infra;
+pub mod docker;
 pub mod orchestrator;
 pub mod otel;
 pub mod platform;

@@ -36,22 +36,22 @@ fn run_local(config_path: Option<&Path>) -> Result<()> {
     );
     println!();
 
-    // Infra containers
-    if !state.infra.is_empty() {
+    // Docker containers
+    if !state.docker.is_empty() {
         println!("  {:<20} {:<14} {:<24} STATUS", "INFRA", "CONTAINER", "URL");
         println!("  {}", "-".repeat(68));
-        for (name, infra) in &state.infra {
-            let url = infra
+        for (name, docker_svc) in &state.docker {
+            let url = docker_svc
                 .port
                 .map(|p| format!("localhost:{}", p))
                 .unwrap_or_else(|| "-".to_string());
-            let auto_tag = if infra.port_auto { " (auto)" } else { "" };
-            let short_id = if infra.container_id.len() > 12 {
-                &infra.container_id[..12]
+            let auto_tag = if docker_svc.port_auto { " (auto)" } else { "" };
+            let short_id = if docker_svc.container_id.len() > 12 {
+                &docker_svc.container_id[..12]
             } else {
-                &infra.container_id
+                &docker_svc.container_id
             };
-            let init_tag = if infra.init_completed { " [init]" } else { "" };
+            let init_tag = if docker_svc.init_completed { " [init]" } else { "" };
             println!(
                 "  {:<20} {:<14} {:<24} running{}",
                 name,
@@ -132,8 +132,8 @@ fn run_all() -> Result<()> {
             if !s.services.is_empty() {
                 p.push(format!("{} svc", s.services.len()));
             }
-            if !s.infra.is_empty() {
-                p.push(format!("{} infra", s.infra.len()));
+            if !s.docker.is_empty() {
+                p.push(format!("{} docker", s.docker.len()));
             }
             if !s.compose_services.is_empty() {
                 p.push(format!("{} compose", s.compose_services.len()));

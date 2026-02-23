@@ -10,7 +10,7 @@ pub struct ProjectState {
     pub services: BTreeMap<String, ServiceState>,
     pub started_at: DateTime<Utc>,
     #[serde(default)]
-    pub infra: BTreeMap<String, InfraState>,
+    pub docker: BTreeMap<String, DockerState>,
     #[serde(default)]
     pub compose_services: BTreeMap<String, ComposeServiceState>,
     #[serde(default)]
@@ -53,7 +53,7 @@ pub struct ServiceState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct InfraState {
+pub struct DockerState {
     pub container_id: String,
     pub container_name: String,
     pub port: Option<u16>,
@@ -109,8 +109,8 @@ impl ProjectState {
         project_dir.join(".devrig")
     }
 
-    pub fn reset_init(&mut self, infra_name: &str) -> bool {
-        if let Some(state) = self.infra.get_mut(infra_name) {
+    pub fn reset_init(&mut self, docker_name: &str) -> bool {
+        if let Some(state) = self.docker.get_mut(docker_name) {
             state.init_completed = false;
             state.init_completed_at = None;
             true

@@ -53,18 +53,18 @@ pub enum Commands {
         /// Service name to show env for
         service: String,
     },
-    /// Execute a command in an infra container
+    /// Execute a command in a docker container
     Exec {
-        /// Infrastructure service name
-        infra: String,
+        /// Docker service name
+        docker: String,
         /// Command to execute
         #[arg(last = true)]
         command: Vec<String>,
     },
-    /// Reset init-completed flag for an infra service
+    /// Reset init-completed flag for a docker service
     Reset {
-        /// Infrastructure service name
-        infra: String,
+        /// Docker service name
+        docker: String,
     },
 
     /// Validate the configuration file

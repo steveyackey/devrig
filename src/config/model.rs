@@ -7,7 +7,7 @@ pub struct DevrigConfig {
     #[serde(default)]
     pub services: BTreeMap<String, ServiceConfig>,
     #[serde(default)]
-    pub infra: BTreeMap<String, InfraConfig>,
+    pub docker: BTreeMap<String, DockerConfig>,
     #[serde(default)]
     pub compose: Option<ComposeConfig>,
     #[serde(default)]
@@ -81,7 +81,7 @@ pub struct RestartConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
-pub struct InfraConfig {
+pub struct DockerConfig {
     pub image: String,
     #[serde(default)]
     pub port: Option<Port>,
@@ -676,7 +676,7 @@ mod tests {
         assert!(Port::Auto.is_auto());
     }
 
-    // --- v0.2 InfraConfig tests ---
+    // --- v0.2 DockerConfig tests ---
 
     #[test]
     fn parse_infra_single_port() {
@@ -684,35 +684,35 @@ mod tests {
             [project]
             name = "test"
 
-            [infra.postgres]
+            [docker.postgres]
             image = "postgres:16-alpine"
             port = 5432
-            [infra.postgres.env]
+            [docker.postgres.env]
             POSTGRES_USER = "devrig"
             POSTGRES_PASSWORD = "devrig"
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        assert_eq!(config.infra.len(), 1);
-        let pg = &config.infra["postgres"];
+        assert_eq!(config.docker.len(), 1);
+        let pg = &config.docker["postgres"];
         assert_eq!(pg.image, "postgres:16-alpine");
         assert!(matches!(pg.port, Some(Port::Fixed(5432))));
         assert_eq!(pg.env["POSTGRES_USER"], "devrig");
     }
 
     #[test]
-    fn parse_infra_named_ports() {
+    fn parse_docker_named_ports() {
         let toml = r#"
             [project]
             name = "test"
 
-            [infra.mailpit]
+            [docker.mailpit]
             image = "axllent/mailpit:latest"
-            [infra.mailpit.ports]
+            [docker.mailpit.ports]
             smtp = 1025
             ui = 8025
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        let mp = &config.infra["mailpit"];
+        let mp = &config.docker["mailpit"];
         assert_eq!(mp.image, "axllent/mailpit:latest");
         assert!(mp.port.is_none());
         assert_eq!(mp.ports.len(), 2);
@@ -725,12 +725,12 @@ mod tests {
         let toml = r#"
             [project]
             name = "test"
-            [infra.redis]
+            [docker.redis]
             image = "redis:7-alpine"
             port = "auto"
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        assert!(matches!(config.infra["redis"].port, Some(Port::Auto)));
+        assert!(matches!(config.docker["redis"].port, Some(Port::Auto)));
     }
 
     #[test]
@@ -738,14 +738,14 @@ mod tests {
         let toml = r#"
             [project]
             name = "test"
-            [infra.postgres]
+            [docker.postgres]
             image = "postgres:16"
             port = 5432
             ready_check = { type = "pg_isready" }
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         assert!(matches!(
-            config.infra["postgres"].ready_check,
+            config.docker["postgres"].ready_check,
             Some(ReadyCheck::PgIsReady)
         ));
     }
@@ -755,16 +755,16 @@ mod tests {
         let toml = r#"
             [project]
             name = "test"
-            [infra.redis]
+            [docker.redis]
             image = "redis:7"
             port = 6379
-            [infra.redis.ready_check]
+            [docker.redis.ready_check]
             type = "cmd"
             command = "redis-cli ping"
             expect = "PONG"
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        match &config.infra["redis"].ready_check {
+        match &config.docker["redis"].ready_check {
             Some(ReadyCheck::Cmd { command, expect }) => {
                 assert_eq!(command, "redis-cli ping");
                 assert_eq!(expect.as_deref(), Some("PONG"));
@@ -778,13 +778,13 @@ mod tests {
         let toml = r#"
             [project]
             name = "test"
-            [infra.minio]
+            [docker.minio]
             image = "minio/minio"
             port = 9000
             ready_check = { type = "http", url = "http://localhost:9000/minio/health/live" }
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        match &config.infra["minio"].ready_check {
+        match &config.docker["minio"].ready_check {
             Some(ReadyCheck::Http { url }) => {
                 assert_eq!(url, "http://localhost:9000/minio/health/live");
             }
@@ -797,14 +797,14 @@ mod tests {
         let toml = r#"
             [project]
             name = "test"
-            [infra.redis]
+            [docker.redis]
             image = "redis:7"
             port = 6379
             ready_check = { type = "tcp" }
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         assert!(matches!(
-            config.infra["redis"].ready_check,
+            config.docker["redis"].ready_check,
             Some(ReadyCheck::Tcp)
         ));
     }
@@ -814,15 +814,15 @@ mod tests {
         let toml = r#"
             [project]
             name = "test"
-            [infra.postgres]
+            [docker.postgres]
             image = "postgres:16"
             port = 5432
-            [infra.postgres.ready_check]
+            [docker.postgres.ready_check]
             type = "log"
             match = "ready to accept connections"
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        match &config.infra["postgres"].ready_check {
+        match &config.docker["postgres"].ready_check {
             Some(ReadyCheck::Log { pattern }) => {
                 assert_eq!(pattern, "ready to accept connections");
             }
@@ -864,14 +864,14 @@ mod tests {
             [project]
             name = "myapp"
 
-            [infra.postgres]
+            [docker.postgres]
             image = "postgres:16-alpine"
             port = 5432
-            [infra.postgres.env]
+            [docker.postgres.env]
             POSTGRES_USER = "app"
             POSTGRES_PASSWORD = "secret"
 
-            [infra.redis]
+            [docker.redis]
             image = "redis:7-alpine"
             port = 6379
 
@@ -881,14 +881,14 @@ mod tests {
             depends_on = ["postgres"]
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        assert_eq!(config.infra.len(), 2);
+        assert_eq!(config.docker.len(), 2);
         assert_eq!(config.services.len(), 1);
         assert_eq!(config.services["api"].depends_on, vec!["postgres"]);
     }
 
     #[test]
     fn parse_minimal_config_still_works() {
-        // Backwards compatibility: v0.1 config with no infra/compose still works
+        // Backwards compatibility: v0.1 config with no docker/compose still works
         let toml = r#"
             [project]
             name = "test"
@@ -896,7 +896,7 @@ mod tests {
             command = "echo hi"
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        assert!(config.infra.is_empty());
+        assert!(config.docker.is_empty());
         assert!(config.compose.is_none());
         assert!(config.network.is_none());
     }
@@ -907,7 +907,7 @@ mod tests {
             [project]
             name = "test"
 
-            [infra.postgres]
+            [docker.postgres]
             image = "postgres:16-alpine"
             port = 5432
             volumes = ["pgdata:/var/lib/postgresql/data"]
@@ -917,19 +917,19 @@ mod tests {
             ]
             depends_on = ["redis"]
 
-            [infra.postgres.env]
+            [docker.postgres.env]
             POSTGRES_USER = "devrig"
             POSTGRES_PASSWORD = "devrig"
 
-            [infra.postgres.ready_check]
+            [docker.postgres.ready_check]
             type = "pg_isready"
 
-            [infra.redis]
+            [docker.redis]
             image = "redis:7-alpine"
             port = 6379
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        let pg = &config.infra["postgres"];
+        let pg = &config.docker["postgres"];
         assert_eq!(pg.image, "postgres:16-alpine");
         assert!(matches!(pg.port, Some(Port::Fixed(5432))));
         assert_eq!(pg.volumes, vec!["pgdata:/var/lib/postgresql/data"]);
@@ -1068,7 +1068,7 @@ mod tests {
             [project]
             name = "fullstack"
 
-            [infra.postgres]
+            [docker.postgres]
             image = "postgres:16-alpine"
             port = 5432
 
@@ -1085,7 +1085,7 @@ mod tests {
             port = 3000
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
-        assert_eq!(config.infra.len(), 1);
+        assert_eq!(config.docker.len(), 1);
         assert!(config.cluster.is_some());
         assert_eq!(config.cluster.as_ref().unwrap().deploy.len(), 1);
         assert_eq!(config.services.len(), 1);

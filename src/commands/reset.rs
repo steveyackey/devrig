@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::orchestrator::state::ProjectState;
 
-pub fn run(config_path: Option<&Path>, infra_name: &str) -> Result<()> {
+pub fn run(config_path: Option<&Path>, docker_name: &str) -> Result<()> {
     let config_path = match config_path {
         Some(p) => p.to_path_buf(),
         None => crate::config::resolve::resolve_config(None)?,
@@ -16,18 +16,18 @@ pub fn run(config_path: Option<&Path>, infra_name: &str) -> Result<()> {
         anyhow::anyhow!("no project state found -- has the project been started?")
     })?;
 
-    if !state.reset_init(infra_name) {
+    if !state.reset_init(docker_name) {
         bail!(
-            "infra '{}' not found in state (available: {:?})",
-            infra_name,
-            state.infra.keys().collect::<Vec<_>>()
+            "docker '{}' not found in state (available: {:?})",
+            docker_name,
+            state.docker.keys().collect::<Vec<_>>()
         );
     }
 
     state.save(&state_dir)?;
     println!(
         "Reset init flag for '{}'. Init scripts will run on next start.",
-        infra_name
+        docker_name
     );
 
     Ok(())

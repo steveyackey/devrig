@@ -64,8 +64,8 @@ pub fn resolve_template(
 /// Produced keys:
 ///   - `project.name`
 ///   - `services.{name}.port`       (from resolved_ports key `"service:{name}"`)
-///   - `infra.{name}.port`          (from resolved_ports key `"infra:{name}"`)
-///   - `infra.{name}.ports.{pname}` (from resolved_ports key `"infra:{name}:{pname}"`)
+///   - `docker.{name}.port`          (from resolved_ports key `"docker:{name}"`)
+///   - `docker.{name}.ports.{pname}` (from resolved_ports key `"docker:{name}:{pname}"`)
 pub fn build_template_vars(
     config: &DevrigConfig,
     resolved_ports: &HashMap<String, u16>,
@@ -83,19 +83,19 @@ pub fn build_template_vars(
         }
     }
 
-    // infra.{name}.port and infra.{name}.ports.{pname}
-    for (name, infra) in &config.infra {
+    // docker.{name}.port and docker.{name}.ports.{pname}
+    for (name, docker_cfg) in &config.docker {
         // Single port
-        let port_key = format!("infra:{name}");
+        let port_key = format!("docker:{name}");
         if let Some(&port) = resolved_ports.get(&port_key) {
-            vars.insert(format!("infra.{name}.port"), port.to_string());
+            vars.insert(format!("docker.{name}.port"), port.to_string());
         }
 
         // Named ports
-        for pname in infra.ports.keys() {
-            let port_key = format!("infra:{name}:{pname}");
+        for pname in docker_cfg.ports.keys() {
+            let port_key = format!("docker:{name}:{pname}");
             if let Some(&port) = resolved_ports.get(&port_key) {
-                vars.insert(format!("infra.{name}.ports.{pname}"), port.to_string());
+                vars.insert(format!("docker.{name}.ports.{pname}"), port.to_string());
             }
         }
     }
@@ -156,15 +156,15 @@ pub fn resolve_config_templates(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::model::{DevrigConfig, InfraConfig, Port, ProjectConfig, ServiceConfig};
+    use crate::config::model::{DevrigConfig, DockerConfig, Port, ProjectConfig, ServiceConfig};
     use std::collections::BTreeMap;
 
     fn make_vars() -> HashMap<String, String> {
         let mut vars = HashMap::new();
-        vars.insert("infra.postgres.port".to_string(), "5432".to_string());
-        vars.insert("infra.redis.port".to_string(), "6379".to_string());
+        vars.insert("docker.postgres.port".to_string(), "5432".to_string());
+        vars.insert("docker.redis.port".to_string(), "6379".to_string());
         vars.insert("project.name".to_string(), "myapp".to_string());
-        vars.insert("infra.mailpit.ports.smtp".to_string(), "1025".to_string());
+        vars.insert("docker.mailpit.ports.smtp".to_string(), "1025".to_string());
         vars
     }
 
@@ -172,14 +172,14 @@ mod tests {
     fn basic_substitution() {
         let vars = make_vars();
         let result =
-            resolve_template("port={{ infra.postgres.port }}", &vars, "test_field").unwrap();
+            resolve_template("port={{ docker.postgres.port }}", &vars, "test_field").unwrap();
         assert_eq!(result, "port=5432");
     }
 
     #[test]
     fn multiple_substitutions() {
         let vars = make_vars();
-        let input = "pg={{ infra.postgres.port }},redis={{ infra.redis.port }}";
+        let input = "pg={{ docker.postgres.port }},redis={{ docker.redis.port }}";
         let result = resolve_template(input, &vars, "test_field").unwrap();
         assert_eq!(result, "pg=5432,redis=6379");
     }
@@ -188,7 +188,7 @@ mod tests {
     fn unresolved_variable_error() {
         let vars = make_vars();
         let result = resolve_template(
-            "host={{ infra.mysql.port }}",
+            "host={{ docker.mysql.port }}",
             &vars,
             "services.api.env.DB_HOST",
         );
@@ -198,7 +198,7 @@ mod tests {
         match &errors[0] {
             TemplateError::UnresolvedVariable { field, variable } => {
                 assert_eq!(field, "services.api.env.DB_HOST");
-                assert_eq!(variable, "infra.mysql.port");
+                assert_eq!(variable, "docker.mysql.port");
             }
         }
     }
@@ -215,7 +215,7 @@ mod tests {
     fn whitespace_in_braces() {
         let vars = make_vars();
         let result =
-            resolve_template("port={{  infra.postgres.port  }}", &vars, "test_field").unwrap();
+            resolve_template("port={{  docker.postgres.port  }}", &vars, "test_field").unwrap();
         assert_eq!(result, "port=5432");
     }
 
@@ -238,10 +238,10 @@ mod tests {
         mailpit_ports.insert("smtp".to_string(), Port::Fixed(1025));
         mailpit_ports.insert("ui".to_string(), Port::Fixed(8025));
 
-        let mut infra = BTreeMap::new();
-        infra.insert(
+        let mut docker_map = BTreeMap::new();
+        docker_map.insert(
             "postgres".to_string(),
-            InfraConfig {
+            DockerConfig {
                 image: "postgres:16".to_string(),
                 port: Some(Port::Fixed(5432)),
                 ports: BTreeMap::new(),
@@ -252,9 +252,9 @@ mod tests {
                 depends_on: vec![],
             },
         );
-        infra.insert(
+        docker_map.insert(
             "mailpit".to_string(),
-            InfraConfig {
+            DockerConfig {
                 image: "axllent/mailpit:latest".to_string(),
                 port: None,
                 ports: mailpit_ports,
@@ -271,7 +271,7 @@ mod tests {
                 name: "myapp".to_string(),
             },
             services,
-            infra,
+            docker: docker_map,
             compose: None,
             cluster: None,
             dashboard: None,
@@ -281,17 +281,17 @@ mod tests {
 
         let mut resolved_ports = HashMap::new();
         resolved_ports.insert("service:api".to_string(), 3000u16);
-        resolved_ports.insert("infra:postgres".to_string(), 5432u16);
-        resolved_ports.insert("infra:mailpit:smtp".to_string(), 1025u16);
-        resolved_ports.insert("infra:mailpit:ui".to_string(), 8025u16);
+        resolved_ports.insert("docker:postgres".to_string(), 5432u16);
+        resolved_ports.insert("docker:mailpit:smtp".to_string(), 1025u16);
+        resolved_ports.insert("docker:mailpit:ui".to_string(), 8025u16);
 
         let vars = build_template_vars(&config, &resolved_ports);
 
         assert_eq!(vars.get("project.name").unwrap(), "myapp");
         assert_eq!(vars.get("services.api.port").unwrap(), "3000");
-        assert_eq!(vars.get("infra.postgres.port").unwrap(), "5432");
-        assert_eq!(vars.get("infra.mailpit.ports.smtp").unwrap(), "1025");
-        assert_eq!(vars.get("infra.mailpit.ports.ui").unwrap(), "8025");
+        assert_eq!(vars.get("docker.postgres.port").unwrap(), "5432");
+        assert_eq!(vars.get("docker.mailpit.ports.smtp").unwrap(), "1025");
+        assert_eq!(vars.get("docker.mailpit.ports.ui").unwrap(), "8025");
     }
 
     #[test]
@@ -302,7 +302,7 @@ mod tests {
                 name: "myapp".to_string(),
             },
             services: BTreeMap::new(),
-            infra: BTreeMap::new(),
+            docker: BTreeMap::new(),
             compose: None,
             cluster: None,
             dashboard: Some(DashboardConfig {
@@ -332,7 +332,7 @@ mod tests {
                 name: "myapp".to_string(),
             },
             services: BTreeMap::new(),
-            infra: BTreeMap::new(),
+            docker: BTreeMap::new(),
             compose: None,
             cluster: Some(crate::config::model::ClusterConfig {
                 name: Some("my-cluster".to_string()),

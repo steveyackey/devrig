@@ -8,14 +8,14 @@ each other and infrastructure without hardcoding connection strings.
 Variables are applied in this order (later overrides earlier):
 
 1. Global env from `[env]`
-2. Auto-generated `DEVRIG_*` vars for all infra services
+2. Auto-generated `DEVRIG_*` vars for all docker services
 3. Auto-generated `DEVRIG_*` vars for all other services
 4. `PORT` and `HOST` for the service itself
 5. Service-specific env from `[services.<name>.env]`
 
-## Infrastructure Variables
+## Docker Container Variables
 
-For each `[infra.<name>]` block, all services receive:
+For each `[docker.<name>]` block, all services receive:
 
 | Variable | Example | Description |
 |---|---|---|
@@ -34,7 +34,7 @@ URLs are generated based on the Docker image name:
 
 ### Named Ports
 
-For infra with `[infra.<name>.ports]`, additional variables are created:
+For docker containers with `[docker.<name>.ports]`, additional variables are created:
 
 | Variable | Example |
 |---|---|
@@ -58,15 +58,15 @@ Service env values support `{{ dotted.path }}` template expressions:
 
 ```toml
 [services.api.env]
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
-SMTP_PORT = "{{ infra.mailpit.ports.smtp }}"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
+SMTP_PORT = "{{ docker.mailpit.ports.smtp }}"
 ```
 
 Available template variables:
 - `project.name`
 - `services.<name>.port`
-- `infra.<name>.port`
-- `infra.<name>.ports.<portname>`
+- `docker.<name>.port`
+- `docker.<name>.ports.<portname>`
 - `compose.<name>.port`
 
 ## Inspecting Variables

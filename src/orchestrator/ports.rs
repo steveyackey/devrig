@@ -90,7 +90,7 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
     crate::platform::identify_port_owner(port)
 }
 
-/// Check all fixed ports (services + infra) for conflicts with already-bound
+/// Check all fixed ports (services + docker) for conflicts with already-bound
 /// ports on the system.
 pub fn check_all_ports_unified(config: &DevrigConfig) -> Vec<PortConflict> {
     let mut conflicts = Vec::new();
@@ -107,21 +107,21 @@ pub fn check_all_ports_unified(config: &DevrigConfig) -> Vec<PortConflict> {
         }
     }
 
-    for (name, infra) in &config.infra {
-        if let Some(Port::Fixed(port)) = &infra.port {
+    for (name, docker_cfg) in &config.docker {
+        if let Some(Port::Fixed(port)) = &docker_cfg.port {
             if !check_port_available(*port) {
                 conflicts.push(PortConflict {
-                    service: format!("infra:{}", name),
+                    service: format!("docker:{}", name),
                     port: *port,
                     owner: identify_port_owner(*port),
                 });
             }
         }
-        for (port_name, port_val) in &infra.ports {
+        for (port_name, port_val) in &docker_cfg.ports {
             if let Port::Fixed(port) = port_val {
                 if !check_port_available(*port) {
                     conflicts.push(PortConflict {
-                        service: format!("infra:{}:{}", name, port_name),
+                        service: format!("docker:{}:{}", name, port_name),
                         port: *port,
                         owner: identify_port_owner(*port),
                     });

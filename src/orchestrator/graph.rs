@@ -8,7 +8,7 @@ use crate::config::model::DevrigConfig;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ResourceKind {
     Service,
-    Infra,
+    Docker,
     Compose,
     ClusterDeploy,
 }
@@ -22,9 +22,9 @@ pub struct ResourceNode {
 
 /// Resolves startup order from the dependency graph declared in a DevrigConfig.
 ///
-/// The graph is unified: it contains service nodes, infra nodes, and compose
+/// The graph is unified: it contains service nodes, docker nodes, and compose
 /// service nodes. Edges point from dependency to dependent (i.e. if service B
-/// depends on infra A, the edge is A -> B). A topological sort yields the
+/// depends on docker A, the edge is A -> B). A topological sort yields the
 /// correct startup order: dependencies before their dependents.
 #[derive(Debug)]
 pub struct DependencyResolver {
@@ -35,17 +35,17 @@ pub struct DependencyResolver {
 impl DependencyResolver {
     /// Build a unified dependency graph from a DevrigConfig.
     ///
-    /// Includes services, infra, and compose service nodes. Returns an error
+    /// Includes services, docker, and compose service nodes. Returns an error
     /// if any node lists a dependency that is not defined anywhere.
     pub fn from_config(config: &DevrigConfig) -> Result<Self, String> {
         let mut graph = DiGraph::new();
         let mut node_map = BTreeMap::new();
 
-        // Add infra nodes
-        for name in config.infra.keys() {
+        // Add docker nodes
+        for name in config.docker.keys() {
             let idx = graph.add_node(ResourceNode {
                 name: name.clone(),
-                kind: ResourceKind::Infra,
+                kind: ResourceKind::Docker,
             });
             node_map.insert(name.clone(), idx);
         }
@@ -85,13 +85,13 @@ impl DependencyResolver {
             node_map.insert(name.clone(), idx);
         }
 
-        // Add edges for infra depends_on
-        for (name, infra) in &config.infra {
+        // Add edges for docker depends_on
+        for (name, docker_cfg) in &config.docker {
             let dependent_idx = node_map[name];
-            for dep in &infra.depends_on {
+            for dep in &docker_cfg.depends_on {
                 let dep_idx = node_map.get(dep).ok_or_else(|| {
                     format!(
-                        "infra '{}' depends on '{}', which is not defined",
+                        "docker '{}' depends on '{}', which is not defined",
                         name, dep
                     )
                 })?;
@@ -170,7 +170,7 @@ impl DependencyResolver {
 mod tests {
     use super::*;
     use crate::config::model::{
-        ClusterConfig, ClusterDeployConfig, ComposeConfig, DevrigConfig, InfraConfig,
+        ClusterConfig, ClusterDeployConfig, ComposeConfig, DevrigConfig, DockerConfig,
         ProjectConfig, ServiceConfig,
     };
 
@@ -194,7 +194,7 @@ mod tests {
                 name: "test".to_string(),
             },
             services: svc_map,
-            infra: BTreeMap::new(),
+            docker: BTreeMap::new(),
             compose: None,
             cluster: None,
             dashboard: None,
@@ -203,8 +203,8 @@ mod tests {
         }
     }
 
-    fn make_infra(image: &str, deps: Vec<&str>) -> InfraConfig {
-        InfraConfig {
+    fn make_infra(image: &str, deps: Vec<&str>) -> DockerConfig {
+        DockerConfig {
             image: image.to_string(),
             port: None,
             ports: BTreeMap::new(),
@@ -325,10 +325,10 @@ mod tests {
     fn mixed_graph_with_services_and_infra() {
         let mut config = make_config(vec![("api", vec!["postgres"]), ("worker", vec!["redis"])]);
         config
-            .infra
+            .docker
             .insert("postgres".into(), make_infra("postgres:16", vec![]));
         config
-            .infra
+            .docker
             .insert("redis".into(), make_infra("redis:7", vec![]));
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -338,9 +338,9 @@ mod tests {
         assert_before(&order, "redis", "worker");
         assert_eq!(
             resolver.resource_kind("postgres"),
-            Some(ResourceKind::Infra)
+            Some(ResourceKind::Docker)
         );
-        assert_eq!(resolver.resource_kind("redis"), Some(ResourceKind::Infra));
+        assert_eq!(resolver.resource_kind("redis"), Some(ResourceKind::Docker));
         assert_eq!(resolver.resource_kind("api"), Some(ResourceKind::Service));
         assert_eq!(
             resolver.resource_kind("worker"),
@@ -352,10 +352,10 @@ mod tests {
     fn service_depends_on_infra() {
         let mut config = make_config(vec![("api", vec!["postgres", "redis"])]);
         config
-            .infra
+            .docker
             .insert("postgres".into(), make_infra("postgres:16", vec![]));
         config
-            .infra
+            .docker
             .insert("redis".into(), make_infra("redis:7", vec![]));
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -388,10 +388,10 @@ mod tests {
     fn infra_depends_on_another_infra() {
         let mut config = make_config(vec![("api", vec!["postgres"])]);
         config
-            .infra
+            .docker
             .insert("postgres".into(), make_infra("postgres:16", vec!["redis"]));
         config
-            .infra
+            .docker
             .insert("redis".into(), make_infra("redis:7", vec![]));
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -405,10 +405,10 @@ mod tests {
     fn infra_cycle_detected() {
         let mut config = make_config(vec![]);
         config
-            .infra
+            .docker
             .insert("a".into(), make_infra("img-a", vec!["b"]));
         config
-            .infra
+            .docker
             .insert("b".into(), make_infra("img-b", vec!["a"]));
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -473,7 +473,7 @@ mod tests {
     fn cluster_deploy_depends_on_infra() {
         let mut config = make_config(vec![]);
         config
-            .infra
+            .docker
             .insert("postgres".into(), make_infra("postgres:16", vec![]));
         config.cluster = Some(ClusterConfig {
             name: None,
@@ -497,7 +497,7 @@ mod tests {
     fn all_four_types_in_one_graph() {
         let mut config = make_config(vec![("web", vec!["api", "cache"])]);
         config
-            .infra
+            .docker
             .insert("postgres".into(), make_infra("postgres:16", vec![]));
         config.compose = Some(ComposeConfig {
             file: "docker-compose.yml".to_string(),
@@ -527,7 +527,7 @@ mod tests {
         assert_before(&order, "cache", "web");
         assert_eq!(
             resolver.resource_kind("postgres"),
-            Some(ResourceKind::Infra)
+            Some(ResourceKind::Docker)
         );
         assert_eq!(
             resolver.resource_kind("api"),
@@ -586,7 +586,7 @@ mod tests {
     fn all_three_types_in_one_graph() {
         let mut config = make_config(vec![("api", vec!["postgres", "cache"])]);
         config
-            .infra
+            .docker
             .insert("postgres".into(), make_infra("postgres:16", vec![]));
         config.compose = Some(ComposeConfig {
             file: "docker-compose.yml".to_string(),
@@ -602,7 +602,7 @@ mod tests {
         assert_before(&order, "cache", "api");
         assert_eq!(
             resolver.resource_kind("postgres"),
-            Some(ResourceKind::Infra)
+            Some(ResourceKind::Docker)
         );
         assert_eq!(resolver.resource_kind("cache"), Some(ResourceKind::Compose));
         assert_eq!(resolver.resource_kind("api"), Some(ResourceKind::Service));

@@ -1,11 +1,11 @@
 use anyhow::{bail, Result};
 use std::path::Path;
 
-use crate::infra::exec::exec_in_container;
-use crate::infra::InfraManager;
+use crate::docker::exec::exec_in_container;
+use crate::docker::DockerManager;
 use crate::orchestrator::state::ProjectState;
 
-pub async fn run(config_path: Option<&Path>, infra_name: &str, command: Vec<String>) -> Result<()> {
+pub async fn run(config_path: Option<&Path>, docker_name: &str, command: Vec<String>) -> Result<()> {
     let config_path = match config_path {
         Some(p) => p.to_path_buf(),
         None => crate::config::resolve::resolve_config(None)?,
@@ -18,11 +18,11 @@ pub async fn run(config_path: Option<&Path>, infra_name: &str, command: Vec<Stri
         anyhow::anyhow!("no running project state found -- is the project running?")
     })?;
 
-    let infra_state = state.infra.get(infra_name).ok_or_else(|| {
+    let docker_state = state.docker.get(docker_name).ok_or_else(|| {
         anyhow::anyhow!(
-            "infra '{}' not found (available: {:?})",
-            infra_name,
-            state.infra.keys().collect::<Vec<_>>()
+            "docker '{}' not found (available: {:?})",
+            docker_name,
+            state.docker.keys().collect::<Vec<_>>()
         )
     })?;
 
@@ -30,9 +30,9 @@ pub async fn run(config_path: Option<&Path>, infra_name: &str, command: Vec<Stri
         bail!("no command specified");
     }
 
-    let mgr = InfraManager::new(state.slug.clone()).await?;
+    let mgr = DockerManager::new(state.slug.clone()).await?;
     let (exit_code, output) =
-        exec_in_container(mgr.docker(), &infra_state.container_id, command).await?;
+        exec_in_container(mgr.docker(), &docker_state.container_id, command).await?;
 
     print!("{}", output);
 

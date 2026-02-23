@@ -21,19 +21,85 @@ pub fn run() -> Result<()> {
         r#"[project]
 name = "{project_name}"
 
-# Global environment variables shared by all services
+# -- Global env vars shared by all services --
 # [env]
-# DATABASE_URL = "postgres://localhost/mydb"
+# RUST_LOG = "debug"
+# NODE_ENV = "development"
 
+# -- Dashboard + OpenTelemetry --
+# Uncomment to enable the built-in dashboard and OTel collector.
+# Services automatically receive OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME.
+#
+# [dashboard]
+# port = 4000
+#
+# [dashboard.otel]
+# grpc_port = 4317
+# http_port = 4318
+# retention = "1h"
+
+# -- Services --
 [services.{service_name}]
 command = "{service_command}"
 # port = 3000
 # path = "./"
+# depends_on = ["postgres"]
+#
+# [services.{service_name}.env]
+# DATABASE_URL = "postgres://devrig:devrig@localhost:{{{{ docker.postgres.port }}}}/mydb"
+#
+# [services.{service_name}.restart]
+# policy = "on-failure"
+# max_restarts = 10
 
-# Add more services:
 # [services.worker]
 # command = "cargo run --bin worker"
 # depends_on = ["{service_name}"]
+
+# -- Docker containers --
+# devrig manages Docker containers with health checks, init scripts, and volumes.
+#
+# [docker.postgres]
+# image = "postgres:16-alpine"
+# port = 5432
+# volumes = ["pgdata:/var/lib/postgresql/data"]
+# ready_check = {{ type = "pg_isready" }}
+# init = ["CREATE DATABASE {project_name};"]
+#
+# [docker.postgres.env]
+# POSTGRES_USER = "devrig"
+# POSTGRES_PASSWORD = "devrig"
+#
+# [docker.redis]
+# image = "redis:7-alpine"
+# port = 6379
+# ready_check = {{ type = "cmd", command = "redis-cli ping", expect = "PONG" }}
+
+# -- Docker Compose integration --
+# Delegate to an existing docker-compose.yml.
+#
+# [compose]
+# file = "docker-compose.yml"
+# services = ["redis", "postgres"]
+
+# -- Kubernetes cluster (k3d) --
+# Create a local cluster with auto-build and deploy.
+#
+# [cluster]
+# agents = 1
+# ports = ["8080:80"]
+#
+# [cluster.deploy.api]
+# context = "./services/api"
+# manifests = ["k8s/deployment.yaml", "k8s/service.yaml"]
+# watch = true
+# depends_on = ["postgres"]
+#
+# [cluster.addons.traefik]
+# type = "helm"
+# chart = "traefik/traefik"
+# repo = "https://traefik.github.io/charts"
+# namespace = "traefik"
 "#
     );
 

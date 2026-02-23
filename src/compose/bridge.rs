@@ -2,10 +2,10 @@ use anyhow::Result;
 use bollard::Docker;
 
 use crate::compose::lifecycle::ComposeService;
-use crate::infra::network;
+use crate::docker::network;
 
 /// Connect compose containers to the devrig project network so they can
-/// communicate with native infra containers and be reached by services.
+/// communicate with native docker containers and be reached by services.
 pub async fn bridge_compose_containers(
     docker: &Docker,
     network_name: &str,

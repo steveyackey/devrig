@@ -412,7 +412,7 @@ cargo install devrig
    development already, just install devrig inside WSL2 and you're done.
 
 2. **Docker integration.** Docker Desktop's WSL2 backend makes the `docker`
-   CLI available inside WSL2 without additional configuration. devrig's infra
+   CLI available inside WSL2 without additional configuration. devrig's docker
    containers, compose integration, and k3d clusters all work as-is.
 
 3. **File system performance.** Store projects on the Linux filesystem

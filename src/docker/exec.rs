@@ -4,7 +4,7 @@ use bollard::models::ExecConfig;
 use bollard::Docker;
 use futures_util::StreamExt;
 
-use crate::config::model::InfraConfig;
+use crate::config::model::DockerConfig;
 
 /// Execute a command in a container and return (exit_code, combined_output).
 pub async fn exec_in_container(
@@ -53,23 +53,23 @@ pub async fn exec_in_container(
     Ok((exit_code, output))
 }
 
-/// Run init scripts for an infra service.
+/// Run init scripts for a docker service.
 pub async fn run_init_scripts(
     docker: &Docker,
     container_id: &str,
-    infra_name: &str,
-    infra_config: &InfraConfig,
+    docker_name: &str,
+    docker_config: &DockerConfig,
 ) -> Result<()> {
-    for (i, script) in infra_config.init.iter().enumerate() {
+    for (i, script) in docker_config.init.iter().enumerate() {
         tracing::info!(
-            infra = %infra_name,
+            docker = %docker_name,
             "running init script {}/{}",
             i + 1,
-            infra_config.init.len()
+            docker_config.init.len()
         );
 
-        let cmd = if infra_config.image.starts_with("postgres") {
-            let user = infra_config
+        let cmd = if docker_config.image.starts_with("postgres") {
+            let user = docker_config
                 .env
                 .get("POSTGRES_USER")
                 .map(|s| s.as_str())
@@ -88,15 +88,15 @@ pub async fn run_init_scripts(
         let (exit_code, output) = exec_in_container(docker, container_id, cmd).await?;
 
         if !output.trim().is_empty() {
-            tracing::debug!(infra = %infra_name, "init output: {}", output.trim());
+            tracing::debug!(docker = %docker_name, "init output: {}", output.trim());
         }
 
         if exit_code != 0 {
             bail!(
                 "init script {}/{} for '{}' failed with exit code {} — output: {}",
                 i + 1,
-                infra_config.init.len(),
-                infra_name,
+                docker_config.init.len(),
+                docker_name,
                 exit_code,
                 output.trim()
             );

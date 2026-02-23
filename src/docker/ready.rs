@@ -6,7 +6,7 @@ use futures_util::StreamExt;
 use std::time::Duration;
 
 use crate::config::model::ReadyCheck;
-use crate::infra::exec::exec_in_container;
+use crate::docker::exec::exec_in_container;
 
 /// Run a ready check for a container, retrying with exponential backoff.
 ///
@@ -16,7 +16,7 @@ pub async fn run_ready_check(
     container_id: &str,
     check: &ReadyCheck,
     host_port: Option<u16>,
-    infra_name: &str,
+    docker_name: &str,
 ) -> Result<()> {
     let total_timeout = match check {
         ReadyCheck::Log { .. } => Duration::from_secs(60),
@@ -25,13 +25,13 @@ pub async fn run_ready_check(
 
     match check {
         ReadyCheck::Log { pattern } => {
-            run_log_check(docker, container_id, pattern, total_timeout, infra_name).await
+            run_log_check(docker, container_id, pattern, total_timeout, docker_name).await
         }
         _ => {
             let docker = docker.clone();
             let container_id = container_id.to_string();
             let check = check.clone();
-            let infra_name = infra_name.to_string();
+            let docker_name = docker_name.to_string();
 
             let result = tokio::time::timeout(total_timeout, async {
                 (|| async { run_single_check(&docker, &container_id, &check, host_port).await })
@@ -44,7 +44,7 @@ pub async fn run_ready_check(
                     )
                     .notify(|err: &anyhow::Error, dur: Duration| {
                         tracing::debug!(
-                            infra = %infra_name,
+                            docker = %docker_name,
                             "ready check failed: {}, retrying in {:?}",
                             err,
                             dur
@@ -59,7 +59,7 @@ pub async fn run_ready_check(
                 Ok(Err(e)) => Err(e),
                 Err(_) => bail!(
                     "ready check for '{}' timed out after {:?}",
-                    infra_name,
+                    docker_name,
                     total_timeout
                 ),
             }
@@ -91,7 +91,7 @@ async fn run_single_check(
             Ok(())
         }
         ReadyCheck::Cmd { command, expect } => {
-            crate::infra::exec::exec_ready_check(docker, container_id, command, expect.as_deref())
+            crate::docker::exec::exec_ready_check(docker, container_id, command, expect.as_deref())
                 .await
         }
         ReadyCheck::Http { url } => {
@@ -129,7 +129,7 @@ async fn run_log_check(
     container_id: &str,
     pattern: &str,
     timeout: Duration,
-    infra_name: &str,
+    docker_name: &str,
 ) -> Result<()> {
     let options = LogsOptions {
         follow: true,
@@ -151,7 +151,7 @@ async fn run_log_check(
                     }
                 }
                 Err(e) => {
-                    tracing::warn!(infra = %infra_name, "log stream error: {}", e);
+                    tracing::warn!(docker = %docker_name, "log stream error: {}", e);
                 }
             }
         }
@@ -164,7 +164,7 @@ async fn run_log_check(
         Ok(Err(e)) => Err(e),
         Err(_) => bail!(
             "log ready check for '{}' timed out after {:?} (pattern: '{}')",
-            infra_name,
+            docker_name,
             timeout,
             pattern
         ),

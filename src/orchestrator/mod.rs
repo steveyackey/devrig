@@ -24,7 +24,7 @@ use crate::config::model::{DevrigConfig, Port};
 use crate::config::validate::validate;
 use crate::discovery::env::build_service_env;
 use crate::identity::ProjectIdentity;
-use crate::infra::InfraManager;
+use crate::docker::DockerManager;
 use crate::ui::logs::{LogLine, LogWriter};
 use crate::ui::summary::{print_startup_summary, RunningService};
 
@@ -32,7 +32,7 @@ use graph::{DependencyResolver, ResourceKind};
 use ports::{check_all_ports_unified, format_port_conflicts, resolve_port};
 use registry::{InstanceEntry, InstanceRegistry};
 use state::{
-    ClusterDeployState, ClusterState, ComposeServiceState, InfraState, ProjectState, ServiceState,
+    ClusterDeployState, ClusterState, ComposeServiceState, DockerState, ProjectState, ServiceState,
 };
 use supervisor::{RestartPolicy, ServiceSupervisor};
 
@@ -42,9 +42,9 @@ use supervisor::{RestartPolicy, ServiceSupervisor};
 ///
 /// Multi-phase startup order:
 ///   Phase 0 — Parse config, validate, load previous state
-///   Phase 1 — Create Docker network (if infra/compose/cluster present)
+///   Phase 1 — Create Docker network (if docker/compose/cluster present)
 ///   Phase 2 — Compose up, bridge to network, ready checks
-///   Phase 3 — Start infra containers in dependency order
+///   Phase 3 — Start docker containers in dependency order
 ///   Phase 3.5 — Create k3d cluster, deploy to cluster, start watchers
 ///   Phase 4 — Resolve ports, templates, DEVRIG_* env vars
 ///   Phase 5 — Spawn service supervisors with injected env
@@ -102,7 +102,7 @@ impl Orchestrator {
     /// Start services according to the configuration.
     ///
     /// If `service_filter` is non-empty, only the named services (plus their
-    /// transitive dependencies including infra/compose) are started.
+    /// transitive dependencies including docker/compose) are started.
     pub async fn start(&mut self, service_filter: Vec<String>, dev_mode: bool) -> Result<()> {
         // ================================================================
         // Phase 0: Parse, validate, resolve dependencies, load prev state
@@ -142,8 +142,8 @@ impl Orchestrator {
                             }
                         }
                     }
-                    if let Some(infra) = self.config.infra.get(name) {
-                        for dep in &infra.depends_on {
+                    if let Some(docker_cfg) = self.config.docker.get(name) {
+                        for dep in &docker_cfg.depends_on {
                             if needed.insert(dep.clone()) {
                                 changed = true;
                             }
@@ -177,7 +177,7 @@ impl Orchestrator {
             bail!("no resources to start");
         }
 
-        // Check port conflicts for all fixed ports (services + infra)
+        // Check port conflicts for all fixed ports (services + docker)
         let conflicts = check_all_ports_unified(&self.config);
         if !conflicts.is_empty() {
             bail!("{}", format_port_conflicts(&conflicts));
@@ -190,15 +190,15 @@ impl Orchestrator {
         let has_docker = launch_order.iter().any(|(_, k)| {
             matches!(
                 k,
-                ResourceKind::Infra | ResourceKind::Compose | ResourceKind::ClusterDeploy
+                ResourceKind::Docker | ResourceKind::Compose | ResourceKind::ClusterDeploy
             )
         }) || self.config.cluster.is_some();
 
         // ================================================================
         // Phase 1: Docker network
         // ================================================================
-        let infra_mgr = if has_docker {
-            let mgr = InfraManager::new(self.identity.slug.clone()).await?;
+        let docker_mgr = if has_docker {
+            let mgr = DockerManager::new(self.identity.slug.clone()).await?;
             mgr.ensure_network().await?;
             info!(network = %mgr.network_name(), "Docker network ensured");
             Some(mgr)
@@ -206,7 +206,7 @@ impl Orchestrator {
             None
         };
 
-        let network_name = infra_mgr.as_ref().map(|m| m.network_name());
+        let network_name = docker_mgr.as_ref().map(|m| m.network_name());
 
         // ================================================================
         // Phase 2: Compose services
@@ -240,7 +240,7 @@ impl Orchestrator {
                     compose::lifecycle::compose_ps(&compose_file, &self.identity.slug).await?;
 
                 // Bridge compose containers to the devrig network
-                if let Some(mgr) = &infra_mgr {
+                if let Some(mgr) = &docker_mgr {
                     compose::bridge::bridge_compose_containers(
                         mgr.docker(),
                         &mgr.network_name(),
@@ -270,7 +270,7 @@ impl Orchestrator {
         // ================================================================
         // Phase 3: Infrastructure containers (in dependency order)
         // ================================================================
-        let mut infra_states: BTreeMap<String, InfraState> = BTreeMap::new();
+        let mut docker_states: BTreeMap<String, DockerState> = BTreeMap::new();
         let mut allocated_ports: HashSet<u16> = HashSet::new();
 
         // Pre-populate allocated ports from compose services
@@ -281,29 +281,29 @@ impl Orchestrator {
         }
 
         for (name, kind) in &launch_order {
-            if *kind != ResourceKind::Infra {
+            if *kind != ResourceKind::Docker {
                 continue;
             }
 
-            let infra_config = self
+            let docker_config = self
                 .config
-                .infra
+                .docker
                 .get(name)
-                .ok_or_else(|| anyhow::anyhow!("infra '{}' not found in config", name))?
+                .ok_or_else(|| anyhow::anyhow!("docker '{}' not found in config", name))?
                 .clone();
 
-            let prev_infra = prev_state.as_ref().and_then(|s| s.infra.get(name));
+            let prev_docker = prev_state.as_ref().and_then(|s| s.docker.get(name));
 
-            info!(infra = %name, image = %infra_config.image, "starting infra service");
+            info!(docker = %name, image = %docker_config.image, "starting docker service");
 
-            let state = infra_mgr
+            let state = docker_mgr
                 .as_ref()
-                .expect("infra_mgr must exist when infra resources are present")
-                .start_service(name, &infra_config, prev_infra, &mut allocated_ports)
+                .expect("docker_mgr must exist when docker resources are present")
+                .start_service(name, &docker_config, prev_docker, &mut allocated_ports)
                 .await
-                .with_context(|| format!("starting infra service '{}'", name))?;
+                .with_context(|| format!("starting docker service '{}'", name))?;
 
-            infra_states.insert(name.clone(), state);
+            docker_states.insert(name.clone(), state);
         }
 
         // ================================================================
@@ -475,13 +475,13 @@ impl Orchestrator {
         // ================================================================
         let mut resolved_ports: HashMap<String, u16> = HashMap::new();
 
-        // Infra ports
-        for (name, state) in &infra_states {
+        // Docker ports
+        for (name, state) in &docker_states {
             if let Some(port) = state.port {
-                resolved_ports.insert(format!("infra:{}", name), port);
+                resolved_ports.insert(format!("docker:{}", name), port);
             }
             for (pname, &port) in &state.named_ports {
-                resolved_ports.insert(format!("infra:{}:{}", name, pname), port);
+                resolved_ports.insert(format!("docker:{}:{}", name, pname), port);
             }
         }
 
@@ -819,7 +819,7 @@ impl Orchestrator {
             config_path: self.config_path.to_string_lossy().to_string(),
             services: service_states,
             started_at: Utc::now(),
-            infra: infra_states.clone(),
+            docker: docker_states.clone(),
             compose_services: compose_states.clone(),
             network_name: network_name.clone(),
             cluster: cluster_state.clone(),
@@ -845,9 +845,9 @@ impl Orchestrator {
         // ================================================================
         let mut summary_services: BTreeMap<String, RunningService> = BTreeMap::new();
 
-        for (name, state) in &project_state.infra {
+        for (name, state) in &project_state.docker {
             summary_services.insert(
-                format!("[infra] {}", name),
+                format!("[docker] {}", name),
                 RunningService {
                     port: state.port,
                     port_auto: state.port_auto,
@@ -973,7 +973,7 @@ impl Orchestrator {
         // Wait for shutdown signal or all tasks to exit
         // ================================================================
         if service_names.is_empty() {
-            // No services to supervise (infra/compose only) — wait for Ctrl+C
+            // No services to supervise (docker/compose only) — wait for Ctrl+C
             tokio::signal::ctrl_c().await.ok();
             eprintln!("\nShutting down...");
         } else {
@@ -1003,11 +1003,11 @@ impl Orchestrator {
             pf_mgr.stop().await;
         }
 
-        // Stop infra containers on shutdown (preserve state for restart)
-        for (name, infra_state) in &infra_states {
-            if let Some(mgr) = &infra_mgr {
-                if let Err(e) = mgr.stop_service(infra_state).await {
-                    warn!(infra = %name, error = %e, "failed to stop infra container");
+        // Stop docker containers on shutdown (preserve state for restart)
+        for (name, docker_state) in &docker_states {
+            if let Some(mgr) = &docker_mgr {
+                if let Err(e) = mgr.stop_service(docker_state).await {
+                    warn!(docker = %name, error = %e, "failed to stop docker container");
                 }
             }
         }
@@ -1015,7 +1015,7 @@ impl Orchestrator {
         Ok(())
     }
 
-    /// Stop a running project: cancel supervisors, stop infra containers.
+    /// Stop a running project: cancel supervisors, stop docker containers.
     /// Preserves state and registry so `devrig ps` still sees it.
     pub async fn stop(&self) -> Result<()> {
         let state = ProjectState::load(&self.state_dir).ok_or_else(|| {
@@ -1030,18 +1030,18 @@ impl Orchestrator {
             Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
         }
 
-        // Stop infra containers (preserve volumes/data)
-        if !state.infra.is_empty() {
-            match InfraManager::new(state.slug.clone()).await {
+        // Stop docker containers (preserve volumes/data)
+        if !state.docker.is_empty() {
+            match DockerManager::new(state.slug.clone()).await {
                 Ok(mgr) => {
-                    for (name, infra_state) in &state.infra {
-                        if let Err(e) = mgr.stop_service(infra_state).await {
-                            warn!(infra = %name, error = %e, "failed to stop infra container");
+                    for (name, docker_state) in &state.docker {
+                        if let Err(e) = mgr.stop_service(docker_state).await {
+                            warn!(docker = %name, error = %e, "failed to stop docker container");
                         }
                     }
                 }
                 Err(e) => {
-                    warn!(error = %e, "could not connect to Docker to stop infra containers");
+                    warn!(error = %e, "could not connect to Docker to stop docker containers");
                 }
             }
         }
@@ -1111,9 +1111,9 @@ impl Orchestrator {
         // Clean up Docker resources (containers, volumes, networks)
         if state
             .as_ref()
-            .is_some_and(|s| !s.infra.is_empty() || s.network_name.is_some())
+            .is_some_and(|s| !s.docker.is_empty() || s.network_name.is_some())
         {
-            match InfraManager::new(self.identity.slug.clone()).await {
+            match DockerManager::new(self.identity.slug.clone()).await {
                 Ok(mgr) => {
                     if let Err(e) = mgr.cleanup_all().await {
                         warn!(error = %e, "failed to clean up Docker resources");

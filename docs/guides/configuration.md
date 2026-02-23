@@ -53,7 +53,7 @@ depends_on = ["postgres", "redis"]
 
 [services.api.env]
 API_KEY = "dev-secret"
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 ```
 
 ### Fields
@@ -64,7 +64,7 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/mya
 | `path`       | string             | No       | (none)  | Working directory, relative to the config file.           |
 | `port`       | integer or `"auto"`| No       | (none)  | Port the service listens on.                              |
 | `env`        | map of strings     | No       | `{}`    | Environment variables for this service.                   |
-| `depends_on` | list of strings    | No       | `[]`    | Services, infra, or compose services to start before this.|
+| `depends_on` | list of strings    | No       | `[]`    | Services, docker, or compose services to start before this.|
 
 ### Port values
 
@@ -135,12 +135,12 @@ backoff).
 ### Dependencies
 
 The `depends_on` list controls startup order. Dependencies can reference
-service names, infra names, or compose service names:
+service names, docker names, or compose service names:
 
 ```toml
 [services.api]
 command = "cargo run"
-depends_on = ["postgres", "redis"]  # postgres is [infra.postgres]
+depends_on = ["postgres", "redis"]  # postgres is [docker.postgres]
 ```
 
 Circular dependencies are detected at config validation time.
@@ -154,42 +154,42 @@ These are merged with (and override) global `[env]` and auto-generated
 ```toml
 [services.api.env]
 API_KEY = "secret"
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 ```
 
-## `[infra.*]` section
+## `[docker.*]` section
 
-Each `[infra.<name>]` block defines a Docker container that devrig manages.
+Each `[docker.<name>]` block defines a Docker container that devrig manages.
 Containers are automatically pulled, started, health-checked, and initialized.
 
-### Minimal infra
+### Minimal docker
 
 ```toml
-[infra.redis]
+[docker.redis]
 image = "redis:7-alpine"
 port = 6379
 ready_check = { type = "tcp" }
 ```
 
-### Full infra
+### Full docker
 
 ```toml
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
 volumes = ["pgdata:/var/lib/postgresql/data"]
 init = ["CREATE DATABASE myapp;"]
 depends_on = []
 
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
 
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 ```
 
-### Infra fields
+### Docker fields
 
 | Field         | Type               | Required | Default | Description                                   |
 |---------------|--------------------|----------|---------|-----------------------------------------------|
@@ -200,11 +200,11 @@ type = "pg_isready"
 | `volumes`     | list of strings    | No       | `[]`    | Volume mounts (`"name:/path/in/container"`).  |
 | `ready_check` | table              | No       | (none)  | Health check configuration.                   |
 | `init`        | list of strings    | No       | `[]`    | SQL/commands to run after first ready.         |
-| `depends_on`  | list of strings    | No       | `[]`    | Other infra or compose dependencies.          |
+| `depends_on`  | list of strings    | No       | `[]`    | Other docker or compose dependencies.          |
 
-### Port values for infra
+### Port values for docker
 
-Infra ports work the same as service ports:
+Docker ports work the same as service ports:
 
 ```toml
 port = 5432       # Fixed port. Container port is mapped to this host port.
@@ -218,9 +218,9 @@ Auto-assigned ports are sticky across restarts.
 For services that expose multiple ports (like Mailpit with SMTP and UI):
 
 ```toml
-[infra.mailpit]
+[docker.mailpit]
 image = "axllent/mailpit:latest"
-[infra.mailpit.ports]
+[docker.mailpit.ports]
 smtp = 1025
 ui = 8025
 ```
@@ -239,7 +239,7 @@ dependents are started.
 ready_check = { type = "pg_isready" }
 
 # Custom command inside container
-[infra.redis.ready_check]
+[docker.redis.ready_check]
 type = "cmd"
 command = "redis-cli ping"
 expect = "PONG"                # Optional: match this string in stdout
@@ -247,11 +247,11 @@ expect = "PONG"                # Optional: match this string in stdout
 # HTTP health check (from host)
 ready_check = { type = "http", url = "http://localhost:9000/health" }
 
-# TCP port check (from host, uses the infra port)
+# TCP port check (from host, uses the docker port)
 ready_check = { type = "tcp" }
 
 # Wait for a log pattern in container output
-[infra.es.ready_check]
+[docker.es.ready_check]
 type = "log"
 match = "started"
 ```
@@ -269,10 +269,10 @@ All strategies use exponential backoff with jitter (250ms to 3s delay).
 ### Init scripts
 
 Init scripts run inside the container after the ready check passes. They
-only run on the first start. Use `devrig reset <infra>` to re-run them.
+only run on the first start. Use `devrig reset <docker>` to re-run them.
 
 ```toml
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 init = [
     "CREATE DATABASE myapp;",
@@ -363,7 +363,7 @@ depends_on = ["postgres"]
 | `dockerfile` | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
 | `manifests`  | list of strings | Yes      | --           | Kubernetes manifest files to apply, relative to config.|
 | `watch`      | boolean         | No       | `false`      | Enable file watching for automatic rebuild/redeploy.   |
-| `depends_on` | list of strings | No       | `[]`         | Infra or other deploy services to start before this.   |
+| `depends_on` | list of strings | No       | `[]`         | Docker or other deploy services to start before this.   |
 
 When `watch = true`, devrig monitors the build context directory for changes,
 debounces with a 500ms window, rebuilds the Docker image, pushes it to the
@@ -472,7 +472,7 @@ with exponential backoff if the connection drops.
 
 The `[compose]` section delegates infrastructure to an existing
 `docker-compose.yml`. This enables incremental migration from docker-compose
-to native `[infra.*]` blocks.
+to native `[docker.*]` blocks.
 
 ```toml
 [compose]
@@ -592,13 +592,13 @@ metric_buffer = 100000
 log_buffer = 200000
 retention = "2h"
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 
 [services.api]
@@ -607,7 +607,7 @@ command = "cargo watch -x run"
 port = 3000
 depends_on = ["postgres"]
 [services.api.env]
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 ```
 
 With this configuration, `devrig start` will:
@@ -651,8 +651,8 @@ resolve to values from the config and resolved ports:
 
 ```toml
 [services.api.env]
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
-SMTP_PORT = "{{ infra.mailpit.ports.smtp }}"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
+SMTP_PORT = "{{ docker.mailpit.ports.smtp }}"
 APP_NAME = "{{ project.name }}"
 ```
 
@@ -662,8 +662,8 @@ APP_NAME = "{{ project.name }}"
 |--------------------------------|---------------|
 | `project.name`                 | `myapp`       |
 | `services.<name>.port`         | `3000`        |
-| `infra.<name>.port`            | `5432`        |
-| `infra.<name>.ports.<portname>`| `1025`        |
+| `docker.<name>.port`            | `5432`        |
+| `docker.<name>.ports.<portname>`| `1025`        |
 | `compose.<name>.port`          | `6379`        |
 | `cluster.name`                 | `myapp-dev`   |
 
@@ -684,14 +684,14 @@ Every service process automatically receives environment variables for
 service discovery. These are generated in this order (later overrides earlier):
 
 1. Global `[env]`
-2. Auto-generated `DEVRIG_*` vars for all infra services
+2. Auto-generated `DEVRIG_*` vars for all docker services
 3. Auto-generated `DEVRIG_*` vars for all other services
 4. Service's own `PORT` and `HOST`
 5. Service-specific `[services.<name>.env]` (can override any of the above)
 
-### Infrastructure variables
+### Docker container variables
 
-For each `[infra.<name>]`, all services receive:
+For each `[docker.<name>]`, all services receive:
 
 | Variable                         | Example                                      |
 |----------------------------------|----------------------------------------------|
@@ -712,7 +712,7 @@ URLs are generated based on the Docker image name:
 | Default     | `http://localhost:port`                     |
 
 Postgres credentials are extracted from `POSTGRES_USER` and `POSTGRES_PASSWORD`
-in the infra env.
+in the docker env.
 
 ### Service-to-service variables
 
@@ -744,7 +744,7 @@ dependencies.
 
 ### `devrig stop`
 
-Stop all running services and infra containers. Preserves state for restart.
+Stop all running services and docker containers. Preserves state for restart.
 
 ### `devrig delete`
 
@@ -760,13 +760,13 @@ instances across projects.
 
 Print the resolved environment variables for a service.
 
-### `devrig exec <infra> -- <command...>`
+### `devrig exec <docker> -- <command...>`
 
-Execute a command inside an infra container.
+Execute a command inside a docker container.
 
-### `devrig reset <infra>`
+### `devrig reset <docker>`
 
-Clear the init-completed flag for an infra service. Init scripts will
+Clear the init-completed flag for a docker service. Init scripts will
 re-run on the next `devrig start`.
 
 ### `devrig cluster create`
@@ -891,21 +891,21 @@ name = "myapp"
 [env]
 RUST_LOG = "debug"
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
 volumes = ["pgdata:/var/lib/postgresql/data"]
 init = ["CREATE DATABASE myapp;"]
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 
-[infra.redis]
+[docker.redis]
 image = "redis:7-alpine"
 port = 6379
-[infra.redis.ready_check]
+[docker.redis.ready_check]
 type = "cmd"
 command = "redis-cli ping"
 expect = "PONG"
@@ -916,7 +916,7 @@ command = "cargo watch -x run"
 port = 3000
 depends_on = ["postgres", "redis"]
 [services.api.env]
-DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 
 [services.web]
 path = "./web"
@@ -927,22 +927,22 @@ depends_on = ["api"]
 
 ## Complete example with cluster
 
-This example shows a project that runs Postgres as local infra and deploys
+This example shows a project that runs Postgres as a local docker container and deploys
 an API service into a local Kubernetes cluster:
 
 ```toml
 [project]
 name = "myapp"
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
 volumes = ["pgdata:/var/lib/postgresql/data"]
 init = ["CREATE DATABASE myapp;"]
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 
 [cluster]
@@ -978,11 +978,11 @@ Run `devrig validate` to check your config without starting services.
 1. **`[project]` is required** -- The file must contain a `[project]` section
    with a `name` field.
 2. **`command` is required** -- Every service must have a non-empty `command`.
-3. **`image` is required** -- Every infra must have a non-empty `image`.
+3. **`image` is required** -- Every docker container must have a non-empty `image`.
 4. **Dependencies must exist** -- Every entry in `depends_on` must reference
-   a defined service, infra, or compose service name. Typos trigger a "did
+   a defined service, docker, or compose service name. Typos trigger a "did
    you mean?" suggestion if a close match exists.
-5. **No duplicate ports** -- Two services or infra cannot declare the same
+5. **No duplicate ports** -- Two services or docker containers cannot declare the same
    fixed port.
 6. **No cycles** -- The dependency graph must be acyclic.
 7. **Compose file is non-empty** -- If `[compose]` is present, `file` must

@@ -30,7 +30,7 @@ table automatically.
 Example Docker label configuration:
 
 ```toml
-[infra.api]
+[docker.api]
 image = "myapp-api:dev"
 labels = { "traefik.http.routers.api.rule" = "PathPrefix(`/api`)" }
 ```

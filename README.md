@@ -96,7 +96,7 @@ The dashboard opens at `http://localhost:4000`.
 | `devrig validate`    | Validate the configuration file                   |
 | `devrig logs`        | Show and filter service logs                      |
 | `devrig env`         | Show resolved environment variables for a service |
-| `devrig exec`        | Execute a command in an infra container            |
+| `devrig exec`        | Execute a command in a docker container            |
 | `devrig query`       | Query traces, logs, and metrics from the OTel collector |
 | `devrig cluster`     | Manage the k3d cluster (create/delete/kubeconfig) |
 | `devrig kubectl`     | Proxy to kubectl with devrig's isolated kubeconfig |
@@ -115,9 +115,9 @@ The dashboard opens at `http://localhost:4000`.
    phases: TOML deserialization, then semantic checks (missing deps, duplicate
    ports, cycles).
 2. **Resolve** — builds a dependency graph with `petgraph` and topologically
-   sorts it. Infra containers, k3d cluster deployments, and services can all
+   sorts it. Docker containers, k3d cluster deployments, and services can all
    depend on each other. Auto-ports are assigned by binding ephemeral OS ports.
-3. **Infra** — pulls and starts Docker containers for databases, caches, and
+3. **Docker** — pulls and starts Docker containers for databases, caches, and
    other infrastructure. Supports health checks, init commands, and volume
    mounts.
 4. **Cluster** — optionally creates a k3d cluster, deploys manifests, and

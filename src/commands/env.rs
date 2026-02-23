@@ -34,12 +34,12 @@ pub fn run(config_path: Option<&Path>, service_name: &str) -> Result<()> {
                 resolved_ports.insert(format!("service:{}", name), port);
             }
         }
-        for (name, infra_state) in &s.infra {
-            if let Some(port) = infra_state.port {
-                resolved_ports.insert(format!("infra:{}", name), port);
+        for (name, docker_state) in &s.docker {
+            if let Some(port) = docker_state.port {
+                resolved_ports.insert(format!("docker:{}", name), port);
             }
-            for (pname, &port) in &infra_state.named_ports {
-                resolved_ports.insert(format!("infra:{}:{}", name, pname), port);
+            for (pname, &port) in &docker_state.named_ports {
+                resolved_ports.insert(format!("docker:{}:{}", name, pname), port);
             }
         }
         for (name, cs_state) in &s.compose_services {

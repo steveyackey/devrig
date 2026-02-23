@@ -19,13 +19,13 @@ pub fn run(config_file: Option<&Path>) -> Result<()> {
     match validate(&config, &source, &filename) {
         Ok(()) => {
             let svc_count = config.services.len();
-            let infra_count = config.infra.len();
+            let docker_count = config.docker.len();
             println!(
-                "  {} {} is valid ({} services, {} infra)",
+                "  {} {} is valid ({} services, {} docker)",
                 "\u{2713}".green(),
                 filename,
                 svc_count,
-                infra_count,
+                docker_count,
             );
             Ok(())
         }

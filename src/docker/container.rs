@@ -7,7 +7,7 @@ use bollard::query_parameters::{
 use bollard::Docker;
 use std::collections::HashMap;
 
-use crate::infra::network::resource_labels;
+use crate::docker::network::resource_labels;
 
 /// Port mapping: (container_port, host_port).
 pub struct PortMap {

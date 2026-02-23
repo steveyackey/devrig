@@ -7,7 +7,7 @@ use crate::discovery::url::generate_url;
 ///
 /// The layering order (later overrides earlier):
 /// 1. Global env from config.env
-/// 2. Auto-generated DEVRIG_* vars for all infra
+/// 2. Auto-generated DEVRIG_* vars for all docker services
 /// 3. Auto-generated DEVRIG_* vars for all other services
 /// 4. PORT and HOST for the service itself
 /// 5. Service-specific env (explicit overrides)
@@ -23,22 +23,22 @@ pub fn build_service_env(
         env.insert(k.clone(), v.clone());
     }
 
-    // 2. Add DEVRIG_* vars for all infra
-    for (infra_name, infra_config) in &config.infra {
-        let upper = infra_name.to_uppercase();
-        let port_key = format!("infra:{}", infra_name);
+    // 2. Add DEVRIG_* vars for all docker services
+    for (docker_name, docker_config) in &config.docker {
+        let upper = docker_name.to_uppercase();
+        let port_key = format!("docker:{}", docker_name);
 
         env.insert(format!("DEVRIG_{}_HOST", upper), "localhost".to_string());
 
         if let Some(&port) = resolved_ports.get(&port_key) {
             env.insert(format!("DEVRIG_{}_PORT", upper), port.to_string());
-            let url = generate_url(infra_name, infra_config, port);
+            let url = generate_url(docker_name, docker_config, port);
             env.insert(format!("DEVRIG_{}_URL", upper), url);
         }
 
         // Named ports
-        for port_name in infra_config.ports.keys() {
-            let named_key = format!("infra:{}:{}", infra_name, port_name);
+        for port_name in docker_config.ports.keys() {
+            let named_key = format!("docker:{}:{}", docker_name, port_name);
             if let Some(&port) = resolved_ports.get(&named_key) {
                 let upper_port_name = port_name.to_uppercase();
                 env.insert(
@@ -104,7 +104,7 @@ pub fn build_service_env(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::model::{DevrigConfig, InfraConfig, Port, ProjectConfig, ServiceConfig};
+    use crate::config::model::{DevrigConfig, DockerConfig, Port, ProjectConfig, ServiceConfig};
 
     fn minimal_config() -> DevrigConfig {
         DevrigConfig {
@@ -112,7 +112,7 @@ mod tests {
                 name: "test".to_string(),
             },
             services: BTreeMap::new(),
-            infra: BTreeMap::new(),
+            docker: BTreeMap::new(),
             compose: None,
             cluster: None,
             dashboard: None,
@@ -121,8 +121,8 @@ mod tests {
         }
     }
 
-    fn make_infra(image: &str, env: Vec<(&str, &str)>) -> InfraConfig {
-        InfraConfig {
+    fn make_infra(image: &str, env: Vec<(&str, &str)>) -> DockerConfig {
+        DockerConfig {
             image: image.to_string(),
             port: None,
             ports: BTreeMap::new(),
@@ -156,13 +156,13 @@ mod tests {
             vec![("POSTGRES_USER", "devrig"), ("POSTGRES_PASSWORD", "secret")],
         );
         pg.port = Some(Port::Fixed(5432));
-        config.infra.insert("postgres".into(), pg);
+        config.docker.insert("postgres".into(), pg);
         config
             .services
             .insert("api".into(), make_service("cargo run", Some(3000)));
 
         let mut ports = HashMap::new();
-        ports.insert("infra:postgres".into(), 5432u16);
+        ports.insert("docker:postgres".into(), 5432u16);
         ports.insert("service:api".into(), 3000u16);
 
         let env = build_service_env("api", &config, &ports);
@@ -180,15 +180,15 @@ mod tests {
         let mut mailpit = make_infra("axllent/mailpit:latest", vec![]);
         mailpit.ports.insert("smtp".into(), Port::Fixed(1025));
         mailpit.ports.insert("ui".into(), Port::Fixed(8025));
-        config.infra.insert("mailpit".into(), mailpit);
+        config.docker.insert("mailpit".into(), mailpit);
         config
             .services
             .insert("api".into(), make_service("cargo run", Some(3000)));
 
         let mut ports = HashMap::new();
-        ports.insert("infra:mailpit".into(), 1025u16);
-        ports.insert("infra:mailpit:smtp".into(), 1025u16);
-        ports.insert("infra:mailpit:ui".into(), 8025u16);
+        ports.insert("docker:mailpit".into(), 1025u16);
+        ports.insert("docker:mailpit:smtp".into(), 1025u16);
+        ports.insert("docker:mailpit:ui".into(), 8025u16);
         ports.insert("service:api".into(), 3000u16);
 
         let env = build_service_env("api", &config, &ports);

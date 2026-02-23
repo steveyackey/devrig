@@ -23,13 +23,13 @@ Add a `[cluster]` section to your `devrig.toml`:
 [project]
 name = "myapp"
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "devrig"
 POSTGRES_PASSWORD = "devrig"
-[infra.postgres.ready_check]
+[docker.postgres.ready_check]
 type = "pg_isready"
 
 [cluster]
@@ -83,7 +83,7 @@ into the cluster.
 | `dockerfile` | string          | No       | `Dockerfile` | Dockerfile path, relative to context.               |
 | `manifests`  | list of strings | Yes      | --           | Kubernetes manifest files to apply, relative to config. |
 | `watch`      | boolean         | No       | `false`      | Enable file watching for automatic rebuild and redeploy. |
-| `depends_on` | list of strings | No       | `[]`         | Infra or other deploy services to start before this.|
+| `depends_on` | list of strings | No       | `[]`         | Docker or other deploy services to start before this.|
 
 Manifests support the `{{ cluster.name }}` template variable, which resolves
 to the cluster name for use in image references and labels.
@@ -145,7 +145,7 @@ directory for changes and triggers automatic rebuilds and redeploys.
 
 ## Network connectivity
 
-devrig connects the k3d cluster to the same Docker network used by infra
+devrig connects the k3d cluster to the same Docker network used by docker
 containers. This allows pods to reach infrastructure services by Docker
 container name.
 
@@ -153,13 +153,13 @@ container name.
 
 | From       | To         | How                                           | Example                                  |
 |------------|------------|-----------------------------------------------|------------------------------------------|
-| Pod        | Infra      | Docker container name on shared network       | `postgres://devrig:devrig@devrig-myapp-a1b2c3d4-postgres:5432` |
-| Infra      | Pod        | Via cluster load balancer on Docker network   | `http://k3d-myapp-dev-serverlb:80`       |
+| Pod        | Docker     | Docker container name on shared network       | `postgres://devrig:devrig@devrig-myapp-a1b2c3d4-postgres:5432` |
+| Docker     | Pod        | Via cluster load balancer on Docker network   | `http://k3d-myapp-dev-serverlb:80`       |
 | Host       | Pod        | Via port mappings in `cluster.ports`          | `http://localhost:8080`                  |
-| Host       | Infra      | Via infra port mappings                       | `postgres://localhost:5432`              |
+| Host       | Docker     | Via docker port mappings                      | `postgres://localhost:5432`              |
 
 Pods should use the Docker container name (not `localhost`) when connecting
-to infra services, since `localhost` inside a pod refers to the pod itself.
+to docker services, since `localhost` inside a pod refers to the pod itself.
 
 ## CLI commands
 

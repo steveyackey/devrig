@@ -52,7 +52,7 @@ name = "myapp"                    # Used as prefix for containers, networks, clu
 path = "./services/api"           # Working directory (relative to this file)
 command = "cargo watch -x run"    # The hot-reload command
 port = 3000                       # Port this service listens on (explicit)
-env = { DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp" }
+env = { DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp" }
 depends_on = ["postgres"]         # Wait for these before starting
 
 [services.web]
@@ -66,16 +66,16 @@ depends_on = ["api"]
 path = "./services/worker"
 command = "cargo watch -x run"
 port = "auto"                     # Auto-assign an available port
-env = { DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp" }
+env = { DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp" }
 depends_on = ["postgres"]
 
 # ------------------------------------------------------------------
-# Infrastructure: containers managed by devrig
+# Docker containers managed by devrig
 # ------------------------------------------------------------------
-# Each [infra.<name>] block is a Docker container devrig runs.
+# Each [docker.<name>] block is a Docker container devrig runs.
 # devrig handles pulling images, creating volumes, health checks, etc.
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16"
 port = 5432                       # Host port (explicit). Use "auto" to auto-assign.
 env = { POSTGRES_USER = "devrig", POSTGRES_PASSWORD = "devrig" }
@@ -85,12 +85,12 @@ init = [
   "CREATE DATABASE myapp;",       # SQL to run on first start
 ]
 
-[infra.redis]
+[docker.redis]
 image = "redis:7-alpine"
 port = "auto"                     # Auto-assign an available host port
 ready_check = { type = "cmd", command = "redis-cli ping" }
 
-[infra.mailpit]
+[docker.mailpit]
 image = "axllent/mailpit:latest"
 ports = { smtp = 1025, ui = 8025 }
 
@@ -143,7 +143,7 @@ LOG_LEVEL = "debug"
 # ------------------------------------------------------------------
 [network]
 # Network name is auto-generated from project slug (e.g., devrig-myapp-a3f1c9e2-net)
-# All infra containers and cluster share this network.
+# All docker containers and cluster share this network.
 # Services get env vars pointing to the right addresses.
 ```
 
@@ -151,7 +151,7 @@ LOG_LEVEL = "debug"
 
 **Why TOML?** It's the Rust ecosystem standard (`Cargo.toml`). It handles nested config well without YAML's footguns. And it's easy to read.
 
-**Template expressions** like `{{ project.name }}`, `{{ infra.postgres.port }}`, and `{{ services.api.port }}` allow cross-referencing within the config. Port references resolve to the actual assigned value (including auto-assigned ports). Only simple variable interpolation — no logic, no loops.
+**Template expressions** like `{{ project.name }}`, `{{ docker.postgres.port }}`, and `{{ services.api.port }}` allow cross-referencing within the config. Port references resolve to the actual assigned value (including auto-assigned ports). Only simple variable interpolation — no logic, no loops.
 
 **`depends_on` is dependency ordering, not health gating (by default).** If you need health gating, the dependency target needs a `ready_check`. devrig waits for `ready_check` to pass before starting dependents.
 
@@ -207,7 +207,7 @@ When two projects try to bind the same host port, devrig detects the conflict at
   devrig ⚡ otherproject
 
   ✗ Port 5432 is already in use (by devrig-myapp-a3f1c9e2-postgres)
-    → Change [infra.postgres] port in devrig.toml, or stop the other project first
+    → Change [docker.postgres] port in devrig.toml, or stop the other project first
 
   Startup failed: port conflict
 ```
@@ -223,7 +223,7 @@ devrig ps --all
 ```
 
 ```
-  Project       Config                              Services  Infra  Cluster  Status
+  Project       Config                              Services  Docker  Cluster  Status
   myapp         ~/code/myapp/devrig.toml            3         2      yes      ● running
   otherproject  ~/code/other/devrig.toml             1         1      no       ● running
   experiment    ~/code/exp/devrig.minimal.toml       1         0      no       ● stopped
@@ -271,13 +271,13 @@ devrig logs api           # Logs for a specific service
 devrig logs --follow      # Tail mode (default)
 ```
 
-### Infrastructure management
+### Docker container management
 
 ```
-devrig ps                 # Show status of all services and infra for this project
+devrig ps                 # Show status of all services and docker containers for this project
 devrig ps --all           # Show all running devrig instances across all projects
-devrig exec postgres      # Shell into an infra container
-devrig reset postgres     # Re-run init scripts for an infra component
+devrig exec postgres      # Shell into a docker container
+devrig reset postgres     # Re-run init scripts for a docker component
 devrig env api            # Print all resolved env vars for a service
 devrig env api DEVRIG_POSTGRES_URL  # Print a specific var
 devrig env --export api   # Print as export statements (for eval)
@@ -332,9 +332,9 @@ devrig start
   │
   ├─ Parse devrig.toml
   ├─ Resolve dependency graph (topological sort)
-  ├─ Create Docker network (if infra or cluster present)
+  ├─ Create Docker network (if docker containers or cluster present)
   │
-  ├─ Phase 1: Infrastructure
+  ├─ Phase 1: Docker Containers
   │   ├─ Pull images (parallel)
   │   ├─ Start containers (respecting depends_on)
   │   ├─ Run ready_checks (poll with backoff)
@@ -359,7 +359,7 @@ devrig start
   │
   ├─ Print startup summary
   │   ├─ Service URLs (http://localhost:<port> for each service)
-  │   ├─ Infra endpoints (postgres://..., redis://...)
+  │   ├─ Docker endpoints (postgres://..., redis://...)
   │   ├─ Dashboard URL (http://localhost:<dashboard_port>)
   │   └─ OTel collector endpoints
   │
@@ -381,7 +381,7 @@ When `devrig start` finishes bringing everything up, it prints a clear summary:
     web       http://localhost:5173    ● running
     worker                             ● running
 
-  Infrastructure
+  Docker
     postgres  localhost:5432           ● ready
     redis     localhost:6379           ● ready
     mailpit   http://localhost:8025    ● ready
@@ -415,15 +415,15 @@ State is advisory, not critical. `devrig delete` wipes it all — including the 
 
 ### Service Discovery & Environment Injection
 
-devrig automatically injects environment variables into every service so they can discover each other and all infrastructure — without hardcoding ports, hosts, or connection strings. This is the primary mechanism for service-to-service and service-to-infra communication.
+devrig automatically injects environment variables into every service so they can discover each other and all infrastructure — without hardcoding ports, hosts, or connection strings. This is the primary mechanism for service-to-service and service-to-docker communication.
 
 #### Auto-generated variables
 
-Every service and infra component gets a set of `DEVRIG_` prefixed env vars injected into **all** services:
+Every service and docker component gets a set of `DEVRIG_` prefixed env vars injected into **all** services:
 
 ```bash
-# ─── Infrastructure ────────────────────────────────────────────
-# For each [infra.<name>]:
+# ─── Docker Containers ─────────────────────────────────────────
+# For each [docker.<name>]:
 DEVRIG_POSTGRES_HOST=localhost
 DEVRIG_POSTGRES_PORT=5432
 DEVRIG_POSTGRES_URL=postgres://devrig:devrig@localhost:5432  # Connection URL (when credentials are in env)
@@ -459,7 +459,7 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=api                # Set to the service's own name
 ```
 
-**Every service can discover every other service and infra component just by reading env vars.** No config, no DNS, no consul. A service that needs to talk to postgres reads `DEVRIG_POSTGRES_URL`. A service that needs to call the API reads `DEVRIG_API_URL`. This works regardless of whether ports are fixed or auto-assigned.
+**Every service can discover every other service and docker component just by reading env vars.** No config, no DNS, no consul. A service that needs to talk to postgres reads `DEVRIG_POSTGRES_URL`. A service that needs to call the API reads `DEVRIG_API_URL`. This works regardless of whether ports are fixed or auto-assigned.
 
 #### URL generation rules
 
@@ -468,12 +468,12 @@ devrig generates `_URL` vars using these rules:
 | Component | URL pattern | Example |
 |---|---|---|
 | Services with `port` | `http://localhost:{port}` | `DEVRIG_API_URL=http://localhost:3000` |
-| Postgres infra | `postgres://{user}:{pass}@localhost:{port}` | `DEVRIG_POSTGRES_URL=postgres://devrig:devrig@localhost:5432` |
-| Redis infra | `redis://localhost:{port}` | `DEVRIG_REDIS_URL=redis://localhost:63221` |
-| Generic infra | `{host}:{port}` | `DEVRIG_MAILPIT_URL=localhost:1025` |
-| Multi-port infra | No single URL; use `_PORT_<name>` vars | `DEVRIG_MAILPIT_PORT_SMTP=1025` |
+| Postgres docker | `postgres://{user}:{pass}@localhost:{port}` | `DEVRIG_POSTGRES_URL=postgres://devrig:devrig@localhost:5432` |
+| Redis docker | `redis://localhost:{port}` | `DEVRIG_REDIS_URL=redis://localhost:63221` |
+| Generic docker | `{host}:{port}` | `DEVRIG_MAILPIT_URL=localhost:1025` |
+| Multi-port docker | No single URL; use `_PORT_<name>` vars | `DEVRIG_MAILPIT_PORT_SMTP=1025` |
 
-For infra with credentials in `env` (like Postgres), devrig parses `POSTGRES_USER` and `POSTGRES_PASSWORD` to construct the URL. If credentials aren't present, the URL omits them.
+For docker containers with credentials in `env` (like Postgres), devrig parses `POSTGRES_USER` and `POSTGRES_PASSWORD` to construct the URL. If credentials aren't present, the URL omits them.
 
 #### Template expressions for config-time wiring
 
@@ -482,7 +482,7 @@ In addition to runtime env vars, template expressions let you wire things togeth
 ```toml
 [services.api]
 port = 3000
-env = { DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp" }
+env = { DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp" }
 
 [services.web]
 env = { VITE_API_URL = "http://localhost:{{ services.api.port }}" }
@@ -490,9 +490,9 @@ env = { VITE_API_URL = "http://localhost:{{ services.api.port }}" }
 [services.worker]
 port = "auto"
 env = {
-  DATABASE_URL = "postgres://devrig:devrig@localhost:{{ infra.postgres.port }}/myapp",
+  DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp",
   API_ENDPOINT = "http://localhost:{{ services.api.port }}",
-  REDIS_URL = "redis://localhost:{{ infra.redis.port }}"
+  REDIS_URL = "redis://localhost:{{ docker.redis.port }}"
 }
 ```
 
@@ -522,7 +522,7 @@ Any `port` field can be set to `"auto"` instead of a fixed number. devrig finds 
     web       http://localhost:5173    ● running
     worker    http://localhost:48832 (auto)  ● running
 
-  Infrastructure
+  Docker
     postgres  localhost:5432           ● ready
     redis     localhost:63221 (auto)   ● ready
     mailpit   localhost:1025 / http://localhost:8025  ● ready
@@ -564,7 +564,7 @@ devrig/
     config/                  # TOML parsing, validation, template interpolation
     orchestrator/            # Dependency graph, phased startup/shutdown
     services/                # Local process management (spawn, watch, restart)
-    infra/                   # Docker container lifecycle (bollard)
+    docker/                  # Docker container lifecycle (bollard)
     cluster/                 # k3d cluster management, kubeconfig isolation
     compose/                 # docker-compose.yml interop
     otel/                    # OTLP receiver, ring buffers, query engine
@@ -608,7 +608,7 @@ devrig/
       getting-started.md     # Quickstart for new users
       configuration.md       # Full config reference with examples
       cluster-setup.md       # k3d cluster guide
-      compose-migration.md   # Moving from docker-compose to native infra
+      compose-migration.md   # Moving from docker-compose to native docker blocks
       contributing.md        # How to contribute, run tests, etc.
     api/
       rest-api.md            # Dashboard REST API reference
@@ -637,7 +637,7 @@ The `README.md` is the front door to devrig. It should sell the project in 10 se
    devrig start           # everything comes up
    ```
 4. **Example `devrig.toml`** — the minimal annotated config (3 services, postgres, that's it). Not the full annotated example from the PRD — a stripped-down version that shows the core value.
-5. **What devrig manages** — quick visual showing the three layers (services → infra → cluster) with a one-liner for each
+5. **What devrig manages** — quick visual showing the three layers (services → docker → cluster) with a one-liner for each
 6. **Key features** — brief list: service discovery via env vars, ready checks, hot reload, OTel dashboard, multi-instance isolation, compose interop, k3d cluster, Claude Code skill
 7. **CLI reference** — the core commands with one-line descriptions, link to full docs
 8. **Dashboard screenshot** — a single screenshot of the traces view with the waterfall
@@ -810,7 +810,7 @@ devrig query logs --service api --level error
 devrig query logs --search "connection refused"
 devrig query logs --trace-id <id>       # Logs correlated to a trace
 
-devrig query status                     # Full system status (services, infra, cluster)
+devrig query status                     # Full system status (services, docker, cluster)
 
 # Cross-telemetry lookups (jump-to from CLI)
 devrig query related <trace-id>         # All telemetry related to a trace: logs, metrics, spans
@@ -855,7 +855,7 @@ to inspect services, infrastructure, traces, metrics, and logs.
 ## Available commands
 
 ### Status
-- `devrig ps` — Show all services and infra with health status
+- `devrig ps` — Show all services and docker containers with health status
 - `devrig query status` — Full system status as JSON
 
 ### Traces
@@ -885,7 +885,7 @@ to inspect services, infrastructure, traces, metrics, and logs.
 
 ### Actions
 - `devrig restart <service>` — Restart a service
-- `devrig exec <infra>` — Shell into an infra container
+- `devrig exec <docker>` — Shell into a docker container
 - `devrig k get pods` — List pods in the k3d cluster
 - `devrig k logs deploy/<name>` — Tail logs from a cluster deployment
 
@@ -934,7 +934,7 @@ With the skill installed, a developer can say things like:
 - *"Why is the API slow?"* — Claude queries slow traces, identifies the bottleneck span, correlates with logs, and suggests a fix.
 - *"What's erroring in the worker service?"* — Claude queries error traces and logs, cross-references with metrics, and pinpoints the issue.
 - *"Show me what happened at 10:30am"* — Claude uses time-window queries across all three telemetry types to reconstruct what occurred.
-- *"Is postgres healthy?"* — Claude checks infra status, connection metrics, and recent error logs.
+- *"Is postgres healthy?"* — Claude checks docker status, connection metrics, and recent error logs.
 
 The structured JSON output means Claude can ingest, filter, and reason about telemetry data without parsing human-readable output.
 
@@ -1049,22 +1049,22 @@ This is opt-in via `detect = true` on the service. Explicit config always wins.
 - **Tests:** Unit tests for config parsing + dependency resolution + project identity hashing. Integration tests for start/stop/delete lifecycle, `-f` flag, process crash recovery, port verification, cleanup assertions. Multi-instance tests: two projects running simultaneously with no cross-talk, port collision detection, `ps --all` discovery, label-scoped cleanup, directory tree config discovery.
 - **Docs:** `README.md` (quickstart, demo placeholder, minimal example). Initial ADRs (001–008 for all existing decisions, including multi-instance isolation). `docs/architecture/overview.md`, `docs/architecture/config-model.md`, `docs/architecture/dependency-graph.md`, `docs/architecture/multi-instance.md`. `docs/guides/getting-started.md`, `docs/guides/configuration.md`, `docs/guides/contributing.md`.
 
-### v0.2 — Infrastructure containers
-- `[infra.*]` blocks with Docker container lifecycle
+### v0.2 — Docker containers
+- `[docker.*]` blocks with Docker container lifecycle
 - Image pulling, volume management
 - Ready check system (all built-in strategies)
 - Init script execution and tracking
-- Service discovery: `DEVRIG_<NAME>_HOST`, `_PORT`, `_URL` for all services and infra
+- Service discovery: `DEVRIG_<NAME>_HOST`, `_PORT`, `_URL` for all services and docker containers
 - URL generation (postgres://, redis://, http://) from config + credentials
 - `devrig env <service>` command for inspecting resolved vars
 - Auto port selection (`port = "auto"`) with state persistence
-- Template expression resolution (`{{ infra.postgres.port }}`, `{{ services.api.port }}`)
+- Template expression resolution (`{{ docker.postgres.port }}`, `{{ services.api.port }}`)
 - `devrig exec` and `devrig reset`
 - Docker network creation and management
-- `[compose]` interop — delegate infra to existing `docker-compose.yml`
-- Compose + native infra coexistence on shared network
+- `[compose]` interop — delegate docker containers to existing `docker-compose.yml`
+- Compose + native docker coexistence on shared network
 - **Tests:** Integration tests for Postgres/Redis lifecycle (start, ready check, connect, init SQL, stop, delete). Service discovery tests: verify `DEVRIG_*` vars injected into processes, URL generation correctness, `devrig env` output, auto port persistence across stop/start. Compose interop tests. Volume cleanup assertions. Network isolation verification. Leaked resource checks.
-- **Docs:** `docs/architecture/service-discovery.md`. `docs/guides/compose-migration.md`. Update config reference with `[infra.*]`, `[compose]`, service discovery vars, and template expressions.
+- **Docs:** `docs/architecture/service-discovery.md`. `docs/guides/compose-migration.md`. Update config reference with `[docker.*]`, `[compose]`, service discovery vars, and template expressions.
 
 ### v0.3 — k3d cluster support
 - `[cluster]` configuration
@@ -1073,7 +1073,7 @@ This is opt-in via `detect = true` on the service. Explicit config always wins.
 - `[cluster.deploy.*]` with build + manifest apply
 - File watching for cluster-deployed services
 - Network bridging between Docker network and cluster
-- **Tests:** Integration tests for full cluster lifecycle (create, deploy, verify pod running, `devrig k get pods` works, delete cluster, verify no k3d resources remain, verify `.devrig/kubeconfig` removed, verify `~/.kube/config` untouched). Registry push/pull validation. Network bridge connectivity between infra containers and cluster pods.
+- **Tests:** Integration tests for full cluster lifecycle (create, deploy, verify pod running, `devrig k get pods` works, delete cluster, verify no k3d resources remain, verify `.devrig/kubeconfig` removed, verify `~/.kube/config` untouched). Registry push/pull validation. Network bridge connectivity between docker containers and cluster pods.
 - **Docs:** `docs/guides/cluster-setup.md`, `docs/architecture/kubeconfig-isolation.md`. Update config reference with `[cluster]` and `[cluster.deploy.*]`.
 
 ### v0.4 — Developer experience polish
@@ -1124,10 +1124,10 @@ tests/
     start_stop.rs          # Start services, verify running, stop, verify stopped
     delete_cleanup.rs      # Delete removes containers, volumes, networks, state
     infra_lifecycle.rs     # Postgres/Redis containers start, pass ready checks, accept connections
-    compose_interop.rs     # docker-compose.yml services start alongside native infra
+    compose_interop.rs     # docker-compose.yml services start alongside native docker
     depends_on.rs          # Services start in correct order, wait for ready checks
     env_injection.rs       # DEVRIG_* vars and explicit env are present in service processes
-    service_discovery.rs   # DEVRIG_<NAME>_URL, _HOST, _PORT injected for all services/infra
+    service_discovery.rs   # DEVRIG_<NAME>_URL, _HOST, _PORT injected for all services/docker
     env_command.rs         # devrig env <service> returns correct resolved vars
     url_generation.rs      # Postgres/Redis/HTTP URL generation from config + credentials
     init_scripts.rs        # SQL init runs once, tracked in state, skipped on re-start
@@ -1191,7 +1191,7 @@ For the dashboard (v0.5+), use the Claude Code agent-browser skill to validate t
 ```
 e2e/
   dashboard/
-    overview.test.ts       # Services and infra appear with correct status indicators
+    overview.test.ts       # Services and docker containers appear with correct status indicators
     traces.test.ts         # Send test spans → verify waterfall renders, filters work
     metrics.test.ts        # Send test metrics → verify charts render, auto-discover works
     logs.test.ts           # Send test logs → verify log lines appear, severity filter works
@@ -1209,7 +1209,7 @@ e2e/
 
 **How these run:**
 
-1. A test fixture starts `devrig start` with a known config (services + infra + dashboard)
+1. A test fixture starts `devrig start` with a known config (services + docker + dashboard)
 2. A test harness sends synthetic OTLP data (traces, metrics, logs) to the collector
 3. The agent-browser skill opens `http://localhost:4000` and validates the UI
 4. Assertions check that elements are present, filters produce correct results, navigation works
@@ -1255,9 +1255,9 @@ This replaces flaky unit-testing of SolidJS components with real browser validat
 
 3. **Profiles/environments:** No profiles system. Instead, use separate TOML files and the `-f` flag: `devrig start -f devrig.minimal.toml`. All-or-nothing per file. Simple, composable, no new concepts.
 
-4. **Plugin system:** No plugin system for now. Keep `[infra.*]` as raw image + config. The built-in `ready_check` strategies and `init` blocks cover the common cases (Postgres, Redis, etc.) without needing abstraction. If patterns emerge, revisit later.
+4. **Plugin system:** No plugin system for now. Keep `[docker.*]` as raw image + config. The built-in `ready_check` strategies and `init` blocks cover the common cases (Postgres, Redis, etc.) without needing abstraction. If patterns emerge, revisit later.
 
-5. **Compose interop:** Yes. devrig can import a `docker-compose.yml` for the infra layer via `[compose]`. See the Compose Interop section below.
+5. **Compose interop:** Yes. devrig can import a `docker-compose.yml` for the docker layer via `[compose]`. See the Compose Interop section below.
 
 6. **Multi-repo:** Relative paths only. No absolute paths. If devrig runs on different machines (which it will), absolute paths break. For multi-repo, the `devrig.toml` lives in a parent directory or a dedicated orchestration repo, and all paths point to sibling repos with `../`.
 
@@ -1265,7 +1265,7 @@ This replaces flaky unit-testing of SolidJS components with real browser validat
 
 ## Compose Interop
 
-devrig can delegate infrastructure management to an existing `docker-compose.yml` instead of (or alongside) native `[infra.*]` blocks. This is useful for teams that already have a working Compose setup and don't want to rewrite it.
+devrig can delegate infrastructure management to an existing `docker-compose.yml` instead of (or alongside) native `[docker.*]` blocks. This is useful for teams that already have a working Compose setup and don't want to rewrite it.
 
 ### Configuration
 
@@ -1280,7 +1280,7 @@ env_file = ".env"                      # Compose env file (optional)
 
 When `[compose]` is present, devrig runs `docker compose up -d` for the specified services during Phase 1 (infrastructure). It uses the Docker Compose API (via `bollard` or shelling out to `docker compose`) to manage lifecycle.
 
-devrig still handles ready checks, dependency ordering, and environment variable injection for compose-managed services. You can reference compose services in `depends_on` just like native `[infra.*]` blocks:
+devrig still handles ready checks, dependency ordering, and environment variable injection for compose-managed services. You can reference compose services in `depends_on` just like native `[docker.*]` blocks:
 
 ```toml
 [compose]
@@ -1295,9 +1295,9 @@ redis = { type = "cmd", command = "redis-cli ping" }
 depends_on = ["postgres"]             # Works — postgres is from compose
 ```
 
-### Coexistence with native infra
+### Coexistence with native docker
 
-`[compose]` and `[infra.*]` can coexist. Use compose for what you already have, native infra for anything new. devrig puts everything on the same Docker network regardless of source.
+`[compose]` and `[docker.*]` can coexist. Use compose for what you already have, native docker for anything new. devrig puts everything on the same Docker network regardless of source.
 
 ```toml
 # Existing compose services
@@ -1305,12 +1305,12 @@ depends_on = ["postgres"]             # Works — postgres is from compose
 file = "./docker-compose.yml"
 services = ["postgres"]
 
-# New infra managed natively
-[infra.redis]
+# New docker containers managed natively
+[docker.redis]
 image = "redis:7-alpine"
 port = 6379
 ```
 
 ### Migration path
 
-Teams can start with `[compose]` to get devrig's orchestration benefits immediately, then gradually migrate services to native `[infra.*]` blocks for tighter integration (auto-generated env vars, init scripts, etc.).
+Teams can start with `[compose]` to get devrig's orchestration benefits immediately, then gradually migrate services to native `[docker.*]` blocks for tighter integration (auto-generated env vars, init scripts, etc.).

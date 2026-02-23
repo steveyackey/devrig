@@ -65,7 +65,7 @@ pub fn print_startup_summary(
         let url = svc
             .port
             .map(|p| {
-                let base = if name.starts_with("[infra]") || name.starts_with("[cluster]") {
+                let base = if name.starts_with("[docker]") || name.starts_with("[cluster]") {
                     format!("localhost:{}", p)
                 } else {
                     format!("http://localhost:{}", p)
