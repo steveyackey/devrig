@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.0](https://github.com/steveyackey/devrig/compare/v0.2.1...v0.3.0) (2026-02-23)
+
+
+### Features
+
+* add secrets management and compose auto-discovery ([4d11521](https://github.com/steveyackey/devrig/commit/4d11521400fe70c7fdb1b05c22a23230621745b3))
+
+
+### Bug Fixes
+
+* use PATH instead of HOME in env fallback test for Windows compat ([f0afc43](https://github.com/steveyackey/devrig/commit/f0afc43ef8a91056a9432b83990e8280a0587d6e))
+
 ## [0.2.1](https://github.com/steveyackey/devrig/compare/v0.2.0...v0.2.1) (2026-02-23)
 
 
