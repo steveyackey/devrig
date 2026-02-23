@@ -1,6 +1,9 @@
 # DEV RIG
 
-Local development orchestrator.
+Local development orchestrator with built-in OpenTelemetry. Define your
+services in a single TOML file — devrig starts them in dependency order,
+multiplexes logs, manages ports, collects traces/metrics/logs, and tears
+everything down cleanly on Ctrl+C.
 
 ## Dashboard
 
@@ -22,12 +25,6 @@ Browse and search application logs with severity filtering:
 Explore metrics with sparkline cards and expandable time-series charts:
 
 ![Metrics View](docs/images/dashboard-metrics-2fa3ace4.png)
-
-## What is devrig?
-
-devrig manages your local development environment. Define your services in a
-single TOML file, and devrig starts them in dependency order, multiplexes their
-logs, assigns ports, and tears everything down cleanly on Ctrl+C.
 
 ## Install
 
@@ -69,6 +66,8 @@ devrig init && devrig start
 [project]
 name = "myapp"
 
+[dashboard]
+
 [services.api]
 command = "cargo watch -x run"
 port = 3000
@@ -80,17 +79,26 @@ depends_on = ["api"]
 ```
 
 Save as `devrig.toml` in your project root, then run `devrig start`.
+The dashboard opens at `http://localhost:4000`.
 
 ## Commands
 
-| Command         | Description                                      |
-|-----------------|--------------------------------------------------|
-| `devrig start`  | Start all services in dependency order            |
-| `devrig stop`   | Stop all running services gracefully              |
-| `devrig delete` | Stop services and remove all `.devrig/` state     |
-| `devrig ps`     | Show status of services in the current project    |
-| `devrig init`   | Generate a starter `devrig.toml` for your project |
-| `devrig doctor` | Check that external dependencies are installed    |
+| Command              | Description                                      |
+|----------------------|--------------------------------------------------|
+| `devrig start`       | Start all services in dependency order            |
+| `devrig stop`        | Stop all running services gracefully              |
+| `devrig delete`      | Stop services and remove all `.devrig/` state     |
+| `devrig ps`          | Show status of services in the current project    |
+| `devrig init`        | Generate a starter `devrig.toml` for your project |
+| `devrig doctor`      | Check that external dependencies are installed    |
+| `devrig validate`    | Validate the configuration file                   |
+| `devrig logs`        | Show and filter service logs                      |
+| `devrig env`         | Show resolved environment variables for a service |
+| `devrig exec`        | Execute a command in an infra container            |
+| `devrig query`       | Query traces, logs, and metrics from the OTel collector |
+| `devrig cluster`     | Manage the k3d cluster (create/delete/kubeconfig) |
+| `devrig kubectl`     | Proxy to kubectl with devrig's isolated kubeconfig |
+| `devrig completions` | Generate shell completions                        |
 
 ### Global flags
 
@@ -100,64 +108,27 @@ Save as `devrig.toml` in your project root, then run `devrig start`.
 
 ## How it works
 
-1. **Parse** -- devrig reads `devrig.toml` (or walks up the directory tree to
-   find one) and validates it in two phases: TOML deserialization, then semantic
-   validation (missing deps, duplicate ports, cycles).
-2. **Resolve** -- A dependency graph is built with `petgraph` and
-   topologically sorted to determine start order. Auto-ports are assigned by
-   binding ephemeral OS ports.
-3. **Supervise** -- Each service runs under a supervisor that captures
+1. **Parse** — reads `devrig.toml` (or walks up to find one), validates in two
+   phases: TOML deserialization, then semantic checks (missing deps, duplicate
+   ports, cycles).
+2. **Resolve** — builds a dependency graph with `petgraph` and topologically
+   sorts it. Infra containers, k3d cluster deployments, and services can all
+   depend on each other. Auto-ports are assigned by binding ephemeral OS ports.
+3. **Infra** — pulls and starts Docker containers for databases, caches, and
+   other infrastructure. Supports health checks, init commands, and volume
+   mounts.
+4. **Cluster** — optionally creates a k3d cluster, deploys manifests, and
+   installs Helm chart addons with port forwarding.
+5. **Supervise** — each service runs under a supervisor that captures
    stdout/stderr, restarts on failure with exponential backoff, and responds to
-   cancellation via `CancellationToken`.
-4. **Multiplex** -- All service logs stream through a shared channel to a
-   `LogWriter` that color-codes output by service name.
-5. **Shutdown** -- Ctrl+C triggers graceful shutdown: SIGTERM to process
-   groups, 5-second grace period, then SIGKILL. State files are cleaned up.
-
-## Project layout
-
-```
-src/
-  main.rs              CLI entrypoint and command dispatch
-  lib.rs               Public module declarations
-  cli.rs               Clap argument definitions
-  identity.rs          Project identity (name + SHA-256 slug)
-  config/
-    mod.rs             Config loading (TOML parse)
-    model.rs           Data model (DevrigConfig, ServiceConfig, Port)
-    resolve.rs         Config file discovery (walk-up search)
-    validate.rs        Semantic validation (deps, ports, cycles)
-  orchestrator/
-    mod.rs             Orchestrator: coordinates start/stop/delete
-    graph.rs           petgraph-based dependency resolution
-    ports.rs           Port availability checks and auto-assignment
-    registry.rs        Global instance registry (~/.devrig/instances.json)
-    state.rs           Per-project state persistence (.devrig/state.json)
-    supervisor.rs      Process supervision with restart and backoff
-  commands/
-    init.rs            Generate starter devrig.toml
-    doctor.rs          Check external tool availability
-    ps.rs              Display service and instance status
-  ui/
-    logs.rs            Multiplexed log writer with color
-    summary.rs         Startup summary table
-```
-
-## Configuration reference
-
-See [docs/guides/configuration.md](docs/guides/configuration.md) for the full
-`devrig.toml` reference.
-
-## Architecture
-
-See [docs/architecture/overview.md](docs/architecture/overview.md) for a
-system-level overview, and the [docs/adr/](docs/adr/) directory for
-architectural decision records.
-
-## Contributing
-
-See [docs/guides/contributing.md](docs/guides/contributing.md) for development
-setup and PR guidelines.
+   cancellation.
+6. **Observe** — a built-in OTel collector receives traces, metrics, and logs
+   over OTLP (HTTP :4318 / gRPC :4317) and serves them to the dashboard and
+   CLI query commands.
+7. **Dashboard** — an embedded SolidJS app on :4000 provides real-time views
+   of service status, traces, logs, and metrics.
+8. **Shutdown** — Ctrl+C triggers graceful shutdown: SIGTERM to process groups,
+   grace period, then SIGKILL. Containers and state are cleaned up.
 
 ## Tech stack
 
@@ -165,13 +136,21 @@ setup and PR guidelines.
 - **clap** for CLI parsing
 - **petgraph** for dependency resolution
 - **serde** + **toml** for configuration
-- **sha2** for project identity hashing
-- **nix** for Unix signal handling
+- **bollard** for Docker container management
+- **tonic** + **opentelemetry-proto** for OTLP ingest
+- **axum** for the dashboard API and WebSocket server
+- **rust-embed** for compiled-in frontend assets
 - **miette** / **thiserror** / **anyhow** for error reporting
 - **SolidJS** + **Vite** + **Tailwind v4** for the dashboard
 - **Kobalte** for accessible UI primitives
-- **Lucide** for icons
+
+## Documentation
+
+- [Configuration reference](docs/guides/configuration.md)
+- [Architecture overview](docs/architecture/overview.md)
+- [Architectural decision records](docs/adr/)
+- [Contributing](docs/guides/contributing.md)
 
 ## License
 
-See LICENSE file for details.
+MIT — see [LICENSE](LICENSE) for details.
