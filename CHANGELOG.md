@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/steveyackey/devrig/compare/v0.5.0...v0.6.0) (2026-02-23)
+
+
+### Features
+
+* stream Docker container logs to dashboard ([5026f50](https://github.com/steveyackey/devrig/commit/5026f504b86b3212df92ce9b3c9474c322fd818b))
+
 ## [0.5.0](https://github.com/steveyackey/devrig/compare/v0.4.1...v0.5.0) (2026-02-23)
 
 
