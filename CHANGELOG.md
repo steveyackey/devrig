@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/steveyackey/devrig/compare/v0.3.0...v0.3.1) (2026-02-23)
+
+
+### Bug Fixes
+
+* auto-resolve dashboard/OTel ports when already in use ([9148e68](https://github.com/steveyackey/devrig/commit/9148e680e007e8fea9313e78ff7159cc496e4c13))
+
 ## [0.3.0](https://github.com/steveyackey/devrig/compare/v0.2.1...v0.3.0) (2026-02-23)
 
 
