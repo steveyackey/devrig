@@ -27,6 +27,8 @@ pub struct LogQuery {
     pub trace_id: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub limit: Option<usize>,
+    /// Filter by log source: "process" (stdout+stderr), "stdout", "stderr", "otlp", or omit for all.
+    pub source: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -249,6 +251,15 @@ impl TelemetryStore {
                 if let Some(since) = query.since {
                     if log.timestamp < since {
                         return false;
+                    }
+                }
+                if let Some(ref src) = query.source {
+                    let log_source = log.attributes.iter()
+                        .find(|(k, _)| k == "log.source")
+                        .map(|(_, v)| v.as_str());
+                    match src.as_str() {
+                        "process" => if !matches!(log_source, Some("stdout" | "stderr")) { return false; },
+                        other => if log_source != Some(other) { return false; },
                     }
                 }
                 true

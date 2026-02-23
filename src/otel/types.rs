@@ -65,6 +65,22 @@ impl LogSeverity {
             _ => LogSeverity::Info,
         }
     }
+
+    /// Convert from supervisor `LogLevel` to `LogSeverity`.
+    ///
+    /// When no level is detected, stderr defaults to Warn and stdout to Info.
+    pub fn from_log_level(level: Option<crate::ui::logs::LogLevel>, is_stderr: bool) -> Self {
+        use crate::ui::logs::LogLevel;
+        match level {
+            Some(LogLevel::Trace) => LogSeverity::Trace,
+            Some(LogLevel::Debug) => LogSeverity::Debug,
+            Some(LogLevel::Info) => LogSeverity::Info,
+            Some(LogLevel::Warn) => LogSeverity::Warn,
+            Some(LogLevel::Error) => LogSeverity::Error,
+            None if is_stderr => LogSeverity::Warn,
+            None => LogSeverity::Info,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -260,6 +276,25 @@ pub fn proto_span_to_stored(
         status_message,
         attributes: convert_attributes(&span.attributes, 20),
         kind,
+    }
+}
+
+/// Convert a supervisor `LogLine` into a `StoredLog` for the telemetry store.
+///
+/// Tags the log with `log.source = "stdout"` or `"stderr"` so dashboard
+/// filters can distinguish process output from SDK-emitted OTLP logs.
+pub fn logline_to_stored(line: &crate::ui::logs::LogLine) -> StoredLog {
+    let severity = LogSeverity::from_log_level(line.level, line.is_stderr);
+    let source = if line.is_stderr { "stderr" } else { "stdout" };
+    StoredLog {
+        record_id: 0,
+        timestamp: line.timestamp,
+        service_name: line.service.clone(),
+        severity,
+        body: line.text.clone(),
+        trace_id: None,
+        span_id: None,
+        attributes: vec![("log.source".to_string(), source.to_string())],
     }
 }
 

@@ -219,6 +219,30 @@ pub enum ConfigDiagnostic {
         span: SourceSpan,
         name: String,
     },
+
+    #[error("exclude_namespaces requires namespaces = \"all\"")]
+    #[diagnostic(
+        code(devrig::logs_exclude_requires_all),
+        help("set namespaces = \"all\" or remove exclude_namespaces")
+    )]
+    LogsExcludeRequiresAll {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("exclude_namespaces set but namespaces is a list")]
+        span: SourceSpan,
+    },
+
+    #[error("[cluster.logs] is enabled but [dashboard] is not configured")]
+    #[diagnostic(
+        code(devrig::logs_without_dashboard),
+        help("add a [dashboard] section so the OTLP receiver is running to accept logs")
+    )]
+    LogsWithoutDashboard {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("logs enabled here")]
+        span: SourceSpan,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -735,6 +759,33 @@ pub fn validate(
         }
     }
 
+    // Validate cluster.logs config
+    if let Some(cluster) = &config.cluster {
+        if let Some(logs) = &cluster.logs {
+            if logs.enabled {
+                // exclude_namespaces requires namespaces = "all"
+                if logs.exclude_namespaces.is_some() {
+                    if let crate::config::model::NamespaceFilter::List(_) = &logs.namespaces {
+                        let span = find_cluster_logs_span(source, "exclude_namespaces");
+                        errors.push(ConfigDiagnostic::LogsExcludeRequiresAll {
+                            src: src.clone(),
+                            span,
+                        });
+                    }
+                }
+
+                // Warn if dashboard is missing (OTLP receiver won't be running)
+                if config.dashboard.is_none() {
+                    let span = find_cluster_logs_span(source, "logs");
+                    errors.push(ConfigDiagnostic::LogsWithoutDashboard {
+                        src: src.clone(),
+                        span,
+                    });
+                }
+            }
+        }
+    }
+
     // Validate restart config policy values
     for (name, svc) in &config.services {
         if let Some(restart) = &svc.restart {
@@ -864,6 +915,25 @@ fn find_dashboard_span(source: &str, field: &str) -> SourceSpan {
     // Try [dashboard] as prefix (e.g. [dashboard.otel])
     if let Some(pos) = source.find("[dashboard") {
         return (pos, 10).into();
+    }
+    (0, 0).into()
+}
+
+/// Find the byte offset of a field in the [cluster.logs] section.
+fn find_cluster_logs_span(source: &str, field: &str) -> SourceSpan {
+    if let Some(pos) = source.find("[cluster.logs]") {
+        let after = &source[pos..];
+        if let Some(rel) = after.find(field) {
+            return (pos + rel, field.len()).into();
+        }
+        return (pos, 14).into();
+    }
+    // Try as inline table
+    if let Some(pos) = source.find("[cluster]") {
+        let after = &source[pos..];
+        if let Some(rel) = after.find("logs") {
+            return (pos + rel, 4).into();
+        }
     }
     (0, 0).into()
 }
@@ -1329,6 +1399,7 @@ mod tests {
             registry: true,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
+            logs: None,
         });
         let source = "[project]\nname = \"test\"\n\n[services.web]\ncommand = \"npm run dev\"\nport = 3000\ndepends_on = [\"api\"]\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1351,6 +1422,7 @@ mod tests {
                 make_deploy("./api", "./k8s", vec!["postgres"]),
             )]),
             addons: BTreeMap::new(),
+            logs: None,
         });
         let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"postgres\"]\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1366,6 +1438,7 @@ mod tests {
             registry: false,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
+            logs: None,
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1385,6 +1458,7 @@ mod tests {
             registry: false,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "", vec![]))]),
             addons: BTreeMap::new(),
+            logs: None,
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1411,6 +1485,7 @@ mod tests {
                 make_deploy("./pg", "./k8s", vec![]),
             )]),
             addons: BTreeMap::new(),
+            logs: None,
         });
         let source = "[project]\nname = \"test\"\n\n[infra.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.deploy.postgres]\ncontext = \"./pg\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1433,6 +1508,7 @@ mod tests {
                 make_deploy("./api", "./k8s", vec!["nonexistent"]),
             )]),
             addons: BTreeMap::new(),
+            logs: None,
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"nonexistent\"]\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1698,6 +1774,89 @@ namespace = "traefik"
 port_forward = { 9000 = "svc/traefik:9000" }
 "#;
         let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    // --- cluster.logs validation tests ---
+
+    #[test]
+    fn validate_logs_exclude_requires_all() {
+        let source = r#"
+[project]
+name = "test"
+
+[dashboard]
+
+[cluster.logs]
+namespaces = ["default"]
+exclude_namespaces = ["kube-system"]
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::LogsExcludeRequiresAll { .. }
+        )));
+    }
+
+    #[test]
+    fn validate_logs_exclude_with_all_is_valid() {
+        let source = r#"
+[project]
+name = "test"
+
+[dashboard]
+
+[cluster.logs]
+namespaces = "all"
+exclude_namespaces = ["kube-system"]
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn validate_logs_without_dashboard_warns() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster.logs]
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::LogsWithoutDashboard { .. }
+        )));
+    }
+
+    #[test]
+    fn validate_logs_with_dashboard_is_valid() {
+        let source = r#"
+[project]
+name = "test"
+
+[dashboard]
+
+[cluster.logs]
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn validate_logs_disabled_skips_checks() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster.logs]
+enabled = false
+exclude_namespaces = ["kube-system"]
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        // Disabled logs should not trigger validation errors
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
     }
 }

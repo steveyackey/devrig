@@ -1,5 +1,6 @@
 pub mod addon;
 pub mod deploy;
+pub mod log_collector;
 pub mod registry;
 pub mod watcher;
 

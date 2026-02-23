@@ -15,6 +15,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
   const [filterService, setFilterService] = createSignal('');
   const [filterSeverity, setFilterSeverity] = createSignal('');
   const [filterSearch, setFilterSearch] = createSignal('');
+  const [filterSource, setFilterSource] = createSignal('');
 
   const loadLogs = async () => {
     try {
@@ -23,6 +24,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
         service: filterService() || undefined,
         severity: filterSeverity() || undefined,
         search: filterSearch() || undefined,
+        source: filterSource() || undefined,
         limit: 200,
       });
       setLogs(data);
@@ -88,6 +90,20 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
   const severities = ['Trace', 'Debug', 'Info', 'Warn', 'Error', 'Fatal'];
 
+  const getLogSource = (log: StoredLog): string => {
+    const attr = log.attributes.find(([k]) => k === 'log.source');
+    return attr ? attr[1] : '';
+  };
+
+  const sourceLabel = (source: string): string => {
+    switch (source) {
+      case 'stdout': return 'stdout';
+      case 'stderr': return 'stderr';
+      case 'otlp': return 'sdk';
+      default: return source || '-';
+    }
+  };
+
   return (
     <div data-testid="logs-view" class="flex flex-col h-full">
       <div class="px-8 py-6 border-b-2 border-border">
@@ -130,6 +146,19 @@ const LogsView: Component<LogsViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Source</label>
+          <Select
+            value={filterSource()}
+            onChange={(e) => setFilterSource(e.currentTarget.value)}
+            class="min-w-[120px]"
+          >
+            <option value="">All</option>
+            <option value="process">Process</option>
+            <option value="otlp">SDK</option>
+          </Select>
+        </div>
+
+        <div class="flex items-center gap-2">
           <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Search</label>
           <Input
             type="text"
@@ -148,6 +177,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
             setFilterService('');
             setFilterSeverity('');
             setFilterSearch('');
+            setFilterSource('');
             setLoading(true);
             loadLogs();
           }}
@@ -182,6 +212,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
               <TableRow>
                 <TableHead class="text-left w-32">Time</TableHead>
                 <TableHead class="text-left w-20">Severity</TableHead>
+                <TableHead class="text-left w-16">Source</TableHead>
                 <TableHead class="text-left w-32">Service</TableHead>
                 <TableHead class="text-left">Body</TableHead>
                 <TableHead class="text-left w-32">Trace</TableHead>
@@ -189,7 +220,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
             </TableHeader>
             <tbody>
               <Show when={!loading() && !error() && logs().length === 0}>
-                <tr><td colspan="5" class="px-5 py-12 text-center text-text-secondary text-sm">No logs found. Adjust filters or wait for new data.</td></tr>
+                <tr><td colspan="6" class="px-5 py-12 text-center text-text-secondary text-sm">No logs found. Adjust filters or wait for new data.</td></tr>
               </Show>
               <For each={logs()}>
                 {(log) => (
@@ -203,6 +234,11 @@ const LogsView: Component<LogsViewProps> = (props) => {
                       <Badge data-testid="log-severity-badge" variant={severityVariant(log.severity)}>
                         {log.severity}
                       </Badge>
+                    </TableCell>
+                    <TableCell class="align-top">
+                      <span data-testid="log-source" class="text-[10px] font-mono text-text-muted uppercase">
+                        {sourceLabel(getLogSource(log))}
+                      </span>
                     </TableCell>
                     <TableCell class="text-xs text-text-secondary align-top truncate max-w-[130px]">
                       {log.service_name}

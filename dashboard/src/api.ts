@@ -134,6 +134,8 @@ export interface LogsParams {
   search?: string;
   trace_id?: string;
   limit?: number;
+  /** Filter by log source: "process" (stdout+stderr), "stdout", "stderr", "otlp" */
+  source?: string;
 }
 
 export function fetchLogs(params: LogsParams = {}): Promise<StoredLog[]> {
@@ -142,6 +144,7 @@ export function fetchLogs(params: LogsParams = {}): Promise<StoredLog[]> {
   if (params.severity) query.set('severity', params.severity);
   if (params.search) query.set('search', params.search);
   if (params.trace_id) query.set('trace_id', params.trace_id);
+  if (params.source) query.set('source', params.source);
   if (params.limit !== undefined) query.set('limit', String(params.limit));
   const qs = query.toString();
   return fetchJson<StoredLog[]>(`${BASE_URL}/api/logs${qs ? '?' + qs : ''}`);

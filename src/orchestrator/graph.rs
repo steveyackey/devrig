@@ -436,6 +436,7 @@ mod tests {
             registry: false,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
+            logs: None,
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -455,6 +456,7 @@ mod tests {
             registry: false,
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
+            logs: None,
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -483,6 +485,7 @@ mod tests {
                 make_deploy("./api", "./k8s", vec!["postgres"]),
             )]),
             addons: BTreeMap::new(),
+            logs: None,
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -512,6 +515,7 @@ mod tests {
                 make_deploy("./api", "./k8s", vec!["postgres"]),
             )]),
             addons: BTreeMap::new(),
+            logs: None,
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -546,6 +550,7 @@ mod tests {
                 ("b".to_string(), make_deploy("./b", "./k8s/b", vec!["a"])),
             ]),
             addons: BTreeMap::new(),
+            logs: None,
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -566,6 +571,7 @@ mod tests {
                 make_deploy("./api", "./k8s", vec!["nonexistent"]),
             )]),
             addons: BTreeMap::new(),
+            logs: None,
         });
 
         let err = DependencyResolver::from_config(&config).unwrap_err();

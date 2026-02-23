@@ -143,7 +143,8 @@ impl LogsService for OtlpGrpcReceiver {
 
                 for scope_logs in &resource_logs.scope_logs {
                     for log_record in &scope_logs.log_records {
-                        let stored = proto_log_to_stored(log_record, &service_name);
+                        let mut stored = proto_log_to_stored(log_record, &service_name);
+                        stored.attributes.push(("log.source".to_string(), "otlp".to_string()));
                         events.push(TelemetryEvent::LogRecord {
                             trace_id: stored.trace_id.clone(),
                             severity: format!("{:?}", stored.severity),

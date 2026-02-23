@@ -158,7 +158,11 @@ async fn install_manifest_addon(
     config_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<()> {
-    let manifest_path = config_dir.join(path);
+    let manifest_path = if Path::new(path).is_absolute() {
+        std::path::PathBuf::from(path)
+    } else {
+        config_dir.join(path)
+    };
     let manifest_str = manifest_path.to_string_lossy().to_string();
 
     let mut args = vec!["apply", "-f", &manifest_str];
@@ -320,7 +324,11 @@ pub async fn uninstall_addons(
             AddonConfig::Manifest {
                 path, namespace, ..
             } => {
-                let manifest_path = config_dir.join(path);
+                let manifest_path = if Path::new(path.as_str()).is_absolute() {
+                    std::path::PathBuf::from(path)
+                } else {
+                    config_dir.join(path)
+                };
                 let manifest_str = manifest_path.to_string_lossy().to_string();
                 let mut args = vec!["delete", "-f", &manifest_str, "--ignore-not-found"];
                 let ns_str;

@@ -237,6 +237,75 @@ pub struct ClusterConfig {
     pub deploy: BTreeMap<String, ClusterDeployConfig>,
     #[serde(default)]
     pub addons: BTreeMap<String, AddonConfig>,
+    #[serde(default)]
+    pub logs: Option<ClusterLogsConfig>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClusterLogsConfig {
+    /// Enable log collection from the cluster. Default: true.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// Deploy built-in Fluent Bit collector. Set false if bringing your own.
+    #[serde(default = "default_true")]
+    pub collector: bool,
+    /// Which namespaces to collect logs from. Default: ["default"].
+    #[serde(default)]
+    pub namespaces: NamespaceFilter,
+    /// Namespaces to exclude (only valid when namespaces = "all").
+    #[serde(default)]
+    pub exclude_namespaces: Option<Vec<String>>,
+    /// Pod name patterns to exclude from log collection.
+    #[serde(default)]
+    pub exclude_pods: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub enum NamespaceFilter {
+    All,
+    List(Vec<String>),
+}
+
+impl Default for NamespaceFilter {
+    fn default() -> Self {
+        NamespaceFilter::List(vec!["default".to_string()])
+    }
+}
+
+impl<'de> Deserialize<'de> for NamespaceFilter {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct NamespaceFilterVisitor;
+
+        impl<'de> de::Visitor<'de> for NamespaceFilterVisitor {
+            type Value = NamespaceFilter;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                write!(f, "the string \"all\" or a list of namespace strings")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                if v == "all" {
+                    Ok(NamespaceFilter::All)
+                } else {
+                    Err(E::custom(format!("expected \"all\" but got \"{}\"", v)))
+                }
+            }
+
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<Self::Value, A::Error> {
+                let mut names = Vec::new();
+                while let Some(name) = seq.next_element::<String>()? {
+                    names.push(name);
+                }
+                Ok(NamespaceFilter::List(names))
+            }
+        }
+
+        deserializer.deserialize_any(NamespaceFilterVisitor)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
@@ -1403,5 +1472,136 @@ mod tests {
         };
         let b = a.clone();
         assert_eq!(a, b);
+    }
+
+    // --- ClusterLogsConfig tests ---
+
+    #[test]
+    fn parse_minimal_cluster_logs() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+
+            [cluster.logs]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let logs = config.cluster.unwrap().logs.unwrap();
+        assert!(logs.enabled);
+        assert!(logs.collector);
+        assert!(matches!(logs.namespaces, NamespaceFilter::List(ref ns) if ns == &["default"]));
+        assert!(logs.exclude_namespaces.is_none());
+        assert!(logs.exclude_pods.is_none());
+    }
+
+    #[test]
+    fn parse_cluster_logs_specific_namespaces() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.logs]
+            namespaces = ["default", "my-app"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let logs = config.cluster.unwrap().logs.unwrap();
+        match logs.namespaces {
+            NamespaceFilter::List(ns) => assert_eq!(ns, vec!["default", "my-app"]),
+            _ => panic!("expected NamespaceFilter::List"),
+        }
+    }
+
+    #[test]
+    fn parse_cluster_logs_all_namespaces() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.logs]
+            namespaces = "all"
+            exclude_namespaces = ["kube-system", "traefik"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let logs = config.cluster.unwrap().logs.unwrap();
+        assert!(matches!(logs.namespaces, NamespaceFilter::All));
+        assert_eq!(
+            logs.exclude_namespaces.unwrap(),
+            vec!["kube-system", "traefik"]
+        );
+    }
+
+    #[test]
+    fn parse_cluster_logs_byo_collector() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.logs]
+            collector = false
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let logs = config.cluster.unwrap().logs.unwrap();
+        assert!(logs.enabled);
+        assert!(!logs.collector);
+    }
+
+    #[test]
+    fn parse_cluster_logs_disabled() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.logs]
+            enabled = false
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let logs = config.cluster.unwrap().logs.unwrap();
+        assert!(!logs.enabled);
+    }
+
+    #[test]
+    fn parse_cluster_logs_with_exclude_pods() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.logs]
+            namespaces = "all"
+            exclude_pods = ["noisy-sidecar-.*", "debug-pod"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let logs = config.cluster.unwrap().logs.unwrap();
+        assert_eq!(
+            logs.exclude_pods.unwrap(),
+            vec!["noisy-sidecar-.*", "debug-pod"]
+        );
+    }
+
+    #[test]
+    fn parse_cluster_without_logs_section() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.cluster.unwrap().logs.is_none());
+    }
+
+    #[test]
+    fn namespace_filter_invalid_string_errors() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.logs]
+            namespaces = "invalid"
+        "#;
+        let err = toml::from_str::<DevrigConfig>(toml_str).unwrap_err();
+        assert!(err.to_string().contains("expected \"all\""));
     }
 }

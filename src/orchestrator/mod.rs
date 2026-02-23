@@ -6,6 +6,7 @@ pub mod supervisor;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
@@ -396,14 +397,48 @@ impl Orchestrator {
             .await
             .context("starting file watchers")?;
 
+            // Inject synthetic Fluent Bit log collector addon if configured
+            let mut combined_addons = cluster_config.addons.clone();
+            if let Some(logs_config) = &cluster_config.logs {
+                if logs_config.enabled && logs_config.collector {
+                    let otel_http_port = self.config.dashboard.as_ref()
+                        .and_then(|d| d.otel.as_ref())
+                        .map(|o| o.http_port)
+                        .unwrap_or(4318);
+                    let otlp_endpoint = format!("host.k3d.internal:{}", otel_http_port);
+                    let manifest_content = crate::cluster::log_collector::render_fluent_bit_manifest(
+                        logs_config,
+                        &otlp_endpoint,
+                    );
+                    let manifest_path = self.state_dir.join(
+                        crate::cluster::log_collector::MANIFEST_FILENAME,
+                    );
+                    std::fs::write(&manifest_path, &manifest_content)
+                        .with_context(|| format!(
+                            "writing Fluent Bit manifest to {}",
+                            manifest_path.display()
+                        ))?;
+
+                    combined_addons.insert(
+                        crate::cluster::log_collector::ADDON_KEY.to_string(),
+                        crate::config::model::AddonConfig::Manifest {
+                            path: manifest_path.to_string_lossy().to_string(),
+                            namespace: None,
+                            port_forward: BTreeMap::new(),
+                        },
+                    );
+                    info!("Fluent Bit log collector manifest generated");
+                }
+            }
+
             // Install addons (helm charts, manifests, kustomize)
-            let installed_addons = if !cluster_config.addons.is_empty() {
+            let installed_addons = if !combined_addons.is_empty() {
                 info!(
-                    count = cluster_config.addons.len(),
+                    count = combined_addons.len(),
                     "installing cluster addons"
                 );
                 crate::cluster::addon::install_addons(
-                    &cluster_config.addons,
+                    &combined_addons,
                     k3d_mgr.kubeconfig_path(),
                     &config_dir,
                     &self.cancel,
@@ -509,6 +544,9 @@ impl Orchestrator {
         // ================================================================
         let mut dashboard_state: Option<state::DashboardState> = None;
         let mut _otel_collector: Option<crate::otel::OtelCollector> = None;
+        // Clones of store/events for the log bridge (used in Phase 5)
+        let mut bridge_store: Option<Arc<tokio::sync::RwLock<crate::otel::storage::TelemetryStore>>> = None;
+        let mut bridge_events_tx: Option<broadcast::Sender<crate::otel::types::TelemetryEvent>> = None;
 
         if dashboard_enabled {
             let dash_config = self.config.dashboard.as_ref().unwrap();
@@ -528,6 +566,10 @@ impl Orchestrator {
 
             let store = collector.store();
             let events_tx = collector.events_tx();
+
+            // Clone for the log bridge (Phase 5)
+            bridge_store = Some(Arc::clone(&store));
+            bridge_events_tx = Some(events_tx.clone());
 
             let dash_cancel = self.cancel.clone();
             let dash_config_path = Some(self.config_path.clone());
@@ -655,6 +697,34 @@ impl Orchestrator {
                     }
                 }
             });
+
+            // Log bridge: forwards supervisor LogLine → TelemetryStore so
+            // process stdout/stderr appears in the dashboard Logs view.
+            if let (Some(b_store), Some(b_events)) = (bridge_store.clone(), bridge_events_tx.clone()) {
+                let mut bridge_rx = log_tx.subscribe();
+                self.tracker.spawn(async move {
+                    loop {
+                        match bridge_rx.recv().await {
+                            Ok(line) => {
+                                let stored = crate::otel::types::logline_to_stored(&line);
+                                let event = crate::otel::types::TelemetryEvent::LogRecord {
+                                    trace_id: None,
+                                    severity: format!("{:?}", stored.severity),
+                                    body: stored.body.clone(),
+                                    service: stored.service_name.clone(),
+                                };
+                                { b_store.write().await.insert_log(stored); }
+                                let _ = b_events.send(event);
+                            }
+                            Err(broadcast::error::RecvError::Closed) => break,
+                            Err(broadcast::error::RecvError::Lagged(n)) => {
+                                warn!(skipped = n, "log bridge lagged");
+                                continue;
+                            }
+                        }
+                    }
+                });
+            }
 
             for name in &service_names {
                 let svc = &self.config.services[name];
@@ -999,8 +1069,22 @@ impl Orchestrator {
                     network,
                 );
 
-                // Uninstall addons before deleting the cluster
-                if !cluster_config.addons.is_empty() {
+                // Uninstall addons (including synthetic log collector) before deleting the cluster
+                let mut uninstall_addons = cluster_config.addons.clone();
+                let log_collector_manifest = self.state_dir.join(
+                    crate::cluster::log_collector::MANIFEST_FILENAME,
+                );
+                if log_collector_manifest.exists() {
+                    uninstall_addons.insert(
+                        crate::cluster::log_collector::ADDON_KEY.to_string(),
+                        crate::config::model::AddonConfig::Manifest {
+                            path: log_collector_manifest.to_string_lossy().to_string(),
+                            namespace: None,
+                            port_forward: BTreeMap::new(),
+                        },
+                    );
+                }
+                if !uninstall_addons.is_empty() {
                     info!("uninstalling cluster addons before deletion");
                     let cancel = CancellationToken::new();
                     let config_dir = self
@@ -1009,7 +1093,7 @@ impl Orchestrator {
                         .unwrap_or_else(|| std::path::Path::new("."))
                         .to_path_buf();
                     crate::cluster::addon::uninstall_addons(
-                        &cluster_config.addons,
+                        &uninstall_addons,
                         k3d_mgr.kubeconfig_path(),
                         &config_dir,
                         &cancel,
