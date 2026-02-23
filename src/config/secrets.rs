@@ -487,9 +487,9 @@ mod tests {
 
     #[test]
     fn expand_host_env_fallback() {
-        // HOME should always be set on Unix systems
+        // Use PATH which is set on both Unix and Windows
         let env = BTreeMap::new();
-        let (result, expanded) = expand_env_vars("$HOME", &env, "test").unwrap();
+        let (result, expanded) = expand_env_vars("$PATH", &env, "test").unwrap();
         assert!(!result.is_empty());
         assert!(expanded);
     }
