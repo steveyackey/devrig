@@ -4,7 +4,14 @@
     ".": {
       "release-type": "rust",
       "bump-minor-pre-major": true,
-      "draft": true
+      "draft": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "dashboard/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
     }
   }
 }
