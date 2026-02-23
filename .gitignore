@@ -12,6 +12,9 @@ pipeline/bun.lock
 dashboard/node_modules/
 dashboard/dist/
 
+# Claude Code
+.claude/worktrees/
+
 # E2E / Playwright
 test-results/
 e2e/playwright-report/
