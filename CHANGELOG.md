@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/steveyackey/devrig/compare/v0.1.2...v0.1.3) (2026-02-23)
+
+
+### Bug Fixes
+
+* build dashboard frontend in release CI and fix crates.io publish ([4797af1](https://github.com/steveyackey/devrig/commit/4797af127fae8a6fbca099b8544f3ac91533de25))
+
 ## [0.1.2](https://github.com/steveyackey/devrig/compare/v0.1.1...v0.1.2) (2026-02-23)
 
 
