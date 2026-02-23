@@ -374,6 +374,60 @@ debounces with a 500ms window, rebuilds the Docker image, pushes it to the
 local registry, and triggers a rollout restart. The directories `.git`,
 `node_modules`, `target`, `__pycache__`, and `.devrig` are ignored.
 
+## `[cluster.image.*]` section
+
+Each `[cluster.image.<name>]` block defines a Docker image to build and push
+to the cluster registry **without** applying any Kubernetes manifests or
+creating a running deployment. Use this for images referenced by Jobs,
+CronJobs, init containers, or any resource that doesn't need a persistent
+Deployment.
+
+### Minimal image
+
+```toml
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+```
+
+### Full image
+
+```toml
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+dockerfile = "Dockerfile"
+watch = true
+depends_on = ["postgres"]
+```
+
+### Image fields
+
+| Field        | Type            | Required | Default      | Description                                            |
+|--------------|-----------------|----------|--------------|--------------------------------------------------------|
+| `context`    | string          | Yes      | --           | Docker build context directory, relative to config.    |
+| `dockerfile` | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
+| `watch`      | boolean         | No       | `false`      | Enable file watching for automatic rebuild+push.       |
+| `depends_on` | list of strings | No       | `[]`         | Docker, image, or deploy services to start before this.|
+
+When `watch = true`, devrig monitors the build context directory for changes,
+debounces with a 500ms window, and rebuilds+pushes the image. No rollout
+restart is triggered since there is no Deployment. The same directories as
+`cluster.deploy` are ignored (`.git`, `node_modules`, `target`, etc.).
+
+Deploy entries can depend on image entries to ensure the image is available
+in the registry before the deploy's manifests are applied:
+
+```toml
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+watch = true
+
+[cluster.deploy.api]
+context = "./services/api"
+manifests = "k8s/api"
+watch = true
+depends_on = ["job-runner"]   # ensures image exists before api deploys
+```
+
 ## `[cluster.addons.*]` section
 
 Addons are Helm charts, raw manifests, or Kustomize overlays that devrig
@@ -1135,9 +1189,13 @@ Run `devrig validate` to check your config without starting services.
    `policy` must be one of `always`, `on-failure`, or `never`.
 9. **Addon charts are non-empty** -- Helm addons must have a non-empty `chart`
    and `repo`.
-10. **Addon names are unique** -- Addon names must not conflict with cluster
+10. **Image context is non-empty** -- Cluster image entries must have a
+    non-empty `context`.
+11. **Image names are unique** -- Cluster image names must not conflict with
+    cluster deploy names or other resource types.
+12. **Addon names are unique** -- Addon names must not conflict with cluster
     deploy names.
-11. **Addon ports are unique** -- Port-forward local ports must not conflict
+13. **Addon ports are unique** -- Port-forward local ports must not conflict
     with service ports.
 
 All validation errors are reported together so you can fix them in one pass.

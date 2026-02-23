@@ -10,7 +10,7 @@ use tokio_util::task::TaskTracker;
 use tracing::{error, info, warn};
 
 use crate::cluster::deploy;
-use crate::config::model::ClusterDeployConfig;
+use crate::config::model::{ClusterDeployConfig, ClusterImageConfig};
 
 const IGNORED_DIRS: &[&str] = &[
     ".git",
@@ -61,6 +61,176 @@ pub async fn start_watchers(
             }
         });
     }
+
+    Ok(())
+}
+
+/// Start file watchers for all cluster images that have `watch = true`.
+///
+/// Each watcher monitors the image's context directory for file changes,
+/// debounces rapid edits, and triggers a rebuild+push cycle (no manifests).
+pub async fn start_image_watchers(
+    images: &BTreeMap<String, ClusterImageConfig>,
+    registry_port: Option<u16>,
+    config_dir: PathBuf,
+    cancel: CancellationToken,
+    tracker: &TaskTracker,
+) -> Result<()> {
+    for (name, image_config) in images {
+        if !image_config.watch {
+            continue;
+        }
+
+        let name = name.clone();
+        let image_config = image_config.clone();
+        let config_dir = config_dir.clone();
+        let cancel = cancel.clone();
+
+        tracker.spawn(async move {
+            if let Err(e) = watch_and_rebuild_image(
+                name.clone(),
+                image_config,
+                registry_port,
+                config_dir,
+                cancel,
+            )
+            .await
+            {
+                error!(image = %name, error = %e, "image watcher failed");
+            }
+        });
+    }
+
+    Ok(())
+}
+
+/// Watch a single image's context directory for file changes and trigger
+/// rebuild+push cycles when relevant files are modified.
+async fn watch_and_rebuild_image(
+    name: String,
+    image_config: ClusterImageConfig,
+    registry_port: Option<u16>,
+    config_dir: PathBuf,
+    cancel: CancellationToken,
+) -> Result<()> {
+    let watch_path = config_dir.join(&image_config.context);
+
+    if !watch_path.exists() {
+        warn!(
+            image = %name,
+            path = %watch_path.display(),
+            "watch directory does not exist, skipping watcher"
+        );
+        return Ok(());
+    }
+
+    let (tx, mut rx) = mpsc::channel(100);
+
+    let mut debouncer = new_debouncer(Duration::from_millis(500), move |result| {
+        match result {
+            Ok(events) => {
+                if let Err(e) = tx.try_send(events) {
+                    let _ = e;
+                }
+            }
+            Err(e) => {
+                eprintln!("file watcher error: {}", e);
+            }
+        }
+    })
+    .context("creating file watcher debouncer")?;
+
+    debouncer
+        .watcher()
+        .watch(&watch_path, RecursiveMode::Recursive)
+        .with_context(|| format!("watching directory {}", watch_path.display()))?;
+
+    info!(
+        image = %name,
+        path = %watch_path.display(),
+        "image file watcher started"
+    );
+
+    let mut rebuild_cancel: Option<CancellationToken> = None;
+
+    loop {
+        tokio::select! {
+            _ = cancel.cancelled() => {
+                info!(image = %name, "image watcher shutting down");
+                if let Some(token) = rebuild_cancel.take() {
+                    token.cancel();
+                }
+                break;
+            }
+            events = rx.recv() => {
+                let events = match events {
+                    Some(events) => events,
+                    None => {
+                        warn!(image = %name, "image watcher channel closed unexpectedly");
+                        break;
+                    }
+                };
+
+                let relevant: Vec<_> = events
+                    .iter()
+                    .filter(|ev| ev.kind == DebouncedEventKind::Any)
+                    .filter(|ev| !should_ignore(&ev.path))
+                    .collect();
+
+                if relevant.is_empty() {
+                    continue;
+                }
+
+                info!(
+                    image = %name,
+                    "file change detected, rebuilding image..."
+                );
+
+                if let Some(token) = rebuild_cancel.take() {
+                    token.cancel();
+                }
+
+                let child_cancel = cancel.child_token();
+                rebuild_cancel = Some(child_cancel.clone());
+
+                let rebuild_name = name.clone();
+                let rebuild_config = image_config.clone();
+                let rebuild_config_dir = config_dir.clone();
+
+                tokio::spawn(async move {
+                    match deploy::rebuild_image(
+                        &rebuild_name,
+                        &rebuild_config,
+                        registry_port,
+                        &rebuild_config_dir,
+                        &child_cancel,
+                    )
+                    .await
+                    {
+                        Ok(()) => {
+                            info!(image = %rebuild_name, "image rebuild completed successfully");
+                        }
+                        Err(e) => {
+                            if child_cancel.is_cancelled() {
+                                info!(
+                                    image = %rebuild_name,
+                                    "image rebuild cancelled (newer change detected)"
+                                );
+                            } else {
+                                error!(
+                                    image = %rebuild_name,
+                                    error = %e,
+                                    "image rebuild failed"
+                                );
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    drop(debouncer);
 
     Ok(())
 }

@@ -95,11 +95,16 @@ command = "{service_command}"
 # agents = 1
 # ports = ["8080:80"]
 #
+# [cluster.image.job-runner]
+# context = "./tools/job-runner"
+# # dockerfile = "Dockerfile"   # optional, defaults to Dockerfile
+# watch = true
+#
 # [cluster.deploy.api]
 # context = "./services/api"
 # manifests = ["k8s/deployment.yaml", "k8s/service.yaml"]
 # watch = true
-# depends_on = ["postgres"]
+# depends_on = ["job-runner"]   # ensures image is built before deploy
 #
 # [cluster.addons.traefik]
 # type = "helm"

@@ -345,6 +345,7 @@ mod tests {
                 agents: 1,
                 ports: vec![],
                 registry: false,
+                images: BTreeMap::new(),
                 deploy: BTreeMap::new(),
                 addons: BTreeMap::new(),
                 logs: None,

@@ -78,6 +78,26 @@ pub enum ConfigDiagnostic {
         span: SourceSpan,
     },
 
+    #[error("cluster image `{image}` has an empty context")]
+    #[diagnostic(code(devrig::empty_image_context))]
+    EmptyImageContext {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("context is empty")]
+        span: SourceSpan,
+        image: String,
+    },
+
+    #[error("cluster image `{name}` conflicts with a cluster.deploy name")]
+    #[diagnostic(code(devrig::image_deploy_name_conflict))]
+    ImageDeployNameConflict {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("image shares name with a deploy")]
+        span: SourceSpan,
+        name: String,
+    },
+
     #[error("cluster deploy `{deploy}` has an empty context")]
     #[diagnostic(code(devrig::empty_deploy_context))]
     EmptyDeployContext {
@@ -397,6 +417,9 @@ pub fn validate(
         }
     }
     if let Some(cluster) = &config.cluster {
+        for name in cluster.images.keys() {
+            available.push(name.clone());
+        }
         for name in cluster.deploy.keys() {
             available.push(name.clone());
         }
@@ -438,6 +461,28 @@ pub fn validate(
                     service: name.clone(),
                     dependency: dep.clone(),
                 });
+            }
+        }
+    }
+
+    // Check all depends_on references exist (cluster image)
+    if let Some(cluster) = &config.cluster {
+        for (name, image_cfg) in &cluster.images {
+            for dep in &image_cfg.depends_on {
+                if !available.contains(dep) {
+                    let suggestion = find_closest_match(dep, &available);
+                    let advice = match suggestion {
+                        Some(s) => format!("did you mean `{}`?", s),
+                        None => format!("available resources: {:?}", available),
+                    };
+                    errors.push(ConfigDiagnostic::MissingDependency {
+                        src: src.clone(),
+                        span: find_depends_on_value(source, "cluster.image", name, dep),
+                        advice,
+                        service: name.clone(),
+                        dependency: dep.clone(),
+                    });
+                }
             }
         }
     }
@@ -491,6 +536,42 @@ pub fn validate(
         }
     }
 
+    // Check cluster image names don't conflict with deploy, service, docker, compose names
+    if let Some(cluster) = &config.cluster {
+        for name in cluster.images.keys() {
+            // Check conflict with deploy names
+            if cluster.deploy.contains_key(name) {
+                errors.push(ConfigDiagnostic::ImageDeployNameConflict {
+                    src: src.clone(),
+                    span: find_table_span(source, "cluster.image", name),
+                    name: name.clone(),
+                });
+            }
+            // Check conflict with service, docker, compose
+            let mut kinds = Vec::new();
+            if config.services.contains_key(name) {
+                kinds.push("service".to_string());
+            }
+            if config.docker.contains_key(name) {
+                kinds.push("docker".to_string());
+            }
+            if let Some(compose) = &config.compose {
+                if compose.services.contains(name) {
+                    kinds.push("compose".to_string());
+                }
+            }
+            if !kinds.is_empty() {
+                kinds.push("cluster.image".to_string());
+                errors.push(ConfigDiagnostic::DuplicateResourceName {
+                    src: src.clone(),
+                    span: find_table_span(source, "cluster.image", name),
+                    name: name.clone(),
+                    kinds,
+                });
+            }
+        }
+    }
+
     // Check no two services/docker share the same fixed port
     let mut port_map: BTreeMap<u16, Vec<String>> = BTreeMap::new();
     for (name, svc) in &config.services {
@@ -535,6 +616,9 @@ pub fn validate(
         deps_map.insert(name.as_str(), &docker_cfg.depends_on);
     }
     if let Some(cluster) = &config.cluster {
+        for (name, image_cfg) in &cluster.images {
+            deps_map.insert(name.as_str(), &image_cfg.depends_on);
+        }
         for (name, deploy) in &cluster.deploy {
             deps_map.insert(name.as_str(), &deploy.depends_on);
         }
@@ -664,6 +748,19 @@ pub fn validate(
                 src: src.clone(),
                 span,
             });
+        }
+    }
+
+    // Check cluster image entries have non-empty context
+    if let Some(cluster) = &config.cluster {
+        for (name, image_cfg) in &cluster.images {
+            if image_cfg.context.trim().is_empty() {
+                errors.push(ConfigDiagnostic::EmptyImageContext {
+                    src: src.clone(),
+                    span: find_field_span(source, "cluster.image", name, "context"),
+                    image: name.clone(),
+                });
+            }
         }
     }
 
@@ -1012,8 +1109,8 @@ fn find_dashboard_otel_span(source: &str, field: &str) -> SourceSpan {
 mod tests {
     use super::*;
     use crate::config::model::{
-        ClusterConfig, ClusterDeployConfig, ComposeConfig, DockerConfig, ProjectConfig,
-        ServiceConfig,
+        ClusterConfig, ClusterDeployConfig, ClusterImageConfig, ComposeConfig, DockerConfig,
+        ProjectConfig, ServiceConfig,
     };
 
     const TEST_FILENAME: &str = "devrig.toml";
@@ -1436,6 +1533,15 @@ mod tests {
 
     // --- v0.3 cluster validation tests ---
 
+    fn make_image(context: &str, deps: Vec<&str>) -> ClusterImageConfig {
+        ClusterImageConfig {
+            context: context.to_string(),
+            dockerfile: "Dockerfile".to_string(),
+            watch: false,
+            depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+        }
+    }
+
     fn make_deploy(context: &str, manifests: &str, deps: Vec<&str>) -> ClusterDeployConfig {
         ClusterDeployConfig {
             context: context.to_string(),
@@ -1459,6 +1565,7 @@ mod tests {
             agents: 1,
             ports: vec![],
             registry: true,
+            images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
@@ -1480,6 +1587,7 @@ mod tests {
             agents: 1,
             ports: vec![],
             registry: true,
+            images: BTreeMap::new(),
             deploy: BTreeMap::from([(
                 "api".to_string(),
                 make_deploy("./api", "./k8s", vec!["postgres"]),
@@ -1500,6 +1608,7 @@ mod tests {
             agents: 1,
             ports: vec![],
             registry: false,
+            images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("", "./k8s", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
@@ -1521,6 +1630,7 @@ mod tests {
             agents: 1,
             ports: vec![],
             registry: false,
+            images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "", vec![]))]),
             addons: BTreeMap::new(),
             logs: None,
@@ -1546,6 +1656,7 @@ mod tests {
             agents: 1,
             ports: vec![],
             registry: false,
+            images: BTreeMap::new(),
             deploy: BTreeMap::from([(
                 "postgres".to_string(),
                 make_deploy("./pg", "./k8s", vec![]),
@@ -1570,6 +1681,7 @@ mod tests {
             agents: 1,
             ports: vec![],
             registry: false,
+            images: BTreeMap::new(),
             deploy: BTreeMap::from([(
                 "api".to_string(),
                 make_deploy("./api", "./k8s", vec!["nonexistent"]),
@@ -1925,6 +2037,196 @@ exclude_namespaces = ["kube-system"]
 "#;
         let config: DevrigConfig = toml::from_str(source).unwrap();
         // Disabled logs should not trigger validation errors
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    // --- cluster.image validation tests ---
+
+    #[test]
+    fn cluster_image_valid_config_passes() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster]
+registry = true
+
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn cluster_image_with_empty_context_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            images: BTreeMap::from([("job-runner".to_string(), make_image("", vec![]))]),
+            deploy: BTreeMap::new(),
+            addons: BTreeMap::new(),
+            logs: None,
+            registries: vec![],
+        });
+        let source = "[project]\nname = \"test\"\n\n[cluster.image.job-runner]\ncontext = \"\"\n";
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::EmptyImageContext { image, .. } if image == "job-runner"
+        )));
+    }
+
+    #[test]
+    fn cluster_image_name_conflicts_with_deploy_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: true,
+            images: BTreeMap::from([("api".to_string(), make_image("./tools/api", vec![]))]),
+            deploy: BTreeMap::from([(
+                "api".to_string(),
+                make_deploy("./api", "./k8s", vec![]),
+            )]),
+            addons: BTreeMap::new(),
+            logs: None,
+            registries: vec![],
+        });
+        let source = "[project]\nname = \"test\"\n\n[cluster.image.api]\ncontext = \"./tools/api\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\n";
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::ImageDeployNameConflict { name, .. } if name == "api"
+        )));
+    }
+
+    #[test]
+    fn cluster_image_name_conflicts_with_docker_errors() {
+        let mut config = make_config(vec![]);
+        config.docker.insert(
+            "postgres".to_string(),
+            make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
+        );
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            images: BTreeMap::from([(
+                "postgres".to_string(),
+                make_image("./tools/pg", vec![]),
+            )]),
+            deploy: BTreeMap::new(),
+            addons: BTreeMap::new(),
+            logs: None,
+            registries: vec![],
+        });
+        let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.image.postgres]\ncontext = \"./tools/pg\"\n";
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::DuplicateResourceName { name, .. } if name == "postgres"
+        )));
+    }
+
+    #[test]
+    fn cluster_image_depends_on_unknown_errors() {
+        let mut config = make_config(vec![]);
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: false,
+            images: BTreeMap::from([(
+                "job-runner".to_string(),
+                make_image("./tools/job-runner", vec!["nonexistent"]),
+            )]),
+            deploy: BTreeMap::new(),
+            addons: BTreeMap::new(),
+            logs: None,
+            registries: vec![],
+        });
+        let source = "[project]\nname = \"test\"\n\n[cluster.image.job-runner]\ncontext = \"./tools/job-runner\"\ndepends_on = [\"nonexistent\"]\n";
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::MissingDependency {
+                service,
+                dependency,
+                ..
+            } if service == "job-runner" && dependency == "nonexistent"
+        )));
+    }
+
+    #[test]
+    fn cluster_image_depends_on_docker_is_valid() {
+        let mut config = make_config(vec![]);
+        config.docker.insert(
+            "postgres".to_string(),
+            make_infra("postgres:16-alpine", Some(Port::Fixed(5432)), vec![]),
+        );
+        config.cluster = Some(ClusterConfig {
+            name: None,
+            agents: 1,
+            ports: vec![],
+            registry: true,
+            images: BTreeMap::from([(
+                "job-runner".to_string(),
+                make_image("./tools/job-runner", vec!["postgres"]),
+            )]),
+            deploy: BTreeMap::new(),
+            addons: BTreeMap::new(),
+            logs: None,
+            registries: vec![],
+        });
+        let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.image.job-runner]\ncontext = \"./tools/job-runner\"\ndepends_on = [\"postgres\"]\n";
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn deploy_depends_on_cluster_image_is_valid() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster]
+registry = true
+
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+
+[cluster.deploy.api]
+context = "./services/api"
+manifests = "k8s/api"
+depends_on = ["job-runner"]
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn cluster_image_in_available_set_for_service_deps() {
+        let source = r#"
+[project]
+name = "test"
+
+[services.web]
+command = "npm run dev"
+port = 3000
+depends_on = ["job-runner"]
+
+[cluster]
+registry = true
+
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
     }
 }

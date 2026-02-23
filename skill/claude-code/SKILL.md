@@ -147,6 +147,20 @@ http_port = 4318
 retention = "2h"
 ```
 
+**Build-only cluster images (for Jobs, CronJobs, init containers):**
+
+```toml
+[cluster.image.job-runner]
+context = "./tools/job-runner"
+# dockerfile = "Dockerfile"   # optional, defaults to Dockerfile
+watch = true
+
+[cluster.deploy.api]
+context = "./services/api"
+manifests = "k8s/api"
+depends_on = ["job-runner"]   # ensures image exists before deploy
+```
+
 ### Environment Variables
 
 - `$VAR` / `${VAR}` expands from `.env` files or host environment

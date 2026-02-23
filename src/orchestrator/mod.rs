@@ -164,6 +164,13 @@ impl Orchestrator {
                         }
                     }
                     if let Some(cluster) = &self.config.cluster {
+                        if let Some(image_cfg) = cluster.images.get(name) {
+                            for dep in &image_cfg.depends_on {
+                                if needed.insert(dep.clone()) {
+                                    changed = true;
+                                }
+                            }
+                        }
                         if let Some(deploy) = cluster.deploy.get(name) {
                             for dep in &deploy.depends_on {
                                 if needed.insert(dep.clone()) {
@@ -204,7 +211,10 @@ impl Orchestrator {
         let has_docker = launch_order.iter().any(|(_, k)| {
             matches!(
                 k,
-                ResourceKind::Docker | ResourceKind::Compose | ResourceKind::ClusterDeploy
+                ResourceKind::Docker
+                    | ResourceKind::Compose
+                    | ResourceKind::ClusterImage
+                    | ResourceKind::ClusterDeploy
             )
         }) || self.config.cluster.is_some();
 
@@ -365,7 +375,7 @@ impl Orchestrator {
                 None
             };
 
-            // Deploy cluster services in dependency order
+            // Build and push cluster images in dependency order
             let config_dir = self
                 .config_path
                 .parent()
@@ -374,6 +384,31 @@ impl Orchestrator {
 
             let mut deployed: BTreeMap<String, ClusterDeployState> = BTreeMap::new();
 
+            for (name, kind) in &launch_order {
+                if *kind != ResourceKind::ClusterImage {
+                    continue;
+                }
+
+                let image_config = cluster_config
+                    .images
+                    .get(name)
+                    .ok_or_else(|| anyhow::anyhow!("cluster image '{}' not in config", name))?;
+
+                info!(image = %name, "building cluster image");
+                let state = crate::cluster::deploy::run_image_build(
+                    name,
+                    image_config,
+                    registry_port,
+                    &config_dir,
+                    &self.cancel,
+                )
+                .await
+                .with_context(|| format!("building cluster image '{}'", name))?;
+
+                deployed.insert(name.clone(), state);
+            }
+
+            // Deploy cluster services in dependency order
             for (name, kind) in &launch_order {
                 if *kind != ResourceKind::ClusterDeploy {
                     continue;
@@ -410,6 +445,17 @@ impl Orchestrator {
             )
             .await
             .context("starting file watchers")?;
+
+            // Start file watchers for watch=true images
+            crate::cluster::watcher::start_image_watchers(
+                &cluster_config.images,
+                registry_port,
+                config_dir.clone(),
+                self.cancel.clone(),
+                &self.tracker,
+            )
+            .await
+            .context("starting image file watchers")?;
 
             // Inject synthetic Fluent Bit log collector addon if configured
             let mut combined_addons = cluster_config.addons.clone();
@@ -898,26 +944,56 @@ impl Orchestrator {
 
         if let Some(cs) = &cluster_state {
             for (name, deploy_state) in &cs.deployed_services {
-                let watch_tag = self
+                // Check if this is a cluster image (not a deploy)
+                let is_image = self
                     .config
                     .cluster
                     .as_ref()
-                    .and_then(|c| c.deploy.get(name))
-                    .map(|d| d.watch)
-                    .unwrap_or(false);
-                let status = if watch_tag {
-                    "deployed (watching)".to_string()
+                    .is_some_and(|c| c.images.contains_key(name));
+
+                if is_image {
+                    let watch_tag = self
+                        .config
+                        .cluster
+                        .as_ref()
+                        .and_then(|c| c.images.get(name))
+                        .map(|i| i.watch)
+                        .unwrap_or(false);
+                    let status = if watch_tag {
+                        "built (watching)".to_string()
+                    } else {
+                        "built".to_string()
+                    };
+                    summary_services.insert(
+                        format!("[image] {}", name),
+                        RunningService {
+                            port: None,
+                            port_auto: false,
+                            status: format!("{} [{}]", status, deploy_state.image_tag),
+                        },
+                    );
                 } else {
-                    "deployed".to_string()
-                };
-                summary_services.insert(
-                    format!("[cluster] {}", name),
-                    RunningService {
-                        port: None,
-                        port_auto: false,
-                        status: format!("{} [{}]", status, deploy_state.image_tag),
-                    },
-                );
+                    let watch_tag = self
+                        .config
+                        .cluster
+                        .as_ref()
+                        .and_then(|c| c.deploy.get(name))
+                        .map(|d| d.watch)
+                        .unwrap_or(false);
+                    let status = if watch_tag {
+                        "deployed (watching)".to_string()
+                    } else {
+                        "deployed".to_string()
+                    };
+                    summary_services.insert(
+                        format!("[cluster] {}", name),
+                        RunningService {
+                            port: None,
+                            port_auto: false,
+                            status: format!("{} [{}]", status, deploy_state.image_tag),
+                        },
+                    );
+                }
             }
 
             // Addon summary entries

@@ -245,6 +245,8 @@ pub struct ClusterConfig {
     pub ports: Vec<String>,
     #[serde(default)]
     pub registry: bool,
+    #[serde(default, rename = "image")]
+    pub images: BTreeMap<String, ClusterImageConfig>,
     #[serde(default)]
     pub deploy: BTreeMap<String, ClusterDeployConfig>,
     #[serde(default)]
@@ -397,6 +399,17 @@ impl AddonConfig {
             AddonConfig::Kustomize { .. } => "kustomize",
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct ClusterImageConfig {
+    pub context: String,
+    #[serde(default = "default_dockerfile")]
+    pub dockerfile: String,
+    #[serde(default)]
+    pub watch: bool,
+    #[serde(default)]
+    pub depends_on: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -1110,6 +1123,96 @@ mod tests {
         assert!(config.cluster.is_some());
         assert_eq!(config.cluster.as_ref().unwrap().deploy.len(), 1);
         assert_eq!(config.services.len(), 1);
+    }
+
+    #[test]
+    fn parse_cluster_image_config() {
+        let toml = r#"
+            [project]
+            name = "myapp"
+
+            [cluster]
+            registry = true
+
+            [cluster.image.job-runner]
+            context = "./tools/job-runner"
+            watch = true
+
+            [cluster.image.migrator]
+            context = "./tools/migrator"
+            dockerfile = "Dockerfile.migrate"
+            depends_on = ["postgres"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert_eq!(cluster.images.len(), 2);
+
+        let runner = &cluster.images["job-runner"];
+        assert_eq!(runner.context, "./tools/job-runner");
+        assert_eq!(runner.dockerfile, "Dockerfile");
+        assert!(runner.watch);
+        assert!(runner.depends_on.is_empty());
+
+        let migrator = &cluster.images["migrator"];
+        assert_eq!(migrator.context, "./tools/migrator");
+        assert_eq!(migrator.dockerfile, "Dockerfile.migrate");
+        assert!(!migrator.watch);
+        assert_eq!(migrator.depends_on, vec!["postgres"]);
+    }
+
+    #[test]
+    fn parse_cluster_without_images() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert!(cluster.images.is_empty());
+    }
+
+    #[test]
+    fn parse_cluster_image_with_defaults() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [cluster.image.builder]
+            context = "./builder"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        let builder = &cluster.images["builder"];
+        assert_eq!(builder.dockerfile, "Dockerfile");
+        assert!(!builder.watch);
+        assert!(builder.depends_on.is_empty());
+    }
+
+    #[test]
+    fn parse_cluster_with_images_and_deploys() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [cluster]
+            registry = true
+
+            [cluster.image.job-runner]
+            context = "./tools/job-runner"
+
+            [cluster.deploy.api]
+            context = "./api"
+            manifests = "./k8s/api"
+            depends_on = ["job-runner"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let cluster = config.cluster.unwrap();
+        assert_eq!(cluster.images.len(), 1);
+        assert_eq!(cluster.deploy.len(), 1);
+        assert_eq!(cluster.deploy["api"].depends_on, vec!["job-runner"]);
     }
 
     #[test]

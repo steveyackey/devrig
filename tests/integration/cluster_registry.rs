@@ -40,8 +40,11 @@ async fn cluster_registry_push_pull() {
         agents: 1,
         ports: vec![],
         registry: true,
+        images: std::collections::BTreeMap::new(),
         deploy: std::collections::BTreeMap::new(),
         addons: std::collections::BTreeMap::new(),
+        logs: None,
+        registries: vec![],
     };
 
     let state_dir = std::env::temp_dir().join(format!("devrig-regtest-{}", std::process::id()));

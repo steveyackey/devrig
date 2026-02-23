@@ -6,7 +6,7 @@ use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use tracing::info;
 
-use crate::config::model::ClusterDeployConfig;
+use crate::config::model::{ClusterDeployConfig, ClusterImageConfig};
 use crate::orchestrator::state::ClusterDeployState;
 
 /// Run a subprocess command with optional working directory and environment variable,
@@ -193,6 +193,101 @@ pub async fn run_rebuild(
         cancel,
     )
     .await?;
+
+    Ok(())
+}
+
+/// Build and push an image to the registry without applying any manifests.
+/// Used for `[cluster.image.*]` entries that only need the image available.
+pub async fn run_image_build(
+    name: &str,
+    image_config: &ClusterImageConfig,
+    registry_port: Option<u16>,
+    config_dir: &Path,
+    cancel: &CancellationToken,
+) -> Result<ClusterDeployState> {
+    let context_path = config_dir.join(&image_config.context);
+
+    // Build the image tag
+    let tag = if let Some(port) = registry_port {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs();
+        format!("localhost:{port}/{name}:{timestamp}")
+    } else {
+        format!("devrig-{name}:latest")
+    };
+
+    // Docker build
+    info!(name, tag, "building image");
+    let dockerfile = &image_config.dockerfile;
+    run_cmd(
+        "docker",
+        &["build", "-t", &tag, "-f", dockerfile, "."],
+        Some(&context_path),
+        None,
+        cancel,
+    )
+    .await?;
+
+    if cancel.is_cancelled() {
+        bail!("cancelled");
+    }
+
+    // Docker push (only when registry is available)
+    if registry_port.is_some() {
+        info!(name, tag, "pushing image");
+        run_cmd("docker", &["push", &tag], None, None, cancel).await?;
+    }
+
+    Ok(ClusterDeployState {
+        image_tag: tag,
+        last_deployed: Utc::now(),
+    })
+}
+
+/// Rebuild an image and push it (no manifests, no rollout restart).
+/// Used by the watcher for `[cluster.image.*]` entries with `watch = true`.
+pub async fn rebuild_image(
+    name: &str,
+    image_config: &ClusterImageConfig,
+    registry_port: Option<u16>,
+    config_dir: &Path,
+    cancel: &CancellationToken,
+) -> Result<()> {
+    let context_path = config_dir.join(&image_config.context);
+
+    // Build the image tag
+    let tag = if let Some(port) = registry_port {
+        let timestamp = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs();
+        format!("localhost:{port}/{name}:{timestamp}")
+    } else {
+        format!("devrig-{name}:latest")
+    };
+
+    // Docker build
+    info!(name, tag, "rebuilding image");
+    let dockerfile = &image_config.dockerfile;
+    run_cmd(
+        "docker",
+        &["build", "-t", &tag, "-f", dockerfile, "."],
+        Some(&context_path),
+        None,
+        cancel,
+    )
+    .await?;
+
+    if cancel.is_cancelled() {
+        bail!("cancelled");
+    }
+
+    // Docker push (only when registry is available)
+    if registry_port.is_some() {
+        info!(name, tag, "pushing image");
+        run_cmd("docker", &["push", &tag], None, None, cancel).await?;
+    }
 
     Ok(())
 }

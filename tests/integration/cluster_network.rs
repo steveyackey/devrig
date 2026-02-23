@@ -70,8 +70,11 @@ async fn cluster_network_bridge() {
         agents: 0,
         ports: vec![],
         registry: false,
+        images: std::collections::BTreeMap::new(),
         deploy: std::collections::BTreeMap::new(),
         addons: std::collections::BTreeMap::new(),
+        logs: None,
+        registries: vec![],
     };
 
     let state_dir = std::env::temp_dir().join(format!("devrig-nettest-{}", std::process::id()));
