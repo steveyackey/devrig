@@ -14,7 +14,7 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-da
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
 # Whether to install an updater program
-install-updater = false
+install-updater = true
 # Let release-please create the GitHub Release; cargo-dist just uploads artifacts
 create-release = false
 # We customize the workflow triggers for release-please integration

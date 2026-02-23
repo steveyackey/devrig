@@ -8,4 +8,5 @@ pub mod ps;
 pub mod query;
 pub mod reset;
 pub mod skill;
+pub mod update;
 pub mod validate;

@@ -83,6 +83,7 @@ async fn main() {
         Commands::Kubectl { args } => {
             commands::cluster::run_kubectl(cli.global.config_file.as_deref(), args).await
         }
+        Commands::Update => commands::update::run(),
         Commands::Skill { command } => match command {
             devrig::cli::SkillCommands::Install { global } => {
                 commands::skill::run_install(global, cli.global.config_file.as_deref()).await

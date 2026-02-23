@@ -139,6 +139,9 @@ pub enum Commands {
         command: QueryCommands,
     },
 
+    /// Update devrig to the latest version
+    Update,
+
     /// Manage the devrig Claude Code skill
     Skill {
         #[command(subcommand)]
