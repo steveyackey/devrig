@@ -31,13 +31,11 @@ name = "{project_name}"
 # -- Dashboard + OpenTelemetry --
 # Uncomment to enable the built-in dashboard and OTel collector.
 # Services automatically receive OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME.
+# Ports auto-resolve if already in use, so multiple devrig instances can coexist.
 #
 # [dashboard]
-# port = 4000
-#
+# port = 4000                    # default; auto-resolves if in use
 # [dashboard.otel]
-# grpc_port = 4317
-# http_port = 4318
 # retention = "1h"
 
 # -- Services --

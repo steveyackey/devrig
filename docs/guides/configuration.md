@@ -518,6 +518,9 @@ OpenTelemetry collector. When present, `devrig start` launches a local
 dashboard server and OTLP receivers that collect traces, logs, and metrics
 from your services.
 
+All dashboard and OTel ports auto-resolve if already in use, so multiple
+devrig instances can run simultaneously without port conflicts.
+
 ### `[dashboard]` section
 
 ```toml

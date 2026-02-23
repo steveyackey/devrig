@@ -29,12 +29,26 @@ use crate::ui::logs::{LogLine, LogWriter};
 use crate::ui::summary::{print_startup_summary, RunningService};
 
 use graph::{DependencyResolver, ResourceKind};
-use ports::{check_all_ports_unified, format_port_conflicts, resolve_port};
+use ports::{check_all_ports_unified, check_port_available, find_free_port_excluding, format_port_conflicts, resolve_port};
 use registry::{InstanceEntry, InstanceRegistry};
 use state::{
     ClusterDeployState, ClusterState, ComposeServiceState, DockerState, ProjectState, ServiceState,
 };
 use supervisor::{RestartPolicy, ServiceSupervisor};
+
+/// Resolve a dashboard/OTel port: use the configured port if available,
+/// otherwise auto-assign a free one. Tracks in `allocated` to avoid collisions.
+fn resolve_dashboard_port(preferred: u16, label: &str, allocated: &mut HashSet<u16>) -> u16 {
+    if !allocated.contains(&preferred) && check_port_available(preferred) {
+        allocated.insert(preferred);
+        preferred
+    } else {
+        let port = find_free_port_excluding(allocated);
+        info!("{label}: port {preferred} in use, using {port} instead");
+        allocated.insert(port);
+        port
+    }
+}
 
 /// Central orchestrator that loads configuration, resolves dependencies,
 /// manages Docker infrastructure, spawns supervised services, and handles
@@ -551,16 +565,27 @@ impl Orchestrator {
         if dashboard_enabled {
             let dash_config = self.config.dashboard.as_ref().unwrap();
             let otel_config = dash_config.otel.clone().unwrap_or_default();
-            let dash_port = dash_config.port;
 
-            let collector = crate::otel::OtelCollector::new(&otel_config);
+            // Auto-resolve dashboard/OTel ports: use configured port if free,
+            // otherwise find an available one. This lets multiple devrig instances
+            // run without port conflicts.
+            let dash_port = resolve_dashboard_port(dash_config.port, "dashboard", &mut allocated_ports);
+            let otel_grpc = resolve_dashboard_port(otel_config.grpc_port, "otel-grpc", &mut allocated_ports);
+            let otel_http = resolve_dashboard_port(otel_config.http_port, "otel-http", &mut allocated_ports);
+
+            // Use resolved ports for the collector
+            let mut resolved_otel = otel_config;
+            resolved_otel.grpc_port = otel_grpc;
+            resolved_otel.http_port = otel_http;
+
+            let collector = crate::otel::OtelCollector::new(&resolved_otel);
             collector
                 .start(self.cancel.clone())
                 .await
                 .context("starting OTel collector")?;
             info!(
-                grpc_port = otel_config.grpc_port,
-                http_port = otel_config.http_port,
+                grpc_port = otel_grpc,
+                http_port = otel_http,
                 "OTel collector started"
             );
 
@@ -592,8 +617,8 @@ impl Orchestrator {
 
             dashboard_state = Some(state::DashboardState {
                 dashboard_port: dash_port,
-                grpc_port: otel_config.grpc_port,
-                http_port: otel_config.http_port,
+                grpc_port: otel_grpc,
+                http_port: otel_http,
             });
             _otel_collector = Some(collector);
         }
@@ -745,13 +770,17 @@ impl Orchestrator {
                     }
                 }
 
-                // Inject OTel env vars when dashboard/collector is running
+                // Inject OTel env vars with resolved ports (overrides build_service_env defaults)
                 if let Some(ref ds) = dashboard_state {
                     env.insert(
                         "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
                         format!("http://localhost:{}", ds.http_port),
                     );
                     env.insert("OTEL_SERVICE_NAME".to_string(), name.clone());
+                    env.insert(
+                        "DEVRIG_DASHBOARD_URL".to_string(),
+                        format!("http://localhost:{}", ds.dashboard_port),
+                    );
                 }
 
                 let working_dir = svc.path.as_ref().map(|p| {
