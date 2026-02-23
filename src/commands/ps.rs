@@ -85,6 +85,25 @@ fn run_local(config_path: Option<&Path>) -> Result<()> {
         println!();
     }
 
+    // Dashboard
+    if let Some(ref dash) = state.dashboard {
+        println!("  {:<20} {:<24}", "DASHBOARD", "URL");
+        println!("  {}", "-".repeat(48));
+        println!(
+            "  {:<20} http://localhost:{}",
+            "dashboard", dash.dashboard_port
+        );
+        println!(
+            "  {:<20} localhost:{}",
+            "otel-grpc", dash.grpc_port
+        );
+        println!(
+            "  {:<20} localhost:{}",
+            "otel-http", dash.http_port
+        );
+        println!();
+    }
+
     // Services
     if !state.services.is_empty() {
         println!("  {:<20} {:<8} {:<24} STATUS", "SERVICE", "PID", "URL");

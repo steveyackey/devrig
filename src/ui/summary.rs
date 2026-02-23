@@ -102,6 +102,20 @@ pub fn print_startup_summary(
         println!("  {}", line);
     }
 
+    if let Some(dash_svc) = services.get("[dashboard]") {
+        if let Some(port) = dash_svc.port {
+            println!();
+            if use_color {
+                println!(
+                    "  Dashboard: {}",
+                    format!("http://localhost:{}", port).cyan()
+                );
+            } else {
+                println!("  Dashboard: http://localhost:{}", port);
+            }
+        }
+    }
+
     if services.keys().any(|name| name.starts_with("[cluster]")) {
         println!();
         if use_color {

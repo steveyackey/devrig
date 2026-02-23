@@ -27,7 +27,7 @@ pub struct LogQuery {
     pub trace_id: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub limit: Option<usize>,
-    /// Filter by log source: "process" (stdout+stderr), "stdout", "stderr", "otlp", or omit for all.
+    /// Filter by log source: "process" (stdout+stderr), "stdout", "stderr", "docker", "otlp", or omit for all.
     pub source: Option<String>,
 }
 

@@ -134,7 +134,7 @@ export interface LogsParams {
   search?: string;
   trace_id?: string;
   limit?: number;
-  /** Filter by log source: "process" (stdout+stderr), "stdout", "stderr", "otlp" */
+  /** Filter by log source: "process" (stdout+stderr), "stdout", "stderr", "docker", "otlp" */
   source?: string;
 }
 

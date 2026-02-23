@@ -1,6 +1,7 @@
 pub mod container;
 pub mod exec;
 pub mod image;
+pub mod log_stream;
 pub mod network;
 pub mod ready;
 pub mod volume;

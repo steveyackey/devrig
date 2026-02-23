@@ -670,6 +670,36 @@ impl Orchestrator {
         }
 
         // ================================================================
+        // Phase 4.55: Docker container log streams → dashboard
+        // ================================================================
+        if let (Some(ref b_store), Some(ref b_events)) = (&bridge_store, &bridge_events_tx) {
+            if let Some(ref mgr) = docker_mgr {
+                for (name, state) in &docker_states {
+                    crate::docker::log_stream::spawn_docker_log_stream(
+                        mgr.docker().clone(),
+                        state.container_id.clone(),
+                        name.clone(),
+                        Arc::clone(b_store),
+                        b_events.clone(),
+                        self.cancel.clone(),
+                        &self.tracker,
+                    );
+                }
+                for (name, state) in &compose_states {
+                    crate::docker::log_stream::spawn_docker_log_stream(
+                        mgr.docker().clone(),
+                        state.container_id.clone(),
+                        name.clone(),
+                        Arc::clone(b_store),
+                        b_events.clone(),
+                        self.cancel.clone(),
+                        &self.tracker,
+                    );
+                }
+            }
+        }
+
+        // ================================================================
         // Phase 4.6: Vite dev server (--dev mode)
         // ================================================================
         let mut vite_port: Option<u16> = None;

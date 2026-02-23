@@ -99,6 +99,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
     switch (source) {
       case 'stdout': return 'stdout';
       case 'stderr': return 'stderr';
+      case 'docker': return 'docker';
       case 'otlp': return 'sdk';
       default: return source || '-';
     }
@@ -154,6 +155,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
           >
             <option value="">All</option>
             <option value="process">Process</option>
+            <option value="docker">Docker</option>
             <option value="otlp">SDK</option>
           </Select>
         </div>
