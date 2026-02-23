@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/steveyackey/devrig/compare/v0.3.1...v0.4.0) (2026-02-23)
+
+
+### Features
+
+* split skill into SKILL.md + reference/configuration.md ([091ea01](https://github.com/steveyackey/devrig/commit/091ea01204303d00e3f7f82e7b00d0b56940db67))
+
 ## [0.3.1](https://github.com/steveyackey/devrig/compare/v0.3.0...v0.3.1) (2026-02-23)
 
 
