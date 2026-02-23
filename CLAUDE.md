@@ -60,6 +60,7 @@ glob) so that both the new files **and** the deletions of old files are staged.
 
 ## Conventions
 
+- Conventional commits (e.g. `feat:`, `fix:`, `chore:`, `docs:`)
 - Tailwind v4 (CSS-based config, no tailwind.config.js)
 - Biome for frontend linting (not ESLint)
 - Dashboard state served from `.devrig/state.json`
