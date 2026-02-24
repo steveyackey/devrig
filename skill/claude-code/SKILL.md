@@ -31,7 +31,9 @@ devrig start                       # Start all services + docker + dashboard
 devrig start api web               # Start named services + transitive deps
 devrig start -f devrig.alt.toml    # Use a different config file
 devrig stop                        # Stop services, preserve state
+devrig stop --all                  # Stop all running devrig instances
 devrig delete                      # Stop + remove containers, volumes, networks, state
+devrig delete --all                # Delete all running devrig instances
 ```
 
 ### Status & Inspection

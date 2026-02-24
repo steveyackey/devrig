@@ -1125,25 +1125,37 @@ impl Orchestrator {
             }
         }
 
-        // Graceful shutdown: cancel supervisors
+        // Graceful shutdown: cancel supervisors, with second Ctrl+C for force exit
         self.cancel.cancel();
         self.tracker.close();
-        match tokio::time::timeout(std::time::Duration::from_secs(10), self.tracker.wait()).await {
-            Ok(()) => info!("All services stopped cleanly"),
-            Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
-        }
+        let shutdown_fut = async {
+            match tokio::time::timeout(std::time::Duration::from_secs(10), self.tracker.wait())
+                .await
+            {
+                Ok(()) => info!("All services stopped cleanly"),
+                Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
+            }
 
-        // Stop addon port-forwards
-        if let Some(pf_mgr) = &self.port_forward_mgr {
-            pf_mgr.stop().await;
-        }
+            // Stop addon port-forwards
+            if let Some(pf_mgr) = &self.port_forward_mgr {
+                pf_mgr.stop().await;
+            }
 
-        // Stop docker containers on shutdown (preserve state for restart)
-        for (name, docker_state) in &docker_states {
-            if let Some(mgr) = &docker_mgr {
-                if let Err(e) = mgr.stop_service(docker_state).await {
-                    warn!(docker = %name, error = %e, "failed to stop docker container");
+            // Stop docker containers on shutdown (preserve state for restart)
+            for (name, docker_state) in &docker_states {
+                if let Some(mgr) = &docker_mgr {
+                    if let Err(e) = mgr.stop_service(docker_state).await {
+                        warn!(docker = %name, error = %e, "failed to stop docker container");
+                    }
                 }
+            }
+        };
+
+        tokio::select! {
+            () = shutdown_fut => {}
+            _ = tokio::signal::ctrl_c() => {
+                eprintln!("\nForce shutdown");
+                std::process::exit(130);
             }
         }
 

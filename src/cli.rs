@@ -35,9 +35,17 @@ pub enum Commands {
     Stop {
         /// Specific services to stop (stop all if empty)
         services: Vec<String>,
+
+        /// Stop all running devrig instances
+        #[arg(long)]
+        all: bool,
     },
     /// Stop and remove all resources
-    Delete,
+    Delete {
+        /// Delete all running devrig instances
+        #[arg(long)]
+        all: bool,
+    },
     /// Show service status
     Ps {
         /// Show all running devrig instances

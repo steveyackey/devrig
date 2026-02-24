@@ -27,8 +27,10 @@ async fn main() {
             let dev_mode = { #[cfg(debug_assertions)] { dev } #[cfg(not(debug_assertions))] { false } };
             run_start(cli.global.config_file, services, dev_mode).await
         }
+        Commands::Stop { all, .. } if all => run_stop_all().await,
         Commands::Stop { .. } => run_stop(cli.global.config_file).await,
-        Commands::Delete => run_delete(cli.global.config_file).await,
+        Commands::Delete { all } if all => run_delete_all().await,
+        Commands::Delete { .. } => run_delete(cli.global.config_file).await,
         Commands::Ps { all } => commands::ps::run(cli.global.config_file.as_deref(), all),
         Commands::Init => commands::init::run(),
         Commands::Doctor => commands::doctor::run(),
@@ -184,8 +186,70 @@ async fn run_stop(config_file: Option<std::path::PathBuf>) -> anyhow::Result<()>
     orchestrator.stop().await
 }
 
+async fn run_stop_all() -> anyhow::Result<()> {
+    use devrig::orchestrator::registry::InstanceRegistry;
+
+    let mut registry = InstanceRegistry::load();
+    registry.cleanup();
+    let _ = registry.save();
+
+    let instances = registry.list().to_vec();
+    if instances.is_empty() {
+        eprintln!("No running devrig instances found.");
+        return Ok(());
+    }
+
+    for entry in &instances {
+        let config_path = std::path::PathBuf::from(&entry.config_path);
+        if !config_path.exists() {
+            eprintln!("  {} — config not found, skipping", entry.slug);
+            continue;
+        }
+        eprint!("  Stopping {} ... ", entry.slug);
+        match Orchestrator::from_config(config_path) {
+            Ok(o) => match o.stop().await {
+                Ok(()) => eprintln!("done"),
+                Err(e) => eprintln!("error: {:#}", e),
+            },
+            Err(e) => eprintln!("error: {:#}", e),
+        }
+    }
+    Ok(())
+}
+
 async fn run_delete(config_file: Option<std::path::PathBuf>) -> anyhow::Result<()> {
     let config_path = resolve_config(config_file.as_deref())?;
     let orchestrator = Orchestrator::from_config(config_path)?;
     orchestrator.delete().await
+}
+
+async fn run_delete_all() -> anyhow::Result<()> {
+    use devrig::orchestrator::registry::InstanceRegistry;
+
+    let mut registry = InstanceRegistry::load();
+    registry.cleanup();
+    let _ = registry.save();
+
+    let instances = registry.list().to_vec();
+    if instances.is_empty() {
+        eprintln!("No running devrig instances found.");
+        return Ok(());
+    }
+
+    for entry in &instances {
+        let config_path = std::path::PathBuf::from(&entry.config_path);
+        if !config_path.exists() {
+            eprintln!("  {} — config not found, skipping", entry.slug);
+            continue;
+        }
+        eprint!("  Deleting {} ... ", entry.slug);
+        match Orchestrator::from_config(config_path) {
+            Ok(o) => match o.delete().await {
+                Ok(()) => eprintln!("done"),
+                Err(e) => eprintln!("error: {:#}", e),
+            },
+            Err(e) => eprintln!("error: {:#}", e),
+        }
+    }
+    Ok(())
 }
