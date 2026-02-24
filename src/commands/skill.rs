@@ -5,6 +5,11 @@ const SKILL_MD: &str = include_str!("../../skill/claude-code/SKILL.md");
 const REFERENCE_CONFIGURATION_MD: &str =
     include_str!("../../skill/claude-code/reference/configuration.md");
 
+pub fn run_reference() -> Result<()> {
+    print!("{REFERENCE_CONFIGURATION_MD}");
+    Ok(())
+}
+
 pub async fn run_install(global: bool, config_file: Option<&Path>) -> Result<()> {
     let target = if global {
         crate::platform::home_dir()
@@ -21,20 +26,13 @@ pub async fn run_install(global: bool, config_file: Option<&Path>) -> Result<()>
         config_dir.join(".claude/skills/devrig")
     };
 
-    tokio::fs::create_dir_all(target.join("reference"))
+    tokio::fs::create_dir_all(&target)
         .await
         .with_context(|| format!("creating directory {}", target.display()))?;
 
     tokio::fs::write(target.join("SKILL.md"), SKILL_MD)
         .await
         .with_context(|| format!("writing SKILL.md to {}", target.display()))?;
-
-    tokio::fs::write(
-        target.join("reference/configuration.md"),
-        REFERENCE_CONFIGURATION_MD,
-    )
-    .await
-    .with_context(|| format!("writing reference/configuration.md to {}", target.display()))?;
 
     println!("Installed devrig skill to {}", target.display());
     println!();

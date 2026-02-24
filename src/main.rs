@@ -90,6 +90,7 @@ async fn main() {
             devrig::cli::SkillCommands::Install { global } => {
                 commands::skill::run_install(global, cli.global.config_file.as_deref()).await
             }
+            devrig::cli::SkillCommands::Reference => commands::skill::run_reference(),
         },
         Commands::Query { command } => match command {
             devrig::cli::QueryCommands::Traces {

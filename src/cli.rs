@@ -276,6 +276,8 @@ pub enum SkillCommands {
         #[arg(long)]
         global: bool,
     },
+    /// Print the full configuration reference
+    Reference,
 }
 
 #[derive(Debug, Subcommand)]
