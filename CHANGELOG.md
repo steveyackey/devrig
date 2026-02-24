@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.10.0](https://github.com/steveyackey/devrig/compare/v0.9.0...v0.10.0) (2026-02-24)
+
+
+### Features
+
+* show exit codes on dashboard, full-width status bar, and E2E test improvements ([7c9f6a8](https://github.com/steveyackey/devrig/commit/7c9f6a81ed7c157aa98d0e7292ad8f5c520b79e5))
+* start dashboard before infrastructure and show yellow for starting services ([6ee1505](https://github.com/steveyackey/devrig/commit/6ee1505ae31a2af86df331166530d1f38e295dd1))
+
+
+### Bug Fixes
+
+* prevent e2e test hangs with timeout and config path fix ([#22](https://github.com/steveyackey/devrig/issues/22)) ([e4fb491](https://github.com/steveyackey/devrig/commit/e4fb49122f6a831ef572e311e995c35e1d12ca9d))
+
 ## [0.9.0](https://github.com/steveyackey/devrig/compare/v0.8.0...v0.9.0) (2026-02-24)
 
 
