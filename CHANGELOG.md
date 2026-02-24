@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/steveyackey/devrig/compare/v0.12.1...v0.13.0) (2026-02-24)
+
+
+### Features
+
+* add configurable timeout for ready checks ([c3a6fc7](https://github.com/steveyackey/devrig/commit/c3a6fc7ed1b27c2c47f7478e9de3e0e608d41cb7))
+
 ## [0.12.1](https://github.com/steveyackey/devrig/compare/v0.12.0...v0.12.1) (2026-02-24)
 
 
