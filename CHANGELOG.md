@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.0](https://github.com/steveyackey/devrig/compare/v0.11.0...v0.12.0) (2026-02-24)
+
+
+### Features
+
+* add `devrig skill reference` command and slim down SKILL.md ([03e5c8f](https://github.com/steveyackey/devrig/commit/03e5c8f09fc7b041b925b28c30a35cbe4d6602d1))
+
 ## [0.11.0](https://github.com/steveyackey/devrig/compare/v0.10.1...v0.11.0) (2026-02-24)
 
 
