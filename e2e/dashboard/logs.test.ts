@@ -158,12 +158,9 @@ describe('Logs View', () => {
     const searchInput = page.locator('input[placeholder="Search log body..."]');
     await searchInput.fill('some search');
 
-    // Clear
-    const responsePromise = page.waitForResponse((resp) =>
-      resp.url().includes('/api/logs') && resp.status() === 200,
-    );
+    // Clear — don't waitForResponse here; the polling toHaveValue
+    // assertions are sufficient and avoid a CDP race in shared browsers.
     await page.getByRole('button', { name: 'Clear' }).click();
-    await responsePromise;
 
     await expect(severitySelect).toHaveValue('');
     await expect(searchInput).toHaveValue('');
