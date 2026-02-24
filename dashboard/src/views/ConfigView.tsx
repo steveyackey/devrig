@@ -2,7 +2,6 @@ import { Component, createSignal, createEffect, onCleanup, Show } from 'solid-js
 import { fetchConfig, updateConfig } from '../api';
 import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
-import { json } from '@codemirror/lang-json';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import { parse as parseToml } from 'smol-toml';
@@ -187,7 +186,6 @@ const ConfigView: Component = () => {
       doc: '',
       extensions: [
         basicSetup,
-        json(),
         darkTheme,
         syntaxTheme,
         EditorView.theme({

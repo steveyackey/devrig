@@ -4,8 +4,9 @@ use std::process::ExitStatus;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result};
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::sync::broadcast;
+use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, info, warn};
 
@@ -39,11 +40,15 @@ pub enum RestartMode {
 }
 
 impl RestartMode {
-    fn from_str(s: &str) -> Self {
+    fn from_policy_str(s: &str) -> Self {
         match s {
             "always" => RestartMode::Always,
+            "on-failure" => RestartMode::OnFailure,
             "never" => RestartMode::Never,
-            _ => RestartMode::OnFailure,
+            other => unreachable!(
+                "invalid restart policy '{}' should have been caught by validation",
+                other
+            ),
         }
     }
 }
@@ -86,7 +91,7 @@ impl RestartPolicy {
             initial_delay: Duration::from_millis(cfg.initial_delay_ms),
             max_delay: Duration::from_millis(cfg.max_delay_ms),
             reset_after: Duration::from_secs(60),
-            mode: RestartMode::from_str(&cfg.policy),
+            mode: RestartMode::from_policy_str(&cfg.policy),
         }
     }
 }
@@ -94,6 +99,46 @@ impl RestartPolicy {
 // ---------------------------------------------------------------------------
 // ServiceSupervisor
 // ---------------------------------------------------------------------------
+
+/// Spawn a task that reads lines from a stream and sends them to the log channel.
+fn spawn_stream_reader(
+    stream: Option<impl AsyncRead + Unpin + Send + 'static>,
+    tx: broadcast::Sender<LogLine>,
+    service_name: String,
+    is_stderr: bool,
+) -> JoinHandle<()> {
+    tokio::spawn(async move {
+        let Some(stream) = stream else { return };
+        let mut reader = BufReader::new(stream);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match reader.read_line(&mut line).await {
+                Ok(0) => break,
+                Ok(_) => {
+                    let text = line.trim_end_matches(['\r', '\n']).to_string();
+                    let level = crate::ui::logs::detect_log_level(&text);
+                    let _ = tx.send(LogLine {
+                        timestamp: chrono::Utc::now(),
+                        service: service_name.clone(),
+                        text,
+                        is_stderr,
+                        level,
+                    });
+                }
+                Err(e) => {
+                    warn!(
+                        service = %service_name,
+                        error = %e,
+                        "{} read error",
+                        if is_stderr { "stderr" } else { "stdout" }
+                    );
+                    break;
+                }
+            }
+        }
+    })
+}
 
 pub struct ServiceSupervisor {
     name: String,
@@ -133,6 +178,9 @@ impl ServiceSupervisor {
         let mut restart_count: u32 = 0;
         let mut startup_restart_count: u32 = 0;
         let mut last_status: Option<ExitStatus> = None;
+        // ServicePhase tracks lifecycle for future dashboard reporting.
+        // Currently write-only; when the dashboard needs per-service phase,
+        // send updates over a watch::Sender<ServicePhase>.
         let mut _phase = ServicePhase::Initial;
 
         // Track recent crash timestamps for crash rate detection
@@ -183,72 +231,18 @@ impl ServiceSupervisor {
             // -----------------------------------------------------------
             // Pipe stdout / stderr into the log channel
             // -----------------------------------------------------------
-            let stdout = child.stdout.take();
-            let stderr = child.stderr.take();
-
-            let stdout_handle = {
-                let tx = self.log_tx.clone();
-                let svc = self.name.clone();
-                tokio::spawn(async move {
-                    if let Some(out) = stdout {
-                        let mut reader = BufReader::new(out);
-                        let mut line = String::new();
-                        loop {
-                            line.clear();
-                            match reader.read_line(&mut line).await {
-                                Ok(0) => break, // EOF
-                                Ok(_) => {
-                                    let text = line.trim_end_matches(['\r', '\n']).to_string();
-                                    let level = crate::ui::logs::detect_log_level(&text);
-                                    let _ = tx.send(LogLine {
-                                        timestamp: chrono::Utc::now(),
-                                        service: svc.clone(),
-                                        text,
-                                        is_stderr: false,
-                                        level,
-                                    });
-                                }
-                                Err(e) => {
-                                    warn!(service = %svc, error = %e, "stdout read error");
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                })
-            };
-
-            let stderr_handle = {
-                let tx = self.log_tx.clone();
-                let svc = self.name.clone();
-                tokio::spawn(async move {
-                    if let Some(err) = stderr {
-                        let mut reader = BufReader::new(err);
-                        let mut line = String::new();
-                        loop {
-                            line.clear();
-                            match reader.read_line(&mut line).await {
-                                Ok(0) => break, // EOF
-                                Ok(_) => {
-                                    let text = line.trim_end_matches(['\r', '\n']).to_string();
-                                    let level = crate::ui::logs::detect_log_level(&text);
-                                    let _ = tx.send(LogLine {
-                                        timestamp: chrono::Utc::now(),
-                                        service: svc.clone(),
-                                        text,
-                                        is_stderr: true,
-                                        level,
-                                    });
-                                }
-                                Err(e) => {
-                                    warn!(service = %svc, error = %e, "stderr read error");
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                })
-            };
+            let stdout_handle = spawn_stream_reader(
+                child.stdout.take(),
+                self.log_tx.clone(),
+                self.name.clone(),
+                false,
+            );
+            let stderr_handle = spawn_stream_reader(
+                child.stderr.take(),
+                self.log_tx.clone(),
+                self.name.clone(),
+                true,
+            );
 
             // -----------------------------------------------------------
             // Wait for exit or cancellation
@@ -639,7 +633,7 @@ mod tests {
     }
 
     #[test]
-    fn service_phase_transitions() {
+    fn servicephase_transitions() {
         let phase = ServicePhase::Initial;
         assert_eq!(phase, ServicePhase::Initial);
 
@@ -662,11 +656,19 @@ mod tests {
     }
 
     #[test]
-    fn restart_mode_from_str() {
-        assert_eq!(RestartMode::from_str("always"), RestartMode::Always);
-        assert_eq!(RestartMode::from_str("on-failure"), RestartMode::OnFailure);
-        assert_eq!(RestartMode::from_str("never"), RestartMode::Never);
-        assert_eq!(RestartMode::from_str("unknown"), RestartMode::OnFailure);
+    fn restart_mode_from_policy_str() {
+        assert_eq!(RestartMode::from_policy_str("always"), RestartMode::Always);
+        assert_eq!(
+            RestartMode::from_policy_str("on-failure"),
+            RestartMode::OnFailure
+        );
+        assert_eq!(RestartMode::from_policy_str("never"), RestartMode::Never);
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid restart policy")]
+    fn restart_mode_from_policy_str_panics_on_unknown() {
+        RestartMode::from_policy_str("unknown");
     }
 
     #[test]

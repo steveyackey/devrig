@@ -9,6 +9,7 @@ import {
 } from '../api';
 import { Badge, Skeleton, Input, Select, Button, Table, TableHeader, TableRow, TableHead, TableCell } from '../components/ui';
 import MetricChart, { Sparkline } from '../components/MetricChart';
+import { formatTime, formatValue } from '../lib/format';
 
 interface MetricsViewProps {
   onEvent?: TelemetryEvent | null;
@@ -166,26 +167,6 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
     e.preventDefault();
     setLoading(true);
     loadMetrics();
-  };
-
-  const formatTime = (iso: string): string => {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-    } catch {
-      return iso;
-    }
-  };
-
-  const formatValue = (value: number): string => {
-    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (Math.abs(value) >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
-    if (Number.isInteger(value)) return value.toLocaleString();
-    return value.toFixed(2);
   };
 
   const metricTypeVariant = (type: string) => {

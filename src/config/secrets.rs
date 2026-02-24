@@ -1,10 +1,17 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
+use std::sync::LazyLock;
 
 use anyhow::{bail, Context, Result};
 use regex::Regex;
 
 use super::model::DevrigConfig;
+
+/// Compiled pattern matching `$VAR`, `${VAR}`, and `$$` escape sequences.
+static ENV_VAR_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)|\$\$")
+        .expect("valid regex")
+});
 
 // ---------------------------------------------------------------------------
 // SecretRegistry — tracks secret values for masking
@@ -126,14 +133,11 @@ pub fn expand_env_vars(
         return Ok((input.to_string(), false));
     }
 
-    let re = Regex::new(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}|\$([A-Za-z_][A-Za-z0-9_]*)|\$\$")
-        .expect("valid regex");
-
     let mut result = String::with_capacity(input.len());
     let mut last_end = 0;
     let mut had_expansion = false;
 
-    for caps in re.captures_iter(input) {
+    for caps in ENV_VAR_RE.captures_iter(input) {
         let m = caps.get(0).unwrap();
         result.push_str(&input[last_end..m.start()]);
 
@@ -247,10 +251,9 @@ pub fn expand_config_env_vars(
     let mut registry = SecretRegistry::new();
 
     // Global env values
-    let keys: Vec<String> = config.env.keys().cloned().collect();
-    for key in keys {
-        let value = config.env[&key].clone();
-        let (expanded, was_secret) = expand_env_vars(&value, env_file_vars, &format!("env.{}", key))?;
+    let pairs: Vec<(String, String)> = config.env.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+    for (key, value) in pairs {
+        let (expanded, was_secret) = expand_env_vars(&value, env_file_vars, &format!("env.{key}"))?;
         if was_secret {
             registry.track(&expanded);
         }
@@ -260,69 +263,77 @@ pub fn expand_config_env_vars(
     // Service env values
     let svc_names: Vec<String> = config.services.keys().cloned().collect();
     for svc_name in svc_names {
-        let env_keys: Vec<String> = config.services[&svc_name].env.keys().cloned().collect();
-        for key in env_keys {
-            let value = config.services[&svc_name].env[&key].clone();
+        let pairs: Vec<(String, String)> = config.services[&svc_name]
+            .env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (key, value) in pairs {
             let (expanded, was_secret) = expand_env_vars(
                 &value,
                 env_file_vars,
-                &format!("services.{}.env.{}", svc_name, key),
+                &format!("services.{svc_name}.env.{key}"),
             )?;
             if was_secret {
                 registry.track(&expanded);
             }
-            config.services.get_mut(&svc_name).unwrap().env.insert(key, expanded);
+            if let Some(svc) = config.services.get_mut(&svc_name) {
+                svc.env.insert(key, expanded);
+            }
         }
     }
 
-    // Docker env values and image
+    // Docker env values, image, and registry_auth
     let docker_names: Vec<String> = config.docker.keys().cloned().collect();
     for docker_name in docker_names {
         // docker.*.env values
-        let env_keys: Vec<String> = config.docker[&docker_name].env.keys().cloned().collect();
-        for key in env_keys {
-            let value = config.docker[&docker_name].env[&key].clone();
+        let pairs: Vec<(String, String)> = config.docker[&docker_name]
+            .env
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for (key, value) in pairs {
             let (expanded, was_secret) = expand_env_vars(
                 &value,
                 env_file_vars,
-                &format!("docker.{}.env.{}", docker_name, key),
+                &format!("docker.{docker_name}.env.{key}"),
             )?;
             if was_secret {
                 registry.track(&expanded);
             }
-            config.docker.get_mut(&docker_name).unwrap().env.insert(key, expanded);
+            if let Some(docker) = config.docker.get_mut(&docker_name) {
+                docker.env.insert(key, expanded);
+            }
         }
 
         // docker.*.image
-        {
-            let image = config.docker[&docker_name].image.clone();
-            let (expanded, was_secret) = expand_env_vars(
-                &image,
-                env_file_vars,
-                &format!("docker.{}.image", docker_name),
-            )?;
-            if was_secret {
-                registry.track(&expanded);
-            }
-            config.docker.get_mut(&docker_name).unwrap().image = expanded;
+        let image = config.docker[&docker_name].image.clone();
+        let (expanded, was_secret) = expand_env_vars(
+            &image,
+            env_file_vars,
+            &format!("docker.{docker_name}.image"),
+        )?;
+        if was_secret {
+            registry.track(&expanded);
+        }
+        if let Some(docker) = config.docker.get_mut(&docker_name) {
+            docker.image = expanded;
         }
 
         // docker.*.registry_auth
-        let has_auth = config.docker[&docker_name].registry_auth.is_some();
-        if has_auth {
-            let auth = config.docker[&docker_name].registry_auth.as_ref().unwrap();
+        if let Some(auth) = config.docker[&docker_name].registry_auth.as_ref() {
             let username = auth.username.clone();
             let password = auth.password.clone();
 
             let (expanded_user, user_secret) = expand_env_vars(
                 &username,
                 env_file_vars,
-                &format!("docker.{}.registry_auth.username", docker_name),
+                &format!("docker.{docker_name}.registry_auth.username"),
             )?;
             let (expanded_pass, pass_secret) = expand_env_vars(
                 &password,
                 env_file_vars,
-                &format!("docker.{}.registry_auth.password", docker_name),
+                &format!("docker.{docker_name}.registry_auth.password"),
             )?;
 
             if user_secret {
@@ -332,9 +343,14 @@ pub fn expand_config_env_vars(
                 registry.track(&expanded_pass);
             }
 
-            let auth_mut = config.docker.get_mut(&docker_name).unwrap().registry_auth.as_mut().unwrap();
-            auth_mut.username = expanded_user;
-            auth_mut.password = expanded_pass;
+            if let Some(auth_mut) = config
+                .docker
+                .get_mut(&docker_name)
+                .and_then(|d| d.registry_auth.as_mut())
+            {
+                auth_mut.username = expanded_user;
+                auth_mut.password = expanded_pass;
+            }
         }
     }
 

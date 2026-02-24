@@ -1,4 +1,4 @@
-import { Component, createSignal, createEffect, onCleanup, For, Show, createMemo } from 'solid-js';
+import { Component, createSignal, createEffect, For, Show, createMemo } from 'solid-js';
 import {
   fetchTrace,
   fetchRelated,
@@ -8,6 +8,7 @@ import {
   type StoredMetric,
   type RelatedResponse,
 } from '../api';
+import { formatDuration, severityVariant } from '../lib/format';
 import {
   Badge,
   Skeleton,
@@ -134,12 +135,6 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     return { min, max };
   });
 
-  const formatDuration = (ms: number): string => {
-    if (ms < 1) return '<1ms';
-    if (ms < 1000) return `${ms.toFixed(1)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
-
   const truncateId = (id: string): string => {
     if (id.length <= 12) return id;
     return id.slice(0, 8) + '...';
@@ -158,18 +153,6 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
       case 'Error': return 'bg-gradient-to-r from-error/80 to-error/50';
       case 'Ok': return 'bg-gradient-to-r from-accent/60 to-accent/30';
       default: return 'bg-gradient-to-r from-surface-3/80 to-surface-3/50';
-    }
-  };
-
-  const severityVariant = (severity: string) => {
-    switch (severity) {
-      case 'Fatal': return 'fatal' as const;
-      case 'Error': return 'error' as const;
-      case 'Warn': return 'warning' as const;
-      case 'Info': return 'info' as const;
-      case 'Debug': return 'debug' as const;
-      case 'Trace': return 'trace' as const;
-      default: return 'default' as const;
     }
   };
 
@@ -198,14 +181,16 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
         </div>
 
         <Show when={traceData()}>
-          <div class="ml-auto flex items-center gap-4 text-sm text-text-secondary">
-            <span>{traceData()!.spans.length} span{traceData()!.spans.length !== 1 ? 's' : ''}</span>
-            <span>
-              {formatDuration(
-                Math.max(...traceData()!.spans.map(s => s.duration_ms), 0)
-              )}
-            </span>
-          </div>
+          {(data) => (
+            <div class="ml-auto flex items-center gap-4 text-sm text-text-secondary">
+              <span>{data().spans.length} span{data().spans.length !== 1 ? 's' : ''}</span>
+              <span>
+                {formatDuration(
+                  Math.max(...data().spans.map(s => s.duration_ms), 0)
+                )}
+              </span>
+            </div>
+          )}
         </Show>
       </div>
 

@@ -408,6 +408,34 @@ fn find_closest_match<'a>(name: &str, candidates: &'a [String]) -> Option<&'a st
     best.map(|(name, _)| name)
 }
 
+/// Check that all `depends_on` entries for a given resource exist in `available`.
+fn check_deps_exist(
+    name: &str,
+    deps: &[String],
+    section: &str,
+    available: &[String],
+    source: &str,
+    src: &NamedSource<String>,
+    errors: &mut Vec<ConfigDiagnostic>,
+) {
+    for dep in deps {
+        if !available.contains(dep) {
+            let suggestion = find_closest_match(dep, available);
+            let advice = match suggestion {
+                Some(s) => format!("did you mean `{}`?", s),
+                None => format!("available resources: {:?}", available),
+            };
+            errors.push(ConfigDiagnostic::MissingDependency {
+                src: src.clone(),
+                span: find_depends_on_value(source, section, name, dep),
+                advice,
+                service: name.to_string(),
+                dependency: dep.clone(),
+            });
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Main validation function
 // ---------------------------------------------------------------------------
@@ -439,87 +467,19 @@ pub fn validate(
         }
     }
 
-    // Check all depends_on references exist (services)
+    // Check all depends_on references exist
     for (name, svc) in &config.services {
-        for dep in &svc.depends_on {
-            if !available.contains(dep) {
-                let suggestion = find_closest_match(dep, &available);
-                let advice = match suggestion {
-                    Some(s) => format!("did you mean `{}`?", s),
-                    None => format!("available resources: {:?}", available),
-                };
-                errors.push(ConfigDiagnostic::MissingDependency {
-                    src: src.clone(),
-                    span: find_depends_on_value(source, "services", name, dep),
-                    advice,
-                    service: name.clone(),
-                    dependency: dep.clone(),
-                });
-            }
-        }
+        check_deps_exist(name, &svc.depends_on, "services", &available, source, &src, &mut errors);
     }
-
-    // Check all depends_on references exist (docker)
     for (name, docker_cfg) in &config.docker {
-        for dep in &docker_cfg.depends_on {
-            if !available.contains(dep) {
-                let suggestion = find_closest_match(dep, &available);
-                let advice = match suggestion {
-                    Some(s) => format!("did you mean `{}`?", s),
-                    None => format!("available resources: {:?}", available),
-                };
-                errors.push(ConfigDiagnostic::MissingDependency {
-                    src: src.clone(),
-                    span: find_depends_on_value(source, "docker", name, dep),
-                    advice,
-                    service: name.clone(),
-                    dependency: dep.clone(),
-                });
-            }
-        }
+        check_deps_exist(name, &docker_cfg.depends_on, "docker", &available, source, &src, &mut errors);
     }
-
-    // Check all depends_on references exist (cluster image)
     if let Some(cluster) = &config.cluster {
         for (name, image_cfg) in &cluster.images {
-            for dep in &image_cfg.depends_on {
-                if !available.contains(dep) {
-                    let suggestion = find_closest_match(dep, &available);
-                    let advice = match suggestion {
-                        Some(s) => format!("did you mean `{}`?", s),
-                        None => format!("available resources: {:?}", available),
-                    };
-                    errors.push(ConfigDiagnostic::MissingDependency {
-                        src: src.clone(),
-                        span: find_depends_on_value(source, "cluster.image", name, dep),
-                        advice,
-                        service: name.clone(),
-                        dependency: dep.clone(),
-                    });
-                }
-            }
+            check_deps_exist(name, &image_cfg.depends_on, "cluster.image", &available, source, &src, &mut errors);
         }
-    }
-
-    // Check all depends_on references exist (cluster deploy)
-    if let Some(cluster) = &config.cluster {
         for (name, deploy) in &cluster.deploy {
-            for dep in &deploy.depends_on {
-                if !available.contains(dep) {
-                    let suggestion = find_closest_match(dep, &available);
-                    let advice = match suggestion {
-                        Some(s) => format!("did you mean `{}`?", s),
-                        None => format!("available resources: {:?}", available),
-                    };
-                    errors.push(ConfigDiagnostic::MissingDependency {
-                        src: src.clone(),
-                        span: find_depends_on_value(source, "cluster.deploy", name, dep),
-                        advice,
-                        service: name.clone(),
-                        dependency: dep.clone(),
-                    });
-                }
-            }
+            check_deps_exist(name, &deploy.depends_on, "cluster.deploy", &available, source, &src, &mut errors);
         }
     }
 

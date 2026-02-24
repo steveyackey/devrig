@@ -1,6 +1,7 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { fetchLogs, fetchStatus, type StoredLog, type TelemetryEvent } from '../api';
 import { Badge, Skeleton, Input, Select, Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui';
+import { severityVariant, formatTimeMs } from '../lib/format';
 
 interface LogsViewProps {
   onEvent?: TelemetryEvent | null;
@@ -60,32 +61,6 @@ const LogsView: Component<LogsViewProps> = (props) => {
     e.preventDefault();
     setLoading(true);
     loadLogs();
-  };
-
-  const severityVariant = (severity: string) => {
-    switch (severity) {
-      case 'Fatal': return 'fatal' as const;
-      case 'Error': return 'error' as const;
-      case 'Warn': return 'warning' as const;
-      case 'Info': return 'info' as const;
-      case 'Debug': return 'debug' as const;
-      case 'Trace': return 'trace' as const;
-      default: return 'default' as const;
-    }
-  };
-
-  const formatTime = (iso: string): string => {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString(undefined, {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        fractionalSecondDigits: 3,
-      } as Intl.DateTimeFormatOptions);
-    } catch {
-      return iso;
-    }
   };
 
   const severities = ['Trace', 'Debug', 'Info', 'Warn', 'Error', 'Fatal'];
@@ -229,7 +204,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
                   <TableRow data-testid="log-row" class="group animate-fade-in">
                     <TableCell class="align-top">
                       <span data-testid="log-timestamp" class="text-xs font-mono text-text-secondary whitespace-nowrap">
-                        {formatTime(log.timestamp)}
+                        {formatTimeMs(log.timestamp)}
                       </span>
                     </TableCell>
                     <TableCell class="align-top">

@@ -1,6 +1,7 @@
 import { Component, createSignal, createEffect, onCleanup, For, Show } from 'solid-js';
 import { fetchTraces, fetchStatus, type TraceSummary, type TelemetryEvent } from '../api';
 import { Badge, Skeleton, Input, Select, Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui';
+import { formatDuration, formatTime } from '../lib/format';
 
 interface TracesViewProps {
   onEvent?: TelemetryEvent | null;
@@ -64,24 +65,9 @@ const TracesView: Component<TracesViewProps> = (props) => {
     loadTraces();
   };
 
-  const formatDuration = (ms: number): string => {
-    if (ms < 1) return '<1ms';
-    if (ms < 1000) return `${ms.toFixed(1)}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
-
   const truncateId = (id: string): string => {
     if (id.length <= 16) return id;
     return id.slice(0, 8) + '...' + id.slice(-4);
-  };
-
-  const formatTime = (iso: string): string => {
-    try {
-      const d = new Date(iso);
-      return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    } catch {
-      return iso;
-    }
   };
 
   return (
