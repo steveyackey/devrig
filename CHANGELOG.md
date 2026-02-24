@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.0](https://github.com/steveyackey/devrig/compare/v0.8.0...v0.9.0) (2026-02-24)
+
+
+### Features
+
+* add --all flag to stop/delete and improve Ctrl+C handling ([6121ea4](https://github.com/steveyackey/devrig/commit/6121ea43640be740c948f36f6e1321d4f49f44e1))
+* add command and entrypoint overrides for docker containers ([#21](https://github.com/steveyackey/devrig/issues/21)) ([11b57e5](https://github.com/steveyackey/devrig/commit/11b57e58adea2ee56573893480a3ee38d38f40af))
+* migrate E2E tests from Playwright runner to bun test + add favicon ([98067e7](https://github.com/steveyackey/devrig/commit/98067e744fcb6445d9fd0d81172888d2ab76c2ed))
+
 ## [0.8.0](https://github.com/steveyackey/devrig/compare/v0.7.0...v0.8.0) (2026-02-24)
 
 
