@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0](https://github.com/steveyackey/devrig/compare/v0.7.0...v0.8.0) (2026-02-24)
+
+
+### Features
+
+* add bind mount support for docker volumes ([832d286](https://github.com/steveyackey/devrig/commit/832d286c98418b14098472735eef83b1494f95a9))
+* support local helm charts, values_files, and fix kustomize path resolution ([e9fd43a](https://github.com/steveyackey/devrig/commit/e9fd43a6cd3ce3e1e7d0e2a0d55e855eab07e40a))
+* support local helm charts, values_files, and fix kustomize path resolution ([96d767f](https://github.com/steveyackey/devrig/commit/96d767f25160dbc2492928fd3f0c0c6ab59b3fe3))
+
 ## [0.7.0](https://github.com/steveyackey/devrig/compare/v0.6.0...v0.7.0) (2026-02-24)
 
 
