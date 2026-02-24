@@ -74,6 +74,8 @@ NODE_ENV = "development"
 | `ports`         | map                | No       | `{}`    | Named port mappings (multi-port)         |
 | `env`           | map                | No       | `{}`    | Container env vars                       |
 | `volumes`       | list               | No       | `[]`    | Volume mounts: named (`"vol:/path"`) or bind (`"/host:/path"`, `"./rel:/path"`) |
+| `command`       | string or list     | No       | (none)  | Override image CMD                       |
+| `entrypoint`    | string or list     | No       | (none)  | Override image ENTRYPOINT                |
 | `ready_check`   | table              | No       | (none)  | Health check config                      |
 | `init`          | list               | No       | `[]`    | SQL/commands after first ready           |
 | `depends_on`    | list               | No       | `[]`    | Other docker/compose dependencies        |

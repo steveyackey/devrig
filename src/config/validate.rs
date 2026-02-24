@@ -1205,6 +1205,8 @@ mod tests {
             ports: BTreeMap::new(),
             env: BTreeMap::new(),
             volumes: Vec::new(),
+            command: None,
+            entrypoint: None,
             ready_check: None,
             init: Vec::new(),
             depends_on: deps.into_iter().map(|s| s.to_string()).collect(),

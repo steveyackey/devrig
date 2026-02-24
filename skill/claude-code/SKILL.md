@@ -140,6 +140,23 @@ POSTGRES_PASSWORD = "devrig"
 
 Bind mounts use `/absolute`, `./relative`, or `../parent` paths as the source. No Docker volume is created — the host path is mounted directly.
 
+**Docker with custom command/entrypoint:**
+
+```toml
+[docker.redis]
+image = "redis:7-alpine"
+port = 6379
+command = ["redis-server", "--appendonly", "yes"]
+ready_check = { type = "cmd", command = "redis-cli ping", expect = "PONG" }
+
+[docker.worker]
+image = "python:3.12-slim"
+entrypoint = ["python", "-u"]
+command = ["worker.py", "--verbose"]
+```
+
+Both `command` and `entrypoint` accept a string or a list of strings.
+
 **Service connected to docker containers:**
 
 ```toml
