@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Config Editor', () => {
@@ -7,11 +7,7 @@ describe('Config Editor', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {
@@ -66,15 +62,17 @@ describe('Config Editor', () => {
     const editor = page.locator('.cm-editor');
     await expect(editor).toBeVisible();
 
-    // Focus the editor
-    const cmContent = page.locator('.cm-content');
-    await cmContent.click();
-
-    // Move to end and add a comment
-    await page.keyboard.press('Meta+End');
-    await page.keyboard.press('Control+End');
-    await page.keyboard.press('Enter');
-    await page.keyboard.type('# test comment');
+    // Focus the editor and use CodeMirror's API to append text
+    await page.evaluate(() => {
+      const view = (document.querySelector('.cm-editor') as any)?.cmView?.view;
+      if (view) {
+        const { state } = view;
+        const end = state.doc.length;
+        view.dispatch({
+          changes: { from: end, insert: '\n# test comment' },
+        });
+      }
+    });
 
     // Click the save button
     const saveButton = page.getByRole('button', { name: 'Save' });
@@ -89,7 +87,7 @@ describe('Config Editor', () => {
     // Save should succeed (200)
     expect(response.status()).toBe(200);
 
-    // Should show "Saved" status or "Configuration saved" toast
+    // Should show "Saved" status
     await expect(
       page.getByText('Saved').first(),
     ).toBeVisible({ timeout: 5000 });

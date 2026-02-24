@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Overview / Status View', () => {
@@ -7,11 +7,7 @@ describe('Overview / Status View', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {

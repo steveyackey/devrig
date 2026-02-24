@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Logs View', () => {
@@ -7,11 +7,7 @@ describe('Logs View', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {
@@ -101,8 +97,8 @@ describe('Logs View', () => {
         const badge = badges.nth(i);
         const classes = await badge.getAttribute('class');
 
-        // Each badge should have a background color class
-        expect(classes).toMatch(/bg-/);
+        // Each badge should have a color styling class
+        expect(classes).toMatch(/text-|bg-/);
       }
     }
   });

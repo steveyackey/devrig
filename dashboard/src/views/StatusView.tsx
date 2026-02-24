@@ -108,6 +108,25 @@ const StatusView: Component = () => {
                     <For each={serviceList()}>
                       {(svc) => {
                         const isReporting = () => data().services.includes(svc.name);
+                        const isExited = () => svc.phase === 'stopped' || svc.phase === 'failed';
+                        const isFailedExit = () => svc.phase === 'failed' || (isExited() && svc.exit_code != null && svc.exit_code !== 0);
+
+                        const indicatorClass = () => {
+                          if (isExited()) {
+                            return isFailedExit() ? 'bg-error' : 'bg-surface-3';
+                          }
+                          return isReporting() ? 'bg-success animate-pulse-live' : 'bg-warning animate-pulse-live';
+                        };
+
+                        const indicatorShadow = () => {
+                          if (isExited()) {
+                            return isFailedExit() ? { "box-shadow": '0 0 6px rgba(239,68,68,0.4)' } : {};
+                          }
+                          return isReporting()
+                            ? { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' }
+                            : { "box-shadow": '0 0 6px rgba(251,191,36,0.3)' };
+                        };
+
                         return (
                           <div
                             data-testid="service-row"
@@ -115,13 +134,16 @@ const StatusView: Component = () => {
                           >
                             <span
                               data-testid="service-indicator"
-                              class={`inline-block w-2 h-2 rounded-full border-solid ${
-                                isReporting() ? 'bg-success animate-pulse-live' : 'bg-warning animate-pulse-live'
-                              }`}
-                              style={isReporting() ? { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' } : { "box-shadow": '0 0 6px rgba(251,191,36,0.3)' }}
+                              class={`inline-block w-2 h-2 rounded-full border-solid ${indicatorClass()}`}
+                              style={indicatorShadow()}
                             />
                             <span class="font-display text-lg text-text-primary tracking-[0.06em] uppercase">{svc.name}</span>
                             <Badge variant="default">{svc.kind}</Badge>
+                            <Show when={isExited()}>
+                              <Badge variant={isFailedExit() ? 'error' : 'default'}>
+                                {isFailedExit() ? `exited (${svc.exit_code ?? '?'})` : 'exited (0)'}
+                              </Badge>
+                            </Show>
                             <Show when={svc.port}>
                               <a
                                 data-testid="service-port-link"

@@ -888,15 +888,33 @@ impl Orchestrator {
                 );
 
                 let svc_name = name.clone();
+                let state_dir_clone = self.state_dir.clone();
                 self.tracker.spawn(async move {
-                    match supervisor.run().await {
+                    let (phase, exit_code) = match supervisor.run().await {
                         Ok(status) => {
                             info!(service = %svc_name, %status, "supervisor finished");
+                            let code = status.code();
+                            let phase = if code == Some(0) { "stopped" } else { "failed" };
+                            (phase.to_string(), code)
                         }
                         Err(e) => {
                             if !e.to_string().contains("cancelled") {
                                 error!(service = %svc_name, error = %e, "supervisor failed");
+                                ("failed".to_string(), None)
+                            } else {
+                                ("stopped".to_string(), None)
                             }
+                        }
+                    };
+
+                    // Update state.json with exit info
+                    if let Some(mut state) = ProjectState::load(&state_dir_clone) {
+                        if let Some(svc_state) = state.services.get_mut(&svc_name) {
+                            svc_state.phase = Some(phase);
+                            svc_state.exit_code = exit_code;
+                        }
+                        if let Err(e) = state.save(&state_dir_clone) {
+                            warn!(service = %svc_name, error = %e, "failed to update service exit state");
                         }
                     }
                 });
@@ -920,6 +938,8 @@ impl Orchestrator {
                     pid: 0,
                     port,
                     port_auto,
+                    phase: Some("starting".to_string()),
+                    exit_code: None,
                 },
             );
         }

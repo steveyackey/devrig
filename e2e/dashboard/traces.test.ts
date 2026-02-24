@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Traces View', () => {
@@ -7,11 +7,7 @@ describe('Traces View', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {
@@ -139,11 +135,7 @@ describe('Traces View', () => {
     await statusSelect.selectOption('Ok');
 
     // Clear filters
-    const responsePromise = page.waitForResponse((resp) =>
-      resp.url().includes('/api/traces') && resp.status() === 200,
-    );
     await page.getByRole('button', { name: 'Clear' }).click();
-    await responsePromise;
 
     // Status select should be back to empty (All)
     await expect(statusSelect).toHaveValue('');

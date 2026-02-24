@@ -1,5 +1,5 @@
 import { describe, test, beforeAll, afterAll } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 import { execSync } from 'child_process';
 import * as path from 'path';
@@ -24,19 +24,19 @@ describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
+    browser = await sharedBrowser();
     page = await newPage(browser);
   });
 
   afterAll(async () => {
-    await browser.close();
+    await page.context().close();
   });
 
   test('seed telemetry data via generator', async () => {
     runGenerator();
     // Allow data ingestion
     await new Promise((r) => setTimeout(r, 1500));
-  });
+  }, 45_000);
 
   test('screenshot: traces view', async () => {
     await page.goto('/#/traces');
@@ -44,7 +44,7 @@ describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
     await page.locator('[data-testid="trace-row"]').first().waitFor({ timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-traces.png`, fullPage: true });
-  });
+  }, 20_000);
 
   test('screenshot: trace detail (waterfall)', async () => {
     await page.goto('/#/traces');
@@ -57,7 +57,7 @@ describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
       await page.waitForTimeout(1000);
       await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-trace-detail.png`, fullPage: true });
     }
-  });
+  }, 20_000);
 
   test('screenshot: logs view', async () => {
     await page.goto('/#/logs');
@@ -65,7 +65,7 @@ describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
     await page.locator('[data-testid="log-row"]').first().waitFor({ timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-logs.png`, fullPage: true });
-  });
+  }, 20_000);
 
   test('screenshot: metrics view', async () => {
     await page.goto('/#/metrics');
@@ -74,7 +74,7 @@ describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
     await page.locator('[data-testid="metric-card"], [data-testid="metric-row"]').first().waitFor({ timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-metrics.png`, fullPage: true });
-  });
+  }, 20_000);
 
   test('screenshot: status view', async () => {
     await page.goto('/#/status');
@@ -82,5 +82,5 @@ describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
     await page.locator('[data-testid="stat-card"]').first().waitFor({ timeout: 10000 }).catch(() => {});
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-status.png`, fullPage: true });
-  });
+  }, 20_000);
 });

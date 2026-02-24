@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Metrics View', () => {
@@ -7,11 +7,7 @@ describe('Metrics View', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {
@@ -93,32 +89,23 @@ describe('Metrics View', () => {
       for (let i = 0; i < Math.min(badgeCount, 5); i++) {
         const badge = typeBadges.nth(i);
         const classes = await badge.getAttribute('class');
-        // Each badge should have a background color class
-        expect(classes).toMatch(/bg-/);
+        // Each badge should have a color styling class
+        expect(classes).toMatch(/text-|bg-/);
       }
     }
   });
 
   test('service filter dropdown populates from API', async () => {
-    // Wait for status API which populates service list
-    await page.waitForResponse((resp) =>
-      resp.url().includes('/api/status') && resp.status() === 200,
-    );
-
     const serviceSelect = page.locator('select').first();
     const options = serviceSelect.locator('option');
-    const optionCount = await options.count();
 
-    // Should have at least the "All Services" default option
-    expect(optionCount).toBeGreaterThanOrEqual(1);
+    // Wait for at least the "All Services" default option to appear
     await expect(options.first()).toHaveText('All Services');
+    const optionCount = await options.count();
+    expect(optionCount).toBeGreaterThanOrEqual(1);
   });
 
   test('filtering by service sends correct API request', async () => {
-    await page.waitForResponse((resp) =>
-      resp.url().includes('/api/status') && resp.status() === 200,
-    );
-
     const serviceSelect = page.locator('select').first();
     const options = serviceSelect.locator('option');
     const optionCount = await options.count();

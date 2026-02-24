@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Cmd+K Command Palette', () => {
@@ -7,11 +7,7 @@ describe('Cmd+K Command Palette', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {
@@ -27,15 +23,16 @@ describe('Cmd+K Command Palette', () => {
 
   test('Cmd+K opens the command palette', async () => {
     // Press Cmd+K (Meta+K on macOS, Ctrl+K on Linux/Windows)
+    const palette = page.locator('[data-testid="command-palette"]');
     await page.keyboard.press('Control+k');
 
-    // The command palette overlay should appear
-    const palette = page.locator('[data-testid="command-palette"]');
-    await expect(palette).toBeVisible({ timeout: 2000 }).catch(async () => {
+    try {
+      await expect(palette).toBeVisible({ timeout: 2000 });
+    } catch {
       // Fallback: try with Meta key for macOS
       await page.keyboard.press('Meta+k');
       await expect(palette).toBeVisible({ timeout: 2000 });
-    });
+    }
   });
 
   test('command palette has a search input', async () => {
@@ -43,9 +40,11 @@ describe('Cmd+K Command Palette', () => {
 
     // Look for the palette's search input
     const searchInput = page.locator('[data-testid="command-palette-input"]');
-    await expect(searchInput).toBeVisible({ timeout: 2000 }).catch(() => {
+    try {
+      await expect(searchInput).toBeVisible({ timeout: 2000 });
+    } catch {
       // Palette may not be implemented yet; skip gracefully
-    });
+    }
   });
 
   test('command palette lists available views', async () => {

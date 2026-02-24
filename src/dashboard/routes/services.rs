@@ -12,6 +12,10 @@ pub struct ServiceInfo {
     pub port: Option<u16>,
     pub kind: String,
     pub port_auto: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub phase: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
 }
 
 pub async fn get_services(
@@ -33,6 +37,8 @@ pub async fn get_services(
             port: svc.port,
             kind: "service".to_string(),
             port_auto: svc.port_auto,
+            phase: svc.phase.clone(),
+            exit_code: svc.exit_code,
         });
     }
 
@@ -42,6 +48,8 @@ pub async fn get_services(
             port: docker_svc.port,
             kind: "docker".to_string(),
             port_auto: docker_svc.port_auto,
+            phase: None,
+            exit_code: None,
         });
     }
 
@@ -51,6 +59,8 @@ pub async fn get_services(
             port: compose.port,
             kind: "compose".to_string(),
             port_auto: false,
+            phase: None,
+            exit_code: None,
         });
     }
 

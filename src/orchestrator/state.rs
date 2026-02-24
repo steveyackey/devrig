@@ -50,6 +50,10 @@ pub struct ServiceState {
     pub pid: u32,
     pub port: Option<u16>,
     pub port_auto: bool,
+    #[serde(default)]
+    pub phase: Option<String>,
+    #[serde(default)]
+    pub exit_code: Option<i32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

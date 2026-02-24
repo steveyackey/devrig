@@ -188,6 +188,8 @@ export interface ServiceInfo {
   port: number | null;
   kind: string;
   port_auto: boolean;
+  phase?: string;
+  exit_code?: number | null;
 }
 
 export function fetchServices(): Promise<ServiceInfo[]> {

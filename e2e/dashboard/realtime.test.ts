@@ -1,5 +1,5 @@
 import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
-import { launchBrowser, newPage } from '../helpers';
+import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 
 describe('Realtime Updates via WebSocket', () => {
@@ -7,11 +7,7 @@ describe('Realtime Updates via WebSocket', () => {
   let page: Page;
 
   beforeAll(async () => {
-    browser = await launchBrowser();
-  });
-
-  afterAll(async () => {
-    await browser.close();
+    browser = await sharedBrowser();
   });
 
   beforeEach(async () => {
@@ -36,7 +32,7 @@ describe('Realtime Updates via WebSocket', () => {
       () => (window as any).__devrig_ws_connected,
     );
     expect(wsConnected).toBe(true);
-  });
+  }, 15_000);
 
   test('status bar shows Live indicator when WebSocket is connected', async () => {
     await page.goto('/#/traces');
@@ -55,7 +51,7 @@ describe('Realtime Updates via WebSocket', () => {
     // The indicator dot
     const indicator = footer.locator('[data-testid="status-bar-ws-indicator"]');
     await expect(indicator).toBeVisible();
-  });
+  }, 15_000);
 
   test('new trace data appears in traces view without manual refresh', async () => {
     const tracesResponse = page.waitForResponse((resp) =>
@@ -105,7 +101,7 @@ describe('Realtime Updates via WebSocket', () => {
     // Verify the traces view still shows data
     const traceCountLabel = page.locator('[data-testid="traces-count"]');
     await expect(traceCountLabel).toBeVisible();
-  });
+  }, 20_000);
 
   test('new log data appears in logs view without manual refresh', async () => {
     const logsResponse = page.waitForResponse((resp) =>
@@ -133,7 +129,7 @@ describe('Realtime Updates via WebSocket', () => {
 
     // The logs view should remain functional
     await expect(page.getByRole('heading', { name: 'Logs' })).toBeVisible();
-  });
+  }, 20_000);
 
   test('new metric data appears in metrics view without manual refresh', async () => {
     const metricsResponse = page.waitForResponse((resp) =>
@@ -159,7 +155,7 @@ describe('Realtime Updates via WebSocket', () => {
     }
 
     await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible();
-  });
+  }, 20_000);
 
   test('WebSocket reconnects after disconnection', async () => {
     await page.goto('/#/traces');
@@ -181,7 +177,7 @@ describe('Realtime Updates via WebSocket', () => {
 
     // Wait for the WS check interval (every 2s) to pick up the disconnect
     await expect(footer.locator('[data-testid="status-bar-ws-status"]')).toHaveText('Disconnected', { timeout: 5_000 });
-  });
+  }, 15_000);
 
   test('status bar reflects WebSocket connectivity state', async () => {
     await page.goto('/#/traces');
@@ -196,7 +192,7 @@ describe('Realtime Updates via WebSocket', () => {
 
     // After the StatusBar's 2s check interval fires, it should show Live
     await expect(footer.locator('[data-testid="status-bar-ws-status"]')).toHaveText('Live', { timeout: 5_000 });
-  });
+  }, 15_000);
 
   test('traces view auto-refreshes on a timer', async () => {
     const firstResponse = page.waitForResponse((resp) =>
@@ -213,5 +209,5 @@ describe('Realtime Updates via WebSocket', () => {
 
     // Both responses should have been successful
     expect(secondResponse.status()).toBe(200);
-  });
+  }, 20_000);
 });

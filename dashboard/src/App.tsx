@@ -81,14 +81,14 @@ const App: Component = () => {
 
   return (
     <>
-      <div data-testid="app-layout" class="flex h-screen bg-surface-0 text-text-primary font-sans max-[960px]:flex-col">
-        {/* Sidebar */}
-        <Sidebar currentRoute={route()} />
+      <div data-testid="app-layout" class="flex flex-col h-screen bg-surface-0 text-text-primary font-sans">
+        {/* Sidebar + Content row */}
+        <div class="flex flex-1 min-h-0 max-[960px]:flex-col">
+          {/* Sidebar */}
+          <Sidebar currentRoute={route()} />
 
-        {/* Main area */}
-        <div class="flex flex-col flex-1 min-w-0 stencil-bg">
           {/* View content */}
-          <main data-testid="main-content" class="flex-1 overflow-hidden bg-surface-0">
+          <main data-testid="main-content" class="flex-1 overflow-hidden bg-surface-0 stencil-bg">
             <Switch fallback={<StatusView />}>
               <Match when={routeSegment() === 'traces'}>
                 <TracesView onEvent={latestEvent()} />
@@ -110,10 +110,10 @@ const App: Component = () => {
               </Match>
             </Switch>
           </main>
-
-          {/* Status bar */}
-          <StatusBar />
         </div>
+
+        {/* Status bar — full width below sidebar+content */}
+        <StatusBar />
       </div>
       <CommandPalette />
       <ToastProvider />

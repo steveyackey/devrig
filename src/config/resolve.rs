@@ -22,7 +22,7 @@ pub fn find_config(start: &Path, filename: &str) -> Option<PathBuf> {
 pub fn resolve_config(cli_file: Option<&Path>) -> anyhow::Result<PathBuf> {
     if let Some(path) = cli_file {
         if path.is_file() {
-            return Ok(path.to_path_buf());
+            return Ok(path.canonicalize()?);
         }
         anyhow::bail!("Config file not found: {}", path.display());
     }
@@ -108,7 +108,8 @@ mod tests {
 
         let result = resolve_config(Some(&config_path));
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), config_path);
+        // canonicalize() may return UNC paths on Windows, so compare canonical forms
+        assert_eq!(result.unwrap(), config_path.canonicalize().unwrap());
     }
 
     #[test]

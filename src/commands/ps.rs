@@ -225,6 +225,8 @@ mod tests {
                 pid: 0,
                 port: Some(3000),
                 port_auto: false,
+                phase: None,
+                exit_code: None,
             },
         );
         state.dashboard = Some(DashboardState {

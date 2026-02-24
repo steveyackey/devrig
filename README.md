@@ -10,21 +10,21 @@ everything down cleanly on Ctrl+C.
 devrig includes a built-in observability dashboard that receives OpenTelemetry
 data from your services in real time.
 
-![Status Overview](docs/images/dashboard-status-08821e88.png)
+![Status Overview](docs/images/dashboard-status-e44bf46e.png)
 
 Drill into any trace to see the full span waterfall across services:
 
-![Traces View](docs/images/dashboard-traces-e596caa4.png)
+![Traces View](docs/images/dashboard-traces-67e65e0d.png)
 
-![Trace Detail](docs/images/dashboard-trace-detail-1f51514e.png)
+![Trace Detail](docs/images/dashboard-trace-detail-dee48c43.png)
 
 Browse and search application logs with severity filtering:
 
-![Logs View](docs/images/dashboard-logs-b0e2fac3.png)
+![Logs View](docs/images/dashboard-logs-6c8ba334.png)
 
 Explore metrics with sparkline cards and expandable time-series charts:
 
-![Metrics View](docs/images/dashboard-metrics-2fa3ace4.png)
+![Metrics View](docs/images/dashboard-metrics-cf7566da.png)
 
 ## Install
 
