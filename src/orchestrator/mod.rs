@@ -370,6 +370,11 @@ impl Orchestrator {
         // ================================================================
         // Phase 3: Infrastructure containers (in dependency order)
         // ================================================================
+        let config_dir = self
+            .config_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf();
         let mut docker_states: BTreeMap<String, DockerState> = BTreeMap::new();
 
         // Pre-populate allocated ports from compose services
@@ -398,7 +403,7 @@ impl Orchestrator {
             let state = docker_mgr
                 .as_ref()
                 .expect("docker_mgr must exist when docker resources are present")
-                .start_service(name, &docker_config, prev_docker, &mut allocated_ports)
+                .start_service(name, &docker_config, prev_docker, &mut allocated_ports, &config_dir)
                 .await
                 .with_context(|| format!("starting docker service '{}'", name))?;
 
@@ -451,11 +456,6 @@ impl Orchestrator {
             };
 
             // Build and push cluster images in dependency order
-            let config_dir = self
-                .config_path
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."))
-                .to_path_buf();
 
             let mut deployed: BTreeMap<String, ClusterDeployState> = BTreeMap::new();
 

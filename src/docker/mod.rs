@@ -64,6 +64,7 @@ impl DockerManager {
         config: &DockerConfig,
         prev_state: Option<&DockerState>,
         allocated_ports: &mut HashSet<u16>,
+        config_dir: &std::path::Path,
     ) -> Result<DockerState> {
         // Pull image if needed (with optional registry auth)
         if !image::check_image_exists(&self.docker, &config.image).await {
@@ -121,8 +122,24 @@ impl DockerManager {
                     host_path,
                     container_path,
                 }) => {
-                    // Bind mounts pass straight through — no Docker volume needed
-                    volume_binds.push((host_path, container_path));
+                    // Resolve relative paths to absolute (Docker requires absolute paths)
+                    let resolved = if host_path.starts_with('/') {
+                        host_path
+                    } else {
+                        config_dir
+                            .join(&host_path)
+                            .canonicalize()
+                            .with_context(|| {
+                                format!(
+                                    "resolving bind mount path '{}' relative to '{}'",
+                                    host_path,
+                                    config_dir.display()
+                                )
+                            })?
+                            .to_string_lossy()
+                            .into_owned()
+                    };
+                    volume_binds.push((resolved, container_path));
                 }
                 None => {}
             }
