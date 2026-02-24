@@ -102,17 +102,15 @@ pub fn print_startup_summary(
         println!("  {}", line);
     }
 
-    if let Some(dash_svc) = services.get("[dashboard]") {
-        if let Some(port) = dash_svc.port {
-            println!();
-            if use_color {
-                println!(
-                    "  Dashboard: {}",
-                    format!("http://localhost:{}", port).cyan()
-                );
-            } else {
-                println!("  Dashboard: http://localhost:{}", port);
-            }
+    if let Some(port) = resolve_dashboard_display_port(services) {
+        println!();
+        if use_color {
+            println!(
+                "  Dashboard: {}",
+                format!("http://localhost:{}", port).cyan()
+            );
+        } else {
+            println!("  Dashboard: http://localhost:{}", port);
         }
     }
 
@@ -132,4 +130,59 @@ pub fn print_startup_summary(
         println!("  Press Ctrl+C to stop");
     }
     println!();
+}
+
+/// Resolve which port to display as the dashboard URL.
+/// Prefers the Vite dev server (live reload) when available,
+/// otherwise falls back to the embedded dashboard port.
+pub fn resolve_dashboard_display_port(
+    services: &BTreeMap<String, RunningService>,
+) -> Option<u16> {
+    services
+        .get("[vite]")
+        .or_else(|| services.get("[dashboard]"))
+        .and_then(|svc| svc.port)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn svc(port: u16) -> RunningService {
+        RunningService {
+            port: Some(port),
+            port_auto: false,
+            status: "running".to_string(),
+        }
+    }
+
+    #[test]
+    fn dashboard_port_shown_when_no_vite() {
+        let mut services = BTreeMap::new();
+        services.insert("[dashboard]".to_string(), svc(4000));
+        assert_eq!(resolve_dashboard_display_port(&services), Some(4000));
+    }
+
+    #[test]
+    fn vite_port_preferred_over_dashboard() {
+        let mut services = BTreeMap::new();
+        services.insert("[dashboard]".to_string(), svc(4000));
+        services.insert("[vite]".to_string(), svc(5173));
+        assert_eq!(resolve_dashboard_display_port(&services), Some(5173));
+    }
+
+    #[test]
+    fn no_dashboard_or_vite_returns_none() {
+        let mut services = BTreeMap::new();
+        services.insert("api".to_string(), svc(3000));
+        assert_eq!(resolve_dashboard_display_port(&services), None);
+    }
+
+    #[test]
+    fn auto_resolved_dashboard_port_shown() {
+        let mut services = BTreeMap::new();
+        // Port auto-resolved to 4001 because 4000 was busy
+        services.insert("[dashboard]".to_string(), svc(4001));
+        assert_eq!(resolve_dashboard_display_port(&services), Some(4001));
+    }
 }

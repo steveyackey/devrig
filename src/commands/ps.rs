@@ -147,17 +147,7 @@ fn run_all() -> Result<()> {
     for entry in instances {
         let state = ProjectState::load(&std::path::PathBuf::from(&entry.state_dir));
         let parts: Vec<String> = if let Some(ref s) = state {
-            let mut p = Vec::new();
-            if !s.services.is_empty() {
-                p.push(format!("{} svc", s.services.len()));
-            }
-            if !s.docker.is_empty() {
-                p.push(format!("{} docker", s.docker.len()));
-            }
-            if !s.compose_services.is_empty() {
-                p.push(format!("{} compose", s.compose_services.len()));
-            }
-            p
+            build_status_parts(s)
         } else {
             vec![]
         };
@@ -174,4 +164,80 @@ fn run_all() -> Result<()> {
 
 fn is_process_alive(pid: u32) -> bool {
     crate::platform::is_process_alive(pid)
+}
+
+/// Build the status summary parts for `ps --all` display.
+pub fn build_status_parts(state: &ProjectState) -> Vec<String> {
+    let mut p = Vec::new();
+    if !state.services.is_empty() {
+        p.push(format!("{} svc", state.services.len()));
+    }
+    if !state.docker.is_empty() {
+        p.push(format!("{} docker", state.docker.len()));
+    }
+    if !state.compose_services.is_empty() {
+        p.push(format!("{} compose", state.compose_services.len()));
+    }
+    if state.dashboard.is_some() {
+        p.push("dashboard".to_string());
+    }
+    p
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::orchestrator::state::{DashboardState, ServiceState};
+    use chrono::Utc;
+    use std::collections::BTreeMap;
+
+    fn empty_state() -> ProjectState {
+        ProjectState {
+            slug: "test".to_string(),
+            config_path: "devrig.toml".to_string(),
+            services: BTreeMap::new(),
+            started_at: Utc::now(),
+            docker: BTreeMap::new(),
+            compose_services: BTreeMap::new(),
+            network_name: None,
+            cluster: None,
+            dashboard: None,
+        }
+    }
+
+    #[test]
+    fn dashboard_only_shows_dashboard() {
+        let mut state = empty_state();
+        state.dashboard = Some(DashboardState {
+            dashboard_port: 4000,
+            grpc_port: 4317,
+            http_port: 4318,
+        });
+        assert_eq!(build_status_parts(&state), vec!["dashboard"]);
+    }
+
+    #[test]
+    fn services_and_dashboard() {
+        let mut state = empty_state();
+        state.services.insert(
+            "api".to_string(),
+            ServiceState {
+                pid: 0,
+                port: Some(3000),
+                port_auto: false,
+            },
+        );
+        state.dashboard = Some(DashboardState {
+            dashboard_port: 4000,
+            grpc_port: 4317,
+            http_port: 4318,
+        });
+        assert_eq!(build_status_parts(&state), vec!["1 svc", "dashboard"]);
+    }
+
+    #[test]
+    fn no_dashboard_no_services_is_empty() {
+        let state = empty_state();
+        assert!(build_status_parts(&state).is_empty());
+    }
 }
