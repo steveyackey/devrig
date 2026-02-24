@@ -18,13 +18,10 @@ pub async fn run_ready_check(
     host_port: Option<u16>,
     docker_name: &str,
 ) -> Result<()> {
-    let total_timeout = match check {
-        ReadyCheck::Log { .. } => Duration::from_secs(60),
-        _ => Duration::from_secs(30),
-    };
+    let total_timeout = Duration::from_secs(check.timeout_secs());
 
     match check {
-        ReadyCheck::Log { pattern } => {
+        ReadyCheck::Log { pattern, .. } => {
             run_log_check(docker, container_id, pattern, total_timeout, docker_name).await
         }
         _ => {
@@ -75,7 +72,7 @@ async fn run_single_check(
     host_port: Option<u16>,
 ) -> Result<()> {
     match check {
-        ReadyCheck::PgIsReady => {
+        ReadyCheck::PgIsReady { .. } => {
             let cmd = vec![
                 "pg_isready".to_string(),
                 "-h".to_string(),
@@ -90,11 +87,11 @@ async fn run_single_check(
             }
             Ok(())
         }
-        ReadyCheck::Cmd { command, expect } => {
+        ReadyCheck::Cmd { command, expect, .. } => {
             crate::docker::exec::exec_ready_check(docker, container_id, command, expect.as_deref())
                 .await
         }
-        ReadyCheck::Http { url } => {
+        ReadyCheck::Http { url, .. } => {
             let client = reqwest::Client::builder()
                 .timeout(Duration::from_secs(2))
                 .build()
@@ -105,7 +102,7 @@ async fn run_single_check(
             }
             Ok(())
         }
-        ReadyCheck::Tcp => {
+        ReadyCheck::Tcp { .. } => {
             let port = host_port.context("TCP ready check requires a port")?;
             tokio::time::timeout(
                 Duration::from_secs(2),

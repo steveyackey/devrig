@@ -92,14 +92,18 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/my
 | `tcp`        | host      | TCP connection to host port (30s)           |
 | `log`        | container | Stream logs, match pattern (60s)            |
 
+All ready check types support an optional `timeout` field (seconds) to override the default.
+
 ```toml
 ready_check = { type = "pg_isready" }
 ready_check = { type = "cmd", command = "redis-cli ping", expect = "PONG" }
 ready_check = { type = "http", url = "http://localhost:9000/health" }
+ready_check = { type = "http", url = "http://localhost:8080/health", timeout = 90 }
 ready_check = { type = "tcp" }
 [docker.es.ready_check]
 type = "log"
 match = "started"
+timeout = 120
 ```
 
 ---

@@ -262,13 +262,19 @@ type = "log"
 match = "started"
 ```
 
-| Type         | Runs where | Description                                    | Timeout |
-|--------------|------------|------------------------------------------------|---------|
-| `pg_isready` | container  | Runs `pg_isready -h localhost -q -t 2`         | 30s     |
-| `cmd`        | container  | Runs a command, checks exit code and stdout    | 30s     |
-| `http`       | host       | GET request, checks for 2xx status             | 30s     |
-| `tcp`        | host       | TCP connection to host port                    | 30s     |
-| `log`        | container  | Streams logs and searches for pattern match    | 60s     |
+| Type         | Runs where | Description                                    | Default timeout |
+|--------------|------------|------------------------------------------------|-----------------|
+| `pg_isready` | container  | Runs `pg_isready -h localhost -q -t 2`         | 30s             |
+| `cmd`        | container  | Runs a command, checks exit code and stdout    | 30s             |
+| `http`       | host       | GET request, checks for 2xx status             | 30s             |
+| `tcp`        | host       | TCP connection to host port                    | 30s             |
+| `log`        | container  | Streams logs and searches for pattern match    | 60s             |
+
+All types support an optional `timeout` field (seconds) to override the default:
+
+```toml
+ready_check = { type = "http", url = "http://localhost:8080/health", timeout = 90 }
+```
 
 All strategies use exponential backoff with jitter (250ms to 3s delay).
 

@@ -165,22 +165,53 @@ pub struct RegistryAuth {
 #[serde(tag = "type")]
 pub enum ReadyCheck {
     #[serde(rename = "pg_isready")]
-    PgIsReady,
+    PgIsReady {
+        #[serde(default)]
+        timeout: Option<u64>,
+    },
     #[serde(rename = "cmd")]
     Cmd {
         command: String,
         #[serde(default)]
         expect: Option<String>,
+        #[serde(default)]
+        timeout: Option<u64>,
     },
     #[serde(rename = "http")]
-    Http { url: String },
+    Http {
+        url: String,
+        #[serde(default)]
+        timeout: Option<u64>,
+    },
     #[serde(rename = "tcp")]
-    Tcp,
+    Tcp {
+        #[serde(default)]
+        timeout: Option<u64>,
+    },
     #[serde(rename = "log")]
     Log {
         #[serde(rename = "match")]
         pattern: String,
+        #[serde(default)]
+        timeout: Option<u64>,
     },
+}
+
+impl ReadyCheck {
+    /// Get the configured timeout or return the default for this check type.
+    pub fn timeout_secs(&self) -> u64 {
+        let custom = match self {
+            ReadyCheck::PgIsReady { timeout } => *timeout,
+            ReadyCheck::Cmd { timeout, .. } => *timeout,
+            ReadyCheck::Http { timeout, .. } => *timeout,
+            ReadyCheck::Tcp { timeout } => *timeout,
+            ReadyCheck::Log { timeout, .. } => *timeout,
+        };
+        custom.unwrap_or(match self {
+            ReadyCheck::Log { .. } => 60,
+            _ => 30,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -856,7 +887,7 @@ mod tests {
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         assert!(matches!(
             config.docker["postgres"].ready_check,
-            Some(ReadyCheck::PgIsReady)
+            Some(ReadyCheck::PgIsReady { .. })
         ));
     }
 
@@ -875,7 +906,7 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         match &config.docker["redis"].ready_check {
-            Some(ReadyCheck::Cmd { command, expect }) => {
+            Some(ReadyCheck::Cmd { command, expect, .. }) => {
                 assert_eq!(command, "redis-cli ping");
                 assert_eq!(expect.as_deref(), Some("PONG"));
             }
@@ -895,7 +926,7 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         match &config.docker["minio"].ready_check {
-            Some(ReadyCheck::Http { url }) => {
+            Some(ReadyCheck::Http { url, .. }) => {
                 assert_eq!(url, "http://localhost:9000/minio/health/live");
             }
             other => panic!("expected ReadyCheck::Http, got {:?}", other),
@@ -915,7 +946,7 @@ mod tests {
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         assert!(matches!(
             config.docker["redis"].ready_check,
-            Some(ReadyCheck::Tcp)
+            Some(ReadyCheck::Tcp { .. })
         ));
     }
 
@@ -933,7 +964,7 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         match &config.docker["postgres"].ready_check {
-            Some(ReadyCheck::Log { pattern }) => {
+            Some(ReadyCheck::Log { pattern, .. }) => {
                 assert_eq!(pattern, "ready to accept connections");
             }
             other => panic!("expected ReadyCheck::Log, got {:?}", other),
@@ -1045,7 +1076,7 @@ mod tests {
         assert_eq!(pg.volumes, vec!["pgdata:/var/lib/postgresql/data"]);
         assert_eq!(pg.init.len(), 2);
         assert_eq!(pg.depends_on, vec!["redis"]);
-        assert!(matches!(pg.ready_check, Some(ReadyCheck::PgIsReady)));
+        assert!(matches!(pg.ready_check, Some(ReadyCheck::PgIsReady { .. })));
         assert_eq!(pg.env.len(), 2);
     }
 
