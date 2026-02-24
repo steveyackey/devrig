@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use tokio::sync::{broadcast, RwLock};
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 use crate::config::model::OtelConfig;
 use types::TelemetryEvent;
@@ -69,7 +69,7 @@ impl OtelCollector {
                 warn!(error = %e, "OTLP gRPC server failed");
             }
         });
-        info!(port = self.grpc_port, "OTLP gRPC receiver started");
+        debug!(port = self.grpc_port, "OTLP gRPC receiver started");
 
         // Start HTTP OTLP receiver
         let http_store = Arc::clone(&self.store);
@@ -84,7 +84,7 @@ impl OtelCollector {
                 warn!(error = %e, "OTLP HTTP server failed");
             }
         });
-        info!(port = self.http_port, "OTLP HTTP receiver started");
+        debug!(port = self.http_port, "OTLP HTTP receiver started");
 
         // Background sweeper for expired telemetry
         let sweep_store = Arc::clone(&self.store);

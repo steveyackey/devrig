@@ -187,13 +187,13 @@ impl DockerManager {
         .await?;
 
         container::start_container(&self.docker, &container_id).await?;
-        tracing::info!(docker = %name, container = %container_name, "container started");
+        tracing::debug!(docker = %name, container = %container_name, "container started");
 
         // Run ready check
         if let Some(check) = &config.ready_check {
-            tracing::info!(docker = %name, "waiting for ready check");
+            tracing::debug!(docker = %name, "waiting for ready check");
             ready::run_ready_check(&self.docker, &container_id, check, port, name).await?;
-            tracing::info!(docker = %name, "ready");
+            tracing::debug!(docker = %name, "ready");
         }
 
         // Run init scripts (only if not already completed)
@@ -205,7 +205,7 @@ impl DockerManager {
             exec::run_init_scripts(&self.docker, &container_id, name, config).await?;
             init_completed = true;
             init_completed_at = Some(chrono::Utc::now());
-            tracing::info!(docker = %name, "init scripts completed");
+            tracing::debug!(docker = %name, "init scripts completed");
         }
 
         Ok(DockerState {
@@ -222,7 +222,7 @@ impl DockerManager {
     /// Stop a single docker service container.
     pub async fn stop_service(&self, state: &DockerState) -> Result<()> {
         container::stop_container(&self.docker, &state.container_id, 10).await?;
-        tracing::info!(container = %state.container_name, "container stopped");
+        tracing::debug!(container = %state.container_name, "container stopped");
         Ok(())
     }
 
@@ -230,7 +230,7 @@ impl DockerManager {
     pub async fn delete_service(&self, state: &DockerState) -> Result<()> {
         container::stop_container(&self.docker, &state.container_id, 10).await?;
         container::remove_container(&self.docker, &state.container_id, true).await?;
-        tracing::info!(container = %state.container_name, "container removed");
+        tracing::debug!(container = %state.container_name, "container removed");
         Ok(())
     }
 

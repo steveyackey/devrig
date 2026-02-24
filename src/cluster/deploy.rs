@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::SystemTime;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
-use tracing::info;
+use tracing::debug;
 
 use crate::config::model::{ClusterDeployConfig, ClusterImageConfig};
 use crate::orchestrator::state::ClusterDeployState;
@@ -75,7 +75,7 @@ pub async fn run_deploy(
     };
 
     // Docker build
-    info!(name, tag, "building image");
+    debug!(name, tag, "building image");
     let dockerfile = &deploy_config.dockerfile;
     run_cmd(
         "docker",
@@ -92,7 +92,7 @@ pub async fn run_deploy(
 
     // Docker push (only when registry is available)
     if registry_port.is_some() {
-        info!(name, tag, "pushing image");
+        debug!(name, tag, "pushing image");
         run_cmd("docker", &["push", &tag], None, None, cancel).await?;
 
         if cancel.is_cancelled() {
@@ -102,7 +102,7 @@ pub async fn run_deploy(
 
     // kubectl apply
     let manifests_str = manifests_path.to_string_lossy();
-    info!(name, manifests = %manifests_str, "applying manifests");
+    debug!(name, manifests = %manifests_str, "applying manifests");
     run_cmd(
         "kubectl",
         &["apply", "-f", &manifests_str],
@@ -141,7 +141,7 @@ pub async fn run_rebuild(
     };
 
     // Docker build
-    info!(name, tag, "rebuilding image");
+    debug!(name, tag, "rebuilding image");
     let dockerfile = &deploy_config.dockerfile;
     run_cmd(
         "docker",
@@ -158,7 +158,7 @@ pub async fn run_rebuild(
 
     // Docker push (only when registry is available)
     if registry_port.is_some() {
-        info!(name, tag, "pushing image");
+        debug!(name, tag, "pushing image");
         run_cmd("docker", &["push", &tag], None, None, cancel).await?;
 
         if cancel.is_cancelled() {
@@ -168,7 +168,7 @@ pub async fn run_rebuild(
 
     // kubectl apply
     let manifests_str = manifests_path.to_string_lossy();
-    info!(name, manifests = %manifests_str, "applying manifests");
+    debug!(name, manifests = %manifests_str, "applying manifests");
     run_cmd(
         "kubectl",
         &["apply", "-f", &manifests_str],
@@ -184,7 +184,7 @@ pub async fn run_rebuild(
 
     // Rollout restart to pick up the new image
     let deployment = format!("deployment/{name}");
-    info!(name, "restarting deployment");
+    debug!(name, "restarting deployment");
     run_cmd(
         "kubectl",
         &["rollout", "restart", &deployment],
@@ -219,7 +219,7 @@ pub async fn run_image_build(
     };
 
     // Docker build
-    info!(name, tag, "building image");
+    debug!(name, tag, "building image");
     let dockerfile = &image_config.dockerfile;
     run_cmd(
         "docker",
@@ -236,7 +236,7 @@ pub async fn run_image_build(
 
     // Docker push (only when registry is available)
     if registry_port.is_some() {
-        info!(name, tag, "pushing image");
+        debug!(name, tag, "pushing image");
         run_cmd("docker", &["push", &tag], None, None, cancel).await?;
     }
 
@@ -268,7 +268,7 @@ pub async fn rebuild_image(
     };
 
     // Docker build
-    info!(name, tag, "rebuilding image");
+    debug!(name, tag, "rebuilding image");
     let dockerfile = &image_config.dockerfile;
     run_cmd(
         "docker",
@@ -285,7 +285,7 @@ pub async fn rebuild_image(
 
     // Docker push (only when registry is available)
     if registry_port.is_some() {
-        info!(name, tag, "pushing image");
+        debug!(name, tag, "pushing image");
         run_cmd("docker", &["push", &tag], None, None, cancel).await?;
     }
 

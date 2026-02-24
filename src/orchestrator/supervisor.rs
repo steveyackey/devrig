@@ -8,7 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::config::model::RestartConfig;
 use crate::platform;
@@ -190,14 +190,14 @@ impl ServiceSupervisor {
             // Check cancellation before (re)spawning.
             if self.cancel.is_cancelled() {
                 _phase = ServicePhase::Stopped;
-                info!(service = %self.name, "cancelled before spawn");
+                debug!(service = %self.name, "cancelled before spawn");
                 return last_status.ok_or_else(|| {
                     anyhow::anyhow!("service {} cancelled before first start", self.name)
                 });
             }
 
             _phase = ServicePhase::Starting;
-            info!(
+            debug!(
                 service = %self.name,
                 attempt = restart_count + 1,
                 "spawning: {} {:?}",
@@ -259,7 +259,7 @@ impl ServiceSupervisor {
                 }
                 _ = self.cancel.cancelled() => {
                     _phase = ServicePhase::Stopped;
-                    info!(service = %self.name, "cancellation requested, terminating process group");
+                    debug!(service = %self.name, "cancellation requested, terminating process group");
                     platform::terminate_child(&mut child, child_pid, group_handle.as_ref()).await;
                     // Drain the IO tasks.
                     let _ = stdout_handle.await;
@@ -278,7 +278,7 @@ impl ServiceSupervisor {
             last_status = Some(status);
             let runtime = spawn_time.elapsed();
 
-            info!(
+            debug!(
                 service = %self.name,
                 status = %status,
                 runtime_ms = runtime.as_millis() as u64,
@@ -291,14 +291,14 @@ impl ServiceSupervisor {
 
             // RestartMode::Never — don't restart at all
             if self.policy.mode == RestartMode::Never {
-                info!(service = %self.name, "restart mode is 'never', not restarting");
+                debug!(service = %self.name, "restart mode is 'never', not restarting");
                 _phase = ServicePhase::Stopped;
                 return Ok(status);
             }
 
             // RestartMode::OnFailure — exit code 0 means clean exit, don't restart
             if self.policy.mode == RestartMode::OnFailure && exit_code == Some(0) {
-                info!(service = %self.name, "clean exit (code 0) with on-failure policy, not restarting");
+                debug!(service = %self.name, "clean exit (code 0) with on-failure policy, not restarting");
                 _phase = ServicePhase::Stopped;
                 return Ok(status);
             }
@@ -385,7 +385,7 @@ impl ServiceSupervisor {
             _phase = ServicePhase::Backoff {
                 attempt: restart_count + 1,
             };
-            info!(
+            debug!(
                 service = %self.name,
                 delay_ms = delay.as_millis() as u64,
                 restart_count,
@@ -398,7 +398,7 @@ impl ServiceSupervisor {
                 _ = tokio::time::sleep(delay) => {}
                 _ = self.cancel.cancelled() => {
                     _phase = ServicePhase::Stopped;
-                    info!(service = %self.name, "cancelled during backoff");
+                    debug!(service = %self.name, "cancelled during backoff");
                     return last_status.ok_or_else(|| {
                         anyhow::anyhow!("service {} cancelled during backoff", self.name)
                     });

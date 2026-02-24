@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::cluster::deploy;
 use crate::config::model::{ClusterDeployConfig, ClusterImageConfig};
@@ -145,7 +145,7 @@ async fn watch_and_rebuild_image(
         .watch(&watch_path, RecursiveMode::Recursive)
         .with_context(|| format!("watching directory {}", watch_path.display()))?;
 
-    info!(
+    debug!(
         image = %name,
         path = %watch_path.display(),
         "image file watcher started"
@@ -156,7 +156,7 @@ async fn watch_and_rebuild_image(
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
-                info!(image = %name, "image watcher shutting down");
+                debug!(image = %name, "image watcher shutting down");
                 if let Some(token) = rebuild_cancel.take() {
                     token.cancel();
                 }
@@ -181,7 +181,7 @@ async fn watch_and_rebuild_image(
                     continue;
                 }
 
-                info!(
+                debug!(
                     image = %name,
                     "file change detected, rebuilding image..."
                 );
@@ -208,11 +208,11 @@ async fn watch_and_rebuild_image(
                     .await
                     {
                         Ok(()) => {
-                            info!(image = %rebuild_name, "image rebuild completed successfully");
+                            debug!(image = %rebuild_name, "image rebuild completed successfully");
                         }
                         Err(e) => {
                             if child_cancel.is_cancelled() {
-                                info!(
+                                debug!(
                                     image = %rebuild_name,
                                     "image rebuild cancelled (newer change detected)"
                                 );
@@ -278,7 +278,7 @@ async fn watch_and_rebuild(
         .watch(&watch_path, RecursiveMode::Recursive)
         .with_context(|| format!("watching directory {}", watch_path.display()))?;
 
-    info!(
+    debug!(
         deploy = %name,
         path = %watch_path.display(),
         "file watcher started"
@@ -290,7 +290,7 @@ async fn watch_and_rebuild(
     loop {
         tokio::select! {
             _ = cancel.cancelled() => {
-                info!(deploy = %name, "watcher shutting down");
+                debug!(deploy = %name, "watcher shutting down");
                 // Cancel any in-progress rebuild.
                 if let Some(token) = rebuild_cancel.take() {
                     token.cancel();
@@ -321,7 +321,7 @@ async fn watch_and_rebuild(
                     continue;
                 }
 
-                info!(
+                debug!(
                     deploy = %name,
                     "file change detected, rebuilding..."
                 );
@@ -353,11 +353,11 @@ async fn watch_and_rebuild(
                     .await
                     {
                         Ok(()) => {
-                            info!(deploy = %rebuild_name, "rebuild completed successfully");
+                            debug!(deploy = %rebuild_name, "rebuild completed successfully");
                         }
                         Err(e) => {
                             if child_cancel.is_cancelled() {
-                                info!(
+                                debug!(
                                     deploy = %rebuild_name,
                                     "rebuild cancelled (newer change detected)"
                                 );

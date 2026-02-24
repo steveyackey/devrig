@@ -26,7 +26,7 @@ pub async fn check_image_exists(docker: &Docker, image: &str) -> bool {
 /// Pull a single Docker image with progress logging.
 pub async fn pull_image(docker: &Docker, image: &str) -> Result<()> {
     let (name, tag) = parse_image_ref(image);
-    tracing::info!(image = %image, "pulling image");
+    tracing::debug!(image = %image, "pulling image");
 
     let options = CreateImageOptions {
         from_image: Some(name.to_string()),
@@ -42,7 +42,7 @@ pub async fn pull_image(docker: &Docker, image: &str) -> Result<()> {
         }
     }
 
-    tracing::info!(image = %image, "image pulled successfully");
+    tracing::debug!(image = %image, "image pulled successfully");
     Ok(())
 }
 
@@ -53,7 +53,7 @@ pub async fn pull_image_with_auth(
     auth: Option<&RegistryAuth>,
 ) -> Result<()> {
     let (name, tag) = parse_image_ref(image);
-    tracing::info!(image = %image, "pulling image");
+    tracing::debug!(image = %image, "pulling image");
 
     let options = CreateImageOptions {
         from_image: Some(name.to_string()),
@@ -75,7 +75,7 @@ pub async fn pull_image_with_auth(
         }
     }
 
-    tracing::info!(image = %image, "image pulled successfully");
+    tracing::debug!(image = %image, "image pulled successfully");
     Ok(())
 }
 

@@ -2,7 +2,7 @@ use anyhow::{bail, Context, Result};
 use backon::{ExponentialBuilder, Retryable};
 use std::time::Duration;
 use tokio::process::Command;
-use tracing::info;
+use tracing::debug;
 
 /// Look up the host port for the k3d-managed registry container via `docker inspect`.
 ///
@@ -69,7 +69,7 @@ pub async fn wait_for_registry(port: u16) -> Result<()> {
 
     match result {
         Ok(Ok(())) => {
-            info!(port, "registry is ready");
+            debug!(port, "registry is ready");
             Ok(())
         }
         Ok(Err(e)) => Err(e),

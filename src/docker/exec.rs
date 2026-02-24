@@ -61,7 +61,7 @@ pub async fn run_init_scripts(
     docker_config: &DockerConfig,
 ) -> Result<()> {
     for (i, script) in docker_config.init.iter().enumerate() {
-        tracing::info!(
+        tracing::debug!(
             docker = %docker_name,
             "running init script {}/{}",
             i + 1,

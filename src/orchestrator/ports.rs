@@ -71,7 +71,7 @@ pub fn resolve_port(
                         allocated.insert(prev);
                         return prev;
                     }
-                    tracing::info!(
+                    tracing::debug!(
                         "{}: previously assigned port {} no longer available",
                         resource_key,
                         prev

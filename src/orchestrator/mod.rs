@@ -13,7 +13,7 @@ use chrono::Utc;
 use tokio::sync::{broadcast, mpsc};
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::cluster::addon::PortForwardManager;
 use crate::cluster::K3dManager;
@@ -44,7 +44,7 @@ fn resolve_dashboard_port(preferred: u16, label: &str, allocated: &mut HashSet<u
         preferred
     } else {
         let port = find_free_port_excluding(allocated);
-        info!("{label}: port {preferred} in use, using {port} instead");
+        warn!("{label}: port {preferred} in use, using {port} instead");
         allocated.insert(port);
         port
     }
@@ -254,7 +254,7 @@ impl Orchestrator {
                 .start(self.cancel.clone())
                 .await
                 .context("starting OTel collector")?;
-            info!(
+            debug!(
                 grpc_port = otel_grpc,
                 http_port = otel_http,
                 "OTel collector started"
@@ -284,7 +284,7 @@ impl Orchestrator {
                     warn!(error = %e, "Dashboard server failed");
                 }
             });
-            info!(port = dash_port, "Dashboard server started");
+            debug!(port = dash_port, "Dashboard server started");
 
             dashboard_state = Some(state::DashboardState {
                 dashboard_port: dash_port,
@@ -300,7 +300,7 @@ impl Orchestrator {
         let docker_mgr = if has_docker {
             let mgr = DockerManager::new(self.identity.slug.clone()).await?;
             mgr.ensure_network().await?;
-            info!(network = %mgr.network_name(), "Docker network ensured");
+            debug!(network = %mgr.network_name(), "Docker network ensured");
             Some(mgr)
         } else {
             None
@@ -327,7 +327,7 @@ impl Orchestrator {
                 .collect();
 
             if !compose_services.is_empty() {
-                info!(services = ?compose_services, "starting compose services");
+                debug!(services = ?compose_services, "starting compose services");
                 compose::lifecycle::compose_up(
                     &compose_file,
                     &self.identity.slug,
@@ -363,7 +363,7 @@ impl Orchestrator {
                     }
                 }
 
-                info!(count = compose_states.len(), "compose services started");
+                debug!(count = compose_states.len(), "compose services started");
             }
         }
 
@@ -393,7 +393,7 @@ impl Orchestrator {
 
             let prev_docker = prev_state.as_ref().and_then(|s| s.docker.get(name));
 
-            info!(docker = %name, image = %docker_config.image, "starting docker service");
+            debug!(docker = %name, image = %docker_config.image, "starting docker service");
 
             let state = docker_mgr
                 .as_ref()
@@ -422,7 +422,7 @@ impl Orchestrator {
                 network,
             );
 
-            info!(cluster = %k3d_mgr.cluster_name(), "creating k3d cluster");
+            debug!(cluster = %k3d_mgr.cluster_name(), "creating k3d cluster");
             k3d_mgr
                 .create_cluster()
                 .await
@@ -431,7 +431,7 @@ impl Orchestrator {
                 .write_kubeconfig()
                 .await
                 .context("writing kubeconfig")?;
-            info!(
+            debug!(
                 kubeconfig = %k3d_mgr.kubeconfig_path().display(),
                 "kubeconfig written"
             );
@@ -444,7 +444,7 @@ impl Orchestrator {
                 crate::cluster::registry::wait_for_registry(port)
                     .await
                     .context("waiting for registry")?;
-                info!(port = port, "local registry ready");
+                debug!(port = port, "local registry ready");
                 Some(port)
             } else {
                 None
@@ -469,7 +469,7 @@ impl Orchestrator {
                     .get(name)
                     .ok_or_else(|| anyhow::anyhow!("cluster image '{}' not in config", name))?;
 
-                info!(image = %name, "building cluster image");
+                debug!(image = %name, "building cluster image");
                 let state = crate::cluster::deploy::run_image_build(
                     name,
                     image_config,
@@ -494,7 +494,7 @@ impl Orchestrator {
                     .get(name)
                     .ok_or_else(|| anyhow::anyhow!("cluster deploy '{}' not in config", name))?;
 
-                info!(deploy = %name, "deploying to cluster");
+                debug!(deploy = %name, "deploying to cluster");
                 let state = crate::cluster::deploy::run_deploy(
                     name,
                     deploy_config,
@@ -562,13 +562,13 @@ impl Orchestrator {
                             port_forward: BTreeMap::new(),
                         },
                     );
-                    info!("Fluent Bit log collector manifest generated");
+                    debug!("Fluent Bit log collector manifest generated");
                 }
             }
 
             // Install addons (helm charts, manifests, kustomize)
             let installed_addons = if !combined_addons.is_empty() {
-                info!(
+                debug!(
                     count = combined_addons.len(),
                     "installing cluster addons"
                 );
@@ -749,7 +749,7 @@ impl Orchestrator {
             });
 
             vite_port = Some(5173);
-            info!(port = 5173, "Vite dev server started");
+            debug!(port = 5173, "Vite dev server started");
         }
 
         // ================================================================
@@ -892,7 +892,7 @@ impl Orchestrator {
                 self.tracker.spawn(async move {
                     let (phase, exit_code) = match supervisor.run().await {
                         Ok(status) => {
-                            info!(service = %svc_name, %status, "supervisor finished");
+                            debug!(service = %svc_name, %status, "supervisor finished");
                             let code = status.code();
                             let phase = if code == Some(0) { "stopped" } else { "failed" };
                             (phase.to_string(), code)
@@ -1157,7 +1157,7 @@ impl Orchestrator {
             match tokio::time::timeout(std::time::Duration::from_secs(10), self.tracker.wait())
                 .await
             {
-                Ok(()) => info!("All services stopped cleanly"),
+                Ok(()) => debug!("All services stopped cleanly"),
                 Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
             }
 
@@ -1198,7 +1198,7 @@ impl Orchestrator {
         self.cancel.cancel();
         self.tracker.close();
         match tokio::time::timeout(std::time::Duration::from_secs(10), self.tracker.wait()).await {
-            Ok(()) => info!("All services stopped cleanly"),
+            Ok(()) => debug!("All services stopped cleanly"),
             Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
         }
 
@@ -1257,7 +1257,7 @@ impl Orchestrator {
                     );
                 }
                 if !uninstall_addons.is_empty() {
-                    info!("uninstalling cluster addons before deletion");
+                    debug!("uninstalling cluster addons before deletion");
                     let cancel = CancellationToken::new();
                     let config_dir = self
                         .config_path
@@ -1273,7 +1273,7 @@ impl Orchestrator {
                     .await;
                 }
 
-                info!(cluster = %cs.cluster_name, "deleting k3d cluster");
+                debug!(cluster = %cs.cluster_name, "deleting k3d cluster");
                 if let Err(e) = k3d_mgr.delete_cluster().await {
                     warn!(error = %e, "failed to delete k3d cluster");
                 }

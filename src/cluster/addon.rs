@@ -7,7 +7,7 @@ use chrono::Utc;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use tracing::{error, info, warn};
+use tracing::{debug, error, warn};
 
 use crate::config::model::AddonConfig;
 use crate::orchestrator::state::AddonState;
@@ -178,7 +178,7 @@ async fn install_helm_addon(
         .await
         .with_context(|| format!("installing helm addon '{}'", name))?;
 
-    info!(addon = %name, chart = %chart, "helm addon installed");
+    debug!(addon = %name, chart = %chart, "helm addon installed");
     Ok(())
 }
 
@@ -209,7 +209,7 @@ async fn install_manifest_addon(
         .await
         .with_context(|| format!("applying manifest addon '{}'", name))?;
 
-    info!(addon = %name, path = %path, "manifest addon installed");
+    debug!(addon = %name, path = %path, "manifest addon installed");
     Ok(())
 }
 
@@ -240,7 +240,7 @@ async fn install_kustomize_addon(
         .await
         .with_context(|| format!("applying kustomize addon '{}'", name))?;
 
-    info!(addon = %name, path = %path, "kustomize addon installed");
+    debug!(addon = %name, path = %path, "kustomize addon installed");
     Ok(())
 }
 
@@ -259,7 +259,7 @@ pub async fn install_addons(
     let mut states = BTreeMap::new();
 
     for (name, addon) in addons {
-        info!(addon = %name, type_ = %addon.addon_type(), "installing addon");
+        debug!(addon = %name, type_ = %addon.addon_type(), "installing addon");
 
         match addon {
             AddonConfig::Helm {
@@ -350,7 +350,7 @@ pub async fn uninstall_addons(
 ) {
     // Uninstall in reverse alphabetical order
     for (name, addon) in addons.iter().rev() {
-        info!(addon = %name, "uninstalling addon");
+        debug!(addon = %name, "uninstalling addon");
         let result = match addon {
             AddonConfig::Helm { namespace, .. } => {
                 run_helm(
@@ -462,7 +462,7 @@ impl PortForwardManager {
                     let max_backoff = Duration::from_secs(30);
 
                     loop {
-                        info!(
+                        debug!(
                             addon = %addon_name,
                             local_port = local_port,
                             target = format!("{}:{}", resource, remote_port),
@@ -517,7 +517,7 @@ impl PortForwardManager {
                             }
                             _ = cancel.cancelled() => {
                                 let _ = child.kill().await;
-                                info!(addon = %addon_name, local_port = local_port, "port-forward stopped");
+                                debug!(addon = %addon_name, local_port = local_port, "port-forward stopped");
                                 break;
                             }
                         }
@@ -532,7 +532,7 @@ impl PortForwardManager {
         self.cancel.cancel();
         self.tracker.close();
         match tokio::time::timeout(Duration::from_secs(5), self.tracker.wait()).await {
-            Ok(()) => info!("all port-forwards stopped"),
+            Ok(()) => debug!("all port-forwards stopped"),
             Err(_) => warn!("port-forward shutdown timed out"),
         }
     }

@@ -7,7 +7,7 @@ pub mod watcher;
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
-use tracing::{info, warn};
+use tracing::{debug, warn};
 
 use crate::config::model::{ClusterConfig, ClusterRegistryAuth};
 
@@ -37,7 +37,7 @@ impl K3dManager {
     /// Create the k3d cluster if it does not already exist (idempotent).
     pub async fn create_cluster(&self) -> Result<()> {
         if self.cluster_exists().await? {
-            info!(cluster = %self.cluster_name, "cluster already exists, skipping create");
+            debug!(cluster = %self.cluster_name, "cluster already exists, skipping create");
             return Ok(());
         }
 
@@ -75,12 +75,12 @@ impl K3dManager {
                 .context("writing registries.yaml")?;
             args.push("--registry-config".to_string());
             args.push(registries_path.to_string_lossy().to_string());
-            info!(path = %registries_path.display(), "generated registries.yaml for external registries");
+            debug!(path = %registries_path.display(), "generated registries.yaml for external registries");
         }
 
         let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
         self.run_k3d(&arg_refs).await?;
-        info!(cluster = %self.cluster_name, "cluster created");
+        debug!(cluster = %self.cluster_name, "cluster created");
 
         Ok(())
     }
@@ -89,7 +89,7 @@ impl K3dManager {
     pub async fn delete_cluster(&self) -> Result<()> {
         self.run_k3d(&["cluster", "delete", &self.cluster_name])
             .await?;
-        info!(cluster = %self.cluster_name, "cluster deleted");
+        debug!(cluster = %self.cluster_name, "cluster deleted");
 
         if self.kubeconfig_path.exists() {
             tokio::fs::remove_file(&self.kubeconfig_path)
@@ -129,7 +129,7 @@ impl K3dManager {
         // Fix unresolved port 0 if k3d didn't resolve it
         self.fix_kubeconfig_port().await?;
 
-        info!(path = %self.kubeconfig_path.display(), "kubeconfig written");
+        debug!(path = %self.kubeconfig_path.display(), "kubeconfig written");
         Ok(())
     }
 
@@ -198,7 +198,7 @@ impl K3dManager {
             .await
             .context("writing fixed kubeconfig")?;
 
-        info!(port = %actual_port, "fixed kubeconfig API server port");
+        debug!(port = %actual_port, "fixed kubeconfig API server port");
         Ok(())
     }
 
