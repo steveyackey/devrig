@@ -15,9 +15,9 @@ dashboard/dist/
 # Claude Code
 .claude/worktrees/
 
-# E2E / Playwright
+# E2E
+e2e/node_modules/
 test-results/
-e2e/playwright-report/
 
 # Added by cargo
 

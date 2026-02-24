@@ -1,7 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Traces View', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Traces View', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/traces') && resp.status() === 200,
     );
@@ -9,12 +23,16 @@ test.describe('Traces View', () => {
     await responsePromise;
   });
 
-  test('displays the traces heading', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('displays the traces heading', async () => {
     await expect(page.getByRole('heading', { name: 'Traces' })).toBeVisible();
     await expect(page.getByText('Distributed trace overview')).toBeVisible();
   });
 
-  test('renders the filter bar with service, status, and duration filters', async ({ page }) => {
+  test('renders the filter bar with service, status, and duration filters', async () => {
     // Service dropdown
     const serviceSelect = page.locator('select').filter({ hasText: 'All Services' });
     await expect(serviceSelect).toBeVisible();
@@ -34,7 +52,7 @@ test.describe('Traces View', () => {
     await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
   });
 
-  test('trace table has correct column headers', async ({ page }) => {
+  test('trace table has correct column headers', async () => {
     const headers = page.locator('thead th');
     const headerTexts = await headers.allTextContents();
     const normalized = headerTexts.map((t) => t.trim().toLowerCase());
@@ -48,7 +66,7 @@ test.describe('Traces View', () => {
     expect(normalized).toContain('time');
   });
 
-  test('trace rows render with trace ID, service tags, and status badges', async ({ page }) => {
+  test('trace rows render with trace ID, service tags, and status badges', async () => {
     const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
@@ -67,7 +85,7 @@ test.describe('Traces View', () => {
     }
   });
 
-  test('waterfall renders on trace detail navigation', async ({ page }) => {
+  test('waterfall renders on trace detail navigation', async () => {
     const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
@@ -94,7 +112,7 @@ test.describe('Traces View', () => {
     }
   });
 
-  test('filters narrow trace results', async ({ page }) => {
+  test('filters narrow trace results', async () => {
     // Filter by status = Error
     const statusSelect = page.locator('select').nth(1);
     await statusSelect.selectOption('Error');
@@ -115,7 +133,7 @@ test.describe('Traces View', () => {
     }
   });
 
-  test('clear button resets all filters', async ({ page }) => {
+  test('clear button resets all filters', async () => {
     // Set a filter
     const statusSelect = page.locator('select').nth(1);
     await statusSelect.selectOption('Ok');
@@ -131,7 +149,7 @@ test.describe('Traces View', () => {
     await expect(statusSelect).toHaveValue('');
   });
 
-  test('span detail panel opens when clicking a span in waterfall', async ({ page }) => {
+  test('span detail panel opens when clicking a span in waterfall', async () => {
     const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
@@ -159,7 +177,7 @@ test.describe('Traces View', () => {
     }
   });
 
-  test('trace detail shows tabs for Spans, Logs, and Metrics', async ({ page }) => {
+  test('trace detail shows tabs for Spans, Logs, and Metrics', async () => {
     const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
@@ -178,7 +196,7 @@ test.describe('Traces View', () => {
     }
   });
 
-  test('back to traces link navigates away from detail', async ({ page }) => {
+  test('back to traces link navigates away from detail', async () => {
     const rows = page.locator('[data-testid="trace-row"]');
     const rowCount = await rows.count();
 
@@ -194,7 +212,7 @@ test.describe('Traces View', () => {
     }
   });
 
-  test('trace count is displayed in filter bar', async ({ page }) => {
+  test('trace count is displayed in filter bar', async () => {
     const countText = page.locator('[data-testid="traces-count"]');
     await expect(countText).toBeVisible();
     const text = await countText.textContent();

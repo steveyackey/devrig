@@ -1,4 +1,6 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, beforeAll, afterAll } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 import { execSync } from 'child_process';
 import * as path from 'path';
 
@@ -17,8 +19,18 @@ function runGenerator() {
   );
 }
 
-test.describe('Screenshot regeneration @screenshots', () => {
-  test.describe.configure({ mode: 'serial' });
+describe.skipIf(!process.env.SCREENSHOTS)('Screenshot regeneration', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+    page = await newPage(browser);
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
 
   test('seed telemetry data via generator', async () => {
     runGenerator();
@@ -26,7 +38,7 @@ test.describe('Screenshot regeneration @screenshots', () => {
     await new Promise((r) => setTimeout(r, 1500));
   });
 
-  test('screenshot: traces view', async ({ page }) => {
+  test('screenshot: traces view', async () => {
     await page.goto('/#/traces');
     await page.locator('[data-testid="traces-view"]').waitFor();
     await page.locator('[data-testid="trace-row"]').first().waitFor({ timeout: 10000 }).catch(() => {});
@@ -34,7 +46,7 @@ test.describe('Screenshot regeneration @screenshots', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-traces.png`, fullPage: true });
   });
 
-  test('screenshot: trace detail (waterfall)', async ({ page }) => {
+  test('screenshot: trace detail (waterfall)', async () => {
     await page.goto('/#/traces');
     await page.locator('[data-testid="traces-view"]').waitFor();
     const firstRow = page.locator('[data-testid="trace-row"]').first();
@@ -47,7 +59,7 @@ test.describe('Screenshot regeneration @screenshots', () => {
     }
   });
 
-  test('screenshot: logs view', async ({ page }) => {
+  test('screenshot: logs view', async () => {
     await page.goto('/#/logs');
     await page.locator('[data-testid="logs-view"]').waitFor();
     await page.locator('[data-testid="log-row"]').first().waitFor({ timeout: 10000 }).catch(() => {});
@@ -55,7 +67,7 @@ test.describe('Screenshot regeneration @screenshots', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-logs.png`, fullPage: true });
   });
 
-  test('screenshot: metrics view', async ({ page }) => {
+  test('screenshot: metrics view', async () => {
     await page.goto('/#/metrics');
     await page.locator('[data-testid="metrics-view"]').waitFor();
     // Wait for metric cards or rows to appear
@@ -64,7 +76,7 @@ test.describe('Screenshot regeneration @screenshots', () => {
     await page.screenshot({ path: `${SCREENSHOT_DIR}/dashboard-metrics.png`, fullPage: true });
   });
 
-  test('screenshot: status view', async ({ page }) => {
+  test('screenshot: status view', async () => {
     await page.goto('/#/status');
     await page.locator('[data-testid="status-view"]').waitFor();
     await page.locator('[data-testid="stat-card"]').first().waitFor({ timeout: 10000 }).catch(() => {});

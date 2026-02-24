@@ -1,7 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Logs View', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Logs View', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/logs') && resp.status() === 200,
     );
@@ -9,12 +23,16 @@ test.describe('Logs View', () => {
     await responsePromise;
   });
 
-  test('displays the logs heading', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('displays the logs heading', async () => {
     await expect(page.getByRole('heading', { name: 'Logs' })).toBeVisible();
     await expect(page.getByText('Application log records')).toBeVisible();
   });
 
-  test('renders the filter bar with service, severity, and search', async ({ page }) => {
+  test('renders the filter bar with service, severity, and search', async () => {
     // Service dropdown
     const serviceSelect = page.locator('select').filter({ hasText: 'All Services' });
     await expect(serviceSelect).toBeVisible();
@@ -32,7 +50,7 @@ test.describe('Logs View', () => {
     await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
   });
 
-  test('log table has correct column headers', async ({ page }) => {
+  test('log table has correct column headers', async () => {
     const headers = page.locator('thead th');
     const headerTexts = await headers.allTextContents();
     const normalized = headerTexts.map((t) => t.trim().toLowerCase());
@@ -44,7 +62,7 @@ test.describe('Logs View', () => {
     expect(normalized).toContain('trace');
   });
 
-  test('log lines appear with timestamp, severity badge, and body', async ({ page }) => {
+  test('log lines appear with timestamp, severity badge, and body', async () => {
     const rows = page.locator('[data-testid="log-row"]');
     const rowCount = await rows.count();
 
@@ -69,7 +87,7 @@ test.describe('Logs View', () => {
     }
   });
 
-  test('severity badges have correct color coding', async ({ page }) => {
+  test('severity badges have correct color coding', async () => {
     const rows = page.locator('[data-testid="log-row"]');
     const rowCount = await rows.count();
 
@@ -89,7 +107,7 @@ test.describe('Logs View', () => {
     }
   });
 
-  test('severity filter sends correct API request', async ({ page }) => {
+  test('severity filter sends correct API request', async () => {
     const severitySelect = page.locator('select').nth(1);
     await severitySelect.selectOption('Error');
 
@@ -109,7 +127,7 @@ test.describe('Logs View', () => {
     }
   });
 
-  test('severity dropdown contains all severity levels', async ({ page }) => {
+  test('severity dropdown contains all severity levels', async () => {
     const severitySelect = page.locator('select').nth(1);
     const options = severitySelect.locator('option');
     const optionTexts = await options.allTextContents();
@@ -123,7 +141,7 @@ test.describe('Logs View', () => {
     expect(optionTexts).toContain('Fatal');
   });
 
-  test('search filter sends query to API', async ({ page }) => {
+  test('search filter sends query to API', async () => {
     const searchInput = page.locator('input[placeholder="Search log body..."]');
     await searchInput.fill('connection');
 
@@ -136,7 +154,7 @@ test.describe('Logs View', () => {
     await responsePromise;
   });
 
-  test('clear button resets all filters', async ({ page }) => {
+  test('clear button resets all filters', async () => {
     // Set filters
     const severitySelect = page.locator('select').nth(1);
     await severitySelect.selectOption('Warn');
@@ -155,14 +173,14 @@ test.describe('Logs View', () => {
     await expect(searchInput).toHaveValue('');
   });
 
-  test('log count is displayed in filter bar', async ({ page }) => {
+  test('log count is displayed in filter bar', async () => {
     const countText = page.locator('[data-testid="logs-count"]');
     await expect(countText).toBeVisible();
     const text = await countText.textContent();
     expect(text).toMatch(/\d+ logs?/);
   });
 
-  test('logs with trace IDs show clickable trace links', async ({ page }) => {
+  test('logs with trace IDs show clickable trace links', async () => {
     const traceLinks = page.locator('[data-testid="log-trace-link"]');
     const linkCount = await traceLinks.count();
 
@@ -176,7 +194,7 @@ test.describe('Logs View', () => {
     }
   });
 
-  test('logs without trace IDs show a dash', async ({ page }) => {
+  test('logs without trace IDs show a dash', async () => {
     // Some logs may not have trace IDs and should show "-"
     const logRows = page.locator('[data-testid="log-row"]');
     const rowCount = await logRows.count();
@@ -195,7 +213,7 @@ test.describe('Logs View', () => {
     }
   });
 
-  test('sidebar highlights the Logs link', async ({ page }) => {
+  test('sidebar highlights the Logs link', async () => {
     const logsNav = page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Logs' });
     await expect(logsNav).toHaveAttribute('data-active', 'true');
   });

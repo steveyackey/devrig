@@ -1,7 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Metrics View', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Metrics View', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/metrics') && resp.status() === 200,
     );
@@ -9,12 +23,16 @@ test.describe('Metrics View', () => {
     await responsePromise;
   });
 
-  test('displays the metrics heading', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('displays the metrics heading', async () => {
     await expect(page.getByRole('heading', { name: 'Metrics' })).toBeVisible();
     await expect(page.getByText('Telemetry metric data points')).toBeVisible();
   });
 
-  test('renders the filter bar with metric name and service filter', async ({ page }) => {
+  test('renders the filter bar with metric name and service filter', async () => {
     // Metric name input
     const nameInput = page.locator('input[placeholder="Filter by name..."]');
     await expect(nameInput).toBeVisible();
@@ -28,7 +46,7 @@ test.describe('Metrics View', () => {
     await expect(page.getByRole('button', { name: 'Clear' })).toBeVisible();
   });
 
-  test('metrics table has correct column headers', async ({ page }) => {
+  test('metrics table has correct column headers', async () => {
     const headers = page.locator('thead th');
     const headerTexts = await headers.allTextContents();
     const normalized = headerTexts.map((t) => t.trim().toLowerCase());
@@ -41,7 +59,7 @@ test.describe('Metrics View', () => {
     expect(normalized).toContain('unit');
   });
 
-  test('metric rows render with name, type badge, and value', async ({ page }) => {
+  test('metric rows render with name, type badge, and value', async () => {
     const rows = page.locator('[data-testid="metric-row"]');
     const rowCount = await rows.count();
 
@@ -64,7 +82,7 @@ test.describe('Metrics View', () => {
     }
   });
 
-  test('type badges have correct color coding', async ({ page }) => {
+  test('type badges have correct color coding', async () => {
     const rows = page.locator('[data-testid="metric-row"]');
     const rowCount = await rows.count();
 
@@ -81,7 +99,7 @@ test.describe('Metrics View', () => {
     }
   });
 
-  test('service filter dropdown populates from API', async ({ page }) => {
+  test('service filter dropdown populates from API', async () => {
     // Wait for status API which populates service list
     await page.waitForResponse((resp) =>
       resp.url().includes('/api/status') && resp.status() === 200,
@@ -96,7 +114,7 @@ test.describe('Metrics View', () => {
     await expect(options.first()).toHaveText('All Services');
   });
 
-  test('filtering by service sends correct API request', async ({ page }) => {
+  test('filtering by service sends correct API request', async () => {
     await page.waitForResponse((resp) =>
       resp.url().includes('/api/status') && resp.status() === 200,
     );
@@ -120,7 +138,7 @@ test.describe('Metrics View', () => {
     }
   });
 
-  test('filtering by metric name sends correct API request', async ({ page }) => {
+  test('filtering by metric name sends correct API request', async () => {
     const nameInput = page.locator('input[placeholder="Filter by name..."]');
     await nameInput.fill('http.request');
 
@@ -133,7 +151,7 @@ test.describe('Metrics View', () => {
     await responsePromise;
   });
 
-  test('clear button resets filters', async ({ page }) => {
+  test('clear button resets filters', async () => {
     const nameInput = page.locator('input[placeholder="Filter by name..."]');
     await nameInput.fill('test-metric');
 
@@ -146,14 +164,14 @@ test.describe('Metrics View', () => {
     await expect(nameInput).toHaveValue('');
   });
 
-  test('metric count is displayed in filter bar', async ({ page }) => {
+  test('metric count is displayed in filter bar', async () => {
     const countText = page.locator('[data-testid="metrics-count"]');
     await expect(countText).toBeVisible();
     const text = await countText.textContent();
     expect(text).toMatch(/\d+ metrics?/);
   });
 
-  test('shows empty state when no metrics match filter', async ({ page }) => {
+  test('shows empty state when no metrics match filter', async () => {
     const nameInput = page.locator('input[placeholder="Filter by name..."]');
     await nameInput.fill('nonexistent_metric_xyz_999');
 
@@ -169,7 +187,7 @@ test.describe('Metrics View', () => {
     expect(text).toMatch(/0 metrics/);
   });
 
-  test('sidebar highlights the Metrics link', async ({ page }) => {
+  test('sidebar highlights the Metrics link', async () => {
     const metricsNav = page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Metrics' });
     await expect(metricsNav).toHaveAttribute('data-active', 'true');
   });

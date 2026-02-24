@@ -33,7 +33,7 @@ file to force recompile).
 ## Tests
 
 ```bash
-cd e2e && bunx playwright test    # 79 dashboard E2E tests (requires running devrig)
+cd e2e && bun test               # 79 dashboard E2E tests (requires running devrig)
 cd e2e && bun run screenshots    # regenerate docs/images/ screenshots (on-demand, seeds OTLP data)
 ```
 
@@ -55,7 +55,7 @@ glob) so that both the new files **and** the deletions of old files are staged.
 
 - `src/` — Rust: orchestrator, dashboard server, OTel collector
 - `dashboard/` — SolidJS + Tailwind v4 + Vite frontend
-- `e2e/` — Playwright E2E tests
+- `e2e/` — Bun + Playwright E2E tests
 - `docs/images/` — Dashboard screenshots (auto-generated)
 
 ## Conventions

@@ -1,12 +1,30 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Dark / Light Theme Toggle', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Dark / Light Theme Toggle', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     await page.goto('/');
     await page.waitForURL(/\/#\//);
   });
 
-  test('dashboard loads in dark mode by default', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('dashboard loads in dark mode by default', async () => {
     // The body element has class="dark"
     const body = page.locator('body');
     await expect(body).toHaveClass(/dark/);
@@ -16,7 +34,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     await expect(appLayout).toBeVisible();
   });
 
-  test('theme toggle button is visible', async ({ page }) => {
+  test('theme toggle button is visible', async () => {
     // Look for a theme toggle button
     const themeToggle = page.locator('[data-testid="theme-toggle"]');
 
@@ -32,7 +50,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     }
   });
 
-  test('clicking theme toggle switches to light mode', async ({ page }) => {
+  test('clicking theme toggle switches to light mode', async () => {
     const themeToggle = page.locator('[data-testid="theme-toggle"]');
 
     if (await themeToggle.isVisible().catch(() => false)) {
@@ -44,7 +62,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     }
   });
 
-  test('clicking theme toggle twice returns to dark mode', async ({ page }) => {
+  test('clicking theme toggle twice returns to dark mode', async () => {
     const themeToggle = page.locator('[data-testid="theme-toggle"]');
 
     if (await themeToggle.isVisible().catch(() => false)) {
@@ -59,7 +77,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     }
   });
 
-  test('theme preference persists across page refresh', async ({ page }) => {
+  test('theme preference persists across page refresh', async () => {
     const themeToggle = page.locator('[data-testid="theme-toggle"]');
 
     if (await themeToggle.isVisible().catch(() => false)) {
@@ -83,7 +101,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     }
   });
 
-  test('theme preference is stored in localStorage', async ({ page }) => {
+  test('theme preference is stored in localStorage', async () => {
     const themeToggle = page.locator('[data-testid="theme-toggle"]');
 
     if (await themeToggle.isVisible().catch(() => false)) {
@@ -103,7 +121,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     }
   });
 
-  test('dark mode renders with correct background colors', async ({ page }) => {
+  test('dark mode renders with correct background colors', async () => {
     // Verify dark mode colors are applied
     const sidebar = page.locator('[data-testid="sidebar"]');
     await expect(sidebar).toBeVisible();
@@ -121,7 +139,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     }
   });
 
-  test('sidebar and main content have consistent theme', async ({ page }) => {
+  test('sidebar and main content have consistent theme', async () => {
     // Both sidebar and main area should be visible
     const sidebar = page.locator('[data-testid="sidebar"]');
     const mainArea = page.locator('[data-testid="main-content"]');
@@ -130,7 +148,7 @@ test.describe('Dark / Light Theme Toggle', () => {
     await expect(mainArea).toBeVisible();
   });
 
-  test('text remains readable in dark mode', async ({ page }) => {
+  test('text remains readable in dark mode', async () => {
     // Header text should be light-colored on dark background
     const heading = page.locator('h1, h2').first();
     await expect(heading).toBeVisible();

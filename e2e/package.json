@@ -2,16 +2,13 @@
   "name": "devrig-e2e",
   "version": "1.0.0",
   "private": true,
-  "description": "Playwright E2E tests for the DevRig dashboard",
+  "description": "E2E tests for the DevRig dashboard",
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug",
-    "test:ui": "playwright test --ui",
-    "report": "playwright show-report",
-    "screenshots": "SCREENSHOTS=1 bunx playwright test --grep @screenshots && bun run update-readme-hashes.ts"
+    "test": "bun test",
+    "test:headed": "HEADED=1 bun test",
+    "screenshots": "SCREENSHOTS=1 bun test dashboard/screenshots.test.ts && bun run update-readme-hashes.ts"
   },
   "dependencies": {
-    "@playwright/test": "^1.50.0"
+    "playwright": "^1.50.0"
   }
 }

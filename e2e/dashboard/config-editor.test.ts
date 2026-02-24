@@ -1,7 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Config Editor', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Config Editor', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     const responsePromise = page.waitForResponse(
       (resp) => resp.url().includes('/api/config') && resp.status() === 200,
     );
@@ -9,7 +23,11 @@ test.describe('Config Editor', () => {
     await responsePromise;
   });
 
-  test('config editor loads current config', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('config editor loads current config', async () => {
     // The config view heading should be visible
     await expect(page.getByRole('heading', { name: 'Configuration' })).toBeVisible();
     await expect(page.getByText('Edit devrig.toml')).toBeVisible();
@@ -22,7 +40,7 @@ test.describe('Config Editor', () => {
     await expect(page.getByRole('button', { name: 'Save' })).toBeVisible();
   });
 
-  test('shows validation error for invalid TOML', async ({ page }) => {
+  test('shows validation error for invalid TOML', async () => {
     // Wait for the editor to be ready
     const editor = page.locator('.cm-editor');
     await expect(editor).toBeVisible();
@@ -44,7 +62,7 @@ test.describe('Config Editor', () => {
     await expect(saveButton).toBeDisabled();
   });
 
-  test('save button persists changes', async ({ page }) => {
+  test('save button persists changes', async () => {
     const editor = page.locator('.cm-editor');
     await expect(editor).toBeVisible();
 

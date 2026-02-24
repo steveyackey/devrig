@@ -1,13 +1,31 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Cmd+K Command Palette', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Cmd+K Command Palette', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     await page.goto('/');
     // Wait for the app to initialize and settle on default route
     await page.waitForURL(/\/#\//);
   });
 
-  test('Cmd+K opens the command palette', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('Cmd+K opens the command palette', async () => {
     // Press Cmd+K (Meta+K on macOS, Ctrl+K on Linux/Windows)
     await page.keyboard.press('Control+k');
 
@@ -20,7 +38,7 @@ test.describe('Cmd+K Command Palette', () => {
     });
   });
 
-  test('command palette has a search input', async ({ page }) => {
+  test('command palette has a search input', async () => {
     await page.keyboard.press('Control+k');
 
     // Look for the palette's search input
@@ -30,7 +48,7 @@ test.describe('Cmd+K Command Palette', () => {
     });
   });
 
-  test('command palette lists available views', async ({ page }) => {
+  test('command palette lists available views', async () => {
     await page.keyboard.press('Control+k');
 
     const palette = page.locator('[data-testid="command-palette"]');
@@ -49,7 +67,7 @@ test.describe('Cmd+K Command Palette', () => {
     }
   });
 
-  test('selecting a view in the palette navigates to it', async ({ page }) => {
+  test('selecting a view in the palette navigates to it', async () => {
     await page.keyboard.press('Control+k');
 
     const palette = page.locator('[data-testid="command-palette"]');
@@ -74,7 +92,7 @@ test.describe('Cmd+K Command Palette', () => {
     }
   });
 
-  test('Escape key closes the command palette', async ({ page }) => {
+  test('Escape key closes the command palette', async () => {
     await page.keyboard.press('Control+k');
 
     const palette = page.locator('[data-testid="command-palette"]');
@@ -85,7 +103,7 @@ test.describe('Cmd+K Command Palette', () => {
     }
   });
 
-  test('can navigate between all views using sidebar links', async ({ page }) => {
+  test('can navigate between all views using sidebar links', async () => {
     // This test ensures basic navigation works regardless of Cmd+K implementation
 
     // Navigate to Traces via sidebar
@@ -105,7 +123,7 @@ test.describe('Cmd+K Command Palette', () => {
     await expect(page.getByRole('heading', { name: 'System Status' })).toBeVisible();
   });
 
-  test('sidebar highlights the active route correctly when navigating', async ({ page }) => {
+  test('sidebar highlights the active route correctly when navigating', async () => {
     const navLinks = page.locator('[data-testid="sidebar-nav-item"]');
 
     // Click Logs
@@ -120,7 +138,7 @@ test.describe('Cmd+K Command Palette', () => {
     await expect(navLinks.filter({ hasText: 'Logs' })).not.toHaveAttribute('data-active', 'true');
   });
 
-  test('keyboard navigation with arrow keys works in palette', async ({ page }) => {
+  test('keyboard navigation with arrow keys works in palette', async () => {
     await page.keyboard.press('Control+k');
 
     const palette = page.locator('[data-testid="command-palette"]');

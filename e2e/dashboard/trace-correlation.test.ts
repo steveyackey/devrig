@@ -1,7 +1,28 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Trace Correlation', () => {
-  test('clicking a trace ID link on a log row navigates to the trace view', async ({ page }) => {
+describe('Trace Correlation', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
+  });
+
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('clicking a trace ID link on a log row navigates to the trace view', async () => {
     // Start on the logs view
     const logsResponse = page.waitForResponse((resp) =>
       resp.url().includes('/api/logs') && resp.status() === 200,
@@ -37,7 +58,7 @@ test.describe('Trace Correlation', () => {
     }
   });
 
-  test('trace detail view shows the full trace ID', async ({ page }) => {
+  test('trace detail view shows the full trace ID', async () => {
     // Navigate to traces to get a real trace ID
     const tracesResponse = page.waitForResponse((resp) =>
       resp.url().includes('/api/traces') && resp.status() === 200,
@@ -62,7 +83,7 @@ test.describe('Trace Correlation', () => {
     }
   });
 
-  test('trace detail shows related logs under the Logs tab', async ({ page }) => {
+  test('trace detail shows related logs under the Logs tab', async () => {
     const tracesResponse = page.waitForResponse((resp) =>
       resp.url().includes('/api/traces') && resp.status() === 200,
     );
@@ -108,7 +129,7 @@ test.describe('Trace Correlation', () => {
     }
   });
 
-  test('trace detail shows related metrics under the Metrics tab', async ({ page }) => {
+  test('trace detail shows related metrics under the Metrics tab', async () => {
     const tracesResponse = page.waitForResponse((resp) =>
       resp.url().includes('/api/traces') && resp.status() === 200,
     );
@@ -149,7 +170,7 @@ test.describe('Trace Correlation', () => {
     }
   });
 
-  test('navigating from log trace link preserves browser history', async ({ page }) => {
+  test('navigating from log trace link preserves browser history', async () => {
     const logsResponse = page.waitForResponse((resp) =>
       resp.url().includes('/api/logs') && resp.status() === 200,
     );

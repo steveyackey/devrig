@@ -1,7 +1,21 @@
-import { test, expect } from '@playwright/test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { launchBrowser, newPage } from '../helpers';
+import type { Browser, Page } from 'playwright';
 
-test.describe('Overview / Status View', () => {
-  test.beforeEach(async ({ page }) => {
+describe('Overview / Status View', () => {
+  let browser: Browser;
+  let page: Page;
+
+  beforeAll(async () => {
+    browser = await launchBrowser();
+  });
+
+  afterAll(async () => {
+    await browser.close();
+  });
+
+  beforeEach(async () => {
+    page = await newPage(browser);
     const responsePromise = page.waitForResponse((resp) =>
       resp.url().includes('/api/status') && resp.status() === 200,
     );
@@ -9,12 +23,16 @@ test.describe('Overview / Status View', () => {
     await responsePromise;
   });
 
-  test('displays the system status heading', async ({ page }) => {
+  afterEach(async () => {
+    await page.context().close();
+  });
+
+  test('displays the system status heading', async () => {
     await expect(page.getByRole('heading', { name: 'System Status' })).toBeVisible();
     await expect(page.getByText('Telemetry pipeline overview')).toBeVisible();
   });
 
-  test('renders stat cards for traces, spans, logs, and metrics', async ({ page }) => {
+  test('renders stat cards for traces, spans, logs, and metrics', async () => {
     // Each stat card has a label rendered as uppercase text
     await expect(page.getByText('Traces', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Spans', { exact: true })).toBeVisible();
@@ -22,7 +40,7 @@ test.describe('Overview / Status View', () => {
     await expect(page.getByText('Metrics', { exact: true }).first()).toBeVisible();
   });
 
-  test('stat cards display numeric values', async ({ page }) => {
+  test('stat cards display numeric values', async () => {
     // The stat card values are rendered with data-testid
     const statValues = page.locator('[data-testid="stat-card-value"]');
     await expect(statValues).toHaveCount(4);
@@ -35,14 +53,14 @@ test.describe('Overview / Status View', () => {
     }
   });
 
-  test('shows reporting services section', async ({ page }) => {
+  test('shows reporting services section', async () => {
     await expect(page.getByText(/Services \(\d+\)/)).toBeVisible();
     await expect(
       page.getByText('Configured services and their ports'),
     ).toBeVisible();
   });
 
-  test('services have green status indicator dots', async ({ page }) => {
+  test('services have green status indicator dots', async () => {
     const serviceIndicators = page.locator('[data-testid="service-indicator"]');
     const count = await serviceIndicators.count();
 
@@ -52,7 +70,7 @@ test.describe('Overview / Status View', () => {
     }
   });
 
-  test('service rows have View Traces and View Logs links', async ({ page }) => {
+  test('service rows have View Traces and View Logs links', async () => {
     const serviceRows = page.locator('[data-testid="service-row"]');
     const rowCount = await serviceRows.count();
 
@@ -63,7 +81,7 @@ test.describe('Overview / Status View', () => {
     }
   });
 
-  test('refresh button triggers data reload', async ({ page }) => {
+  test('refresh button triggers data reload', async () => {
     const refreshButton = page.getByRole('button', { name: 'Refresh' });
     await expect(refreshButton).toBeVisible();
 
@@ -75,16 +93,16 @@ test.describe('Overview / Status View', () => {
     await responsePromise;
   });
 
-  test('shows auto-refresh indicator', async ({ page }) => {
+  test('shows auto-refresh indicator', async () => {
     await expect(page.getByText('Auto-refreshes every 5 seconds')).toBeVisible();
   });
 
-  test('sidebar navigation highlights the Status link', async ({ page }) => {
+  test('sidebar navigation highlights the Status link', async () => {
     const statusNav = page.locator('[data-testid="sidebar-nav-item"]').filter({ hasText: 'Status' });
     await expect(statusNav).toHaveAttribute('data-active', 'true');
   });
 
-  test('status bar at the bottom shows telemetry counts', async ({ page }) => {
+  test('status bar at the bottom shows telemetry counts', async () => {
     const footer = page.locator('[data-testid="status-bar"]');
     await expect(footer).toBeVisible();
 
