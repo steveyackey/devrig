@@ -122,6 +122,24 @@ port = 6379
 ready_check = { type = "cmd", command = "redis-cli ping", expect = "PONG" }
 ```
 
+**Docker with bind mounts (mount host directories):**
+
+```toml
+[docker.postgres]
+image = "postgres:16-alpine"
+port = 5432
+volumes = [
+    "pgdata:/var/lib/postgresql/data",          # named volume (managed by devrig)
+    "./init-scripts:/docker-entrypoint-initdb.d", # bind mount (host dir)
+]
+ready_check = { type = "pg_isready" }
+[docker.postgres.env]
+POSTGRES_USER = "devrig"
+POSTGRES_PASSWORD = "devrig"
+```
+
+Bind mounts use `/absolute`, `./relative`, or `../parent` paths as the source. No Docker volume is created — the host path is mounted directly.
+
 **Service connected to docker containers:**
 
 ```toml
@@ -199,6 +217,12 @@ depends_on = ["job-runner"]   # ensures image exists before deploy
 2. Check metrics: `devrig query metrics --limit 50`
 3. Look for warnings: `devrig query logs --level warn --limit 30`
 4. Service-specific: `devrig query traces --service <name> --limit 10`
+
+## Docker vs Compose
+
+- **`[docker.*]`** — devrig fully manages the container: pull, start, health-check, init scripts, volumes, teardown. Recommended for most infrastructure.
+- **`[compose]`** — delegates to an existing `docker-compose.yml`. Good when you already have a working compose file and want to integrate into devrig's dependency graph.
+- Compose is a stepping stone; migrate to `[docker.*]` blocks for full lifecycle control.
 
 ## Tips
 

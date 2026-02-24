@@ -200,7 +200,7 @@ type = "pg_isready"
 | `port`          | integer or `"auto"`| No       | (none)  | Single port mapping (host:container).         |
 | `ports`         | map of ports       | No       | `{}`    | Named port mappings for multi-port services.  |
 | `env`           | map of strings     | No       | `{}`    | Container environment variables.              |
-| `volumes`       | list of strings    | No       | `[]`    | Volume mounts (`"name:/path/in/container"`).  |
+| `volumes`       | list of strings    | No       | `[]`    | Volume mounts (named `"vol:/path"` or bind `"/host:/path"`). |
 | `ready_check`   | table              | No       | (none)  | Health check configuration.                   |
 | `init`          | list of strings    | No       | `[]`    | SQL/commands to run after first ready.         |
 | `depends_on`    | list of strings    | No       | `[]`    | Other docker or compose dependencies.          |
@@ -297,6 +297,34 @@ volumes = ["pgdata:/var/lib/postgresql/data"]
 ```
 
 Volumes persist across `devrig stop` but are removed by `devrig delete`.
+
+#### Bind mounts
+
+To mount a host directory directly into the container, use an absolute or
+relative path as the source:
+
+```toml
+volumes = [
+    "/home/user/data:/var/lib/postgresql/data",   # absolute path
+    "./config:/etc/myapp",                         # relative to config file
+    "../shared:/app/shared",                       # parent-relative
+]
+```
+
+Bind mounts are detected when the source starts with `/`, `./`, or `../`.
+No Docker volume is created for bind mounts — the host path is passed
+directly to Docker. Bind mounts are **not** removed by `devrig delete`.
+
+#### Docker vs Compose — when to use which
+
+Use `[docker.*]` blocks when you want devrig to fully manage the container
+lifecycle (pull, start, health-check, init, volumes, teardown). This is the
+recommended approach for most infrastructure services.
+
+Use `[compose]` when you have an existing `docker-compose.yml` that already
+works and you want to integrate those services into devrig's dependency
+graph without rewriting the config. Compose is a good stepping stone for
+gradual migration to native `[docker.*]` blocks.
 
 ## `[cluster]` section
 

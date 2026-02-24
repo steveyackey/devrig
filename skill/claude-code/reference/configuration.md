@@ -73,7 +73,7 @@ NODE_ENV = "development"
 | `port`          | int or `"auto"`    | No       | (none)  | Single port mapping (host:container)     |
 | `ports`         | map                | No       | `{}`    | Named port mappings (multi-port)         |
 | `env`           | map                | No       | `{}`    | Container env vars                       |
-| `volumes`       | list               | No       | `[]`    | Volume mounts (`"name:/path"`)           |
+| `volumes`       | list               | No       | `[]`    | Volume mounts: named (`"vol:/path"`) or bind (`"/host:/path"`, `"./rel:/path"`) |
 | `ready_check`   | table              | No       | (none)  | Health check config                      |
 | `init`          | list               | No       | `[]`    | SQL/commands after first ready           |
 | `depends_on`    | list               | No       | `[]`    | Other docker/compose dependencies        |

@@ -62,7 +62,8 @@ command = "{service_command}"
 # [docker.postgres]
 # image = "postgres:16-alpine"
 # port = 5432
-# volumes = ["pgdata:/var/lib/postgresql/data"]
+# volumes = ["pgdata:/var/lib/postgresql/data"]   # named volume
+# # volumes = ["./data:/var/lib/postgresql/data"] # or bind mount (host dir)
 # ready_check = {{ type = "pg_isready" }}
 # init = ["CREATE DATABASE {project_name};"]
 #

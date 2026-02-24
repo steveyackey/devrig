@@ -266,6 +266,20 @@ pub enum ConfigDiagnostic {
         url: String,
     },
 
+    #[error("invalid volume spec `{spec}` on docker `{service}`")]
+    #[diagnostic(
+        code(devrig::invalid_volume_spec),
+        help("volumes must be \"name:/path\" (named) or \"/host/path:/container/path\" (bind mount)")
+    )]
+    InvalidVolumeSpec {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("invalid volume spec")]
+        span: SourceSpan,
+        service: String,
+        spec: String,
+    },
+
     #[error("exclude_namespaces requires namespaces = \"all\"")]
     #[diagnostic(
         code(devrig::logs_exclude_requires_all),
@@ -705,6 +719,20 @@ pub fn validate(
                     src: src.clone(),
                     span: find_field_span(source, "docker", name, "registry_auth"),
                     service: name.clone(),
+                });
+            }
+        }
+    }
+
+    // Validate docker volume specs are well-formed
+    for (name, docker_cfg) in &config.docker {
+        for vol_spec in &docker_cfg.volumes {
+            if crate::docker::volume::parse_volume_spec(vol_spec, "validate").is_none() {
+                errors.push(ConfigDiagnostic::InvalidVolumeSpec {
+                    src: src.clone(),
+                    span: find_field_span(source, "docker", name, "volumes"),
+                    service: name.clone(),
+                    spec: vol_spec.clone(),
                 });
             }
         }

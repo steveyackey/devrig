@@ -105,15 +105,26 @@ impl DockerManager {
             named_ports.insert(port_name.clone(), resolved);
         }
 
-        // Create volumes
+        // Create volumes / resolve bind mounts
         let mut volume_binds = Vec::new();
         for vol_spec in &config.volumes {
-            if let Some((vol_name, container_path)) =
-                volume::parse_volume_spec(vol_spec, &self.slug)
-            {
-                let labels = resource_labels(&self.slug, name);
-                volume::ensure_volume(&self.docker, &vol_name, labels).await?;
-                volume_binds.push((vol_name, container_path));
+            match volume::parse_volume_spec(vol_spec, &self.slug) {
+                Some(volume::VolumeSpec::Named {
+                    volume_name,
+                    container_path,
+                }) => {
+                    let labels = resource_labels(&self.slug, name);
+                    volume::ensure_volume(&self.docker, &volume_name, labels).await?;
+                    volume_binds.push((volume_name, container_path));
+                }
+                Some(volume::VolumeSpec::Bind {
+                    host_path,
+                    container_path,
+                }) => {
+                    // Bind mounts pass straight through — no Docker volume needed
+                    volume_binds.push((host_path, container_path));
+                }
+                None => {}
             }
         }
 
