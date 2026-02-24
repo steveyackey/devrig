@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.11.0](https://github.com/steveyackey/devrig/compare/v0.10.1...v0.11.0) (2026-02-24)
+
+
+### Features
+
+* add 5 cluster/addon features and fix startup table border ([dcc05b3](https://github.com/steveyackey/devrig/commit/dcc05b32d1119a1ba392c12ad168bd53b46548c1))
+
+
+### Bug Fixes
+
+* remove flaky waitForResponse from logs clear button E2E test ([607ab5e](https://github.com/steveyackey/devrig/commit/607ab5eadfdc5bc6723ea446ad7db667ddccb7b0))
+
 ## [0.10.1](https://github.com/steveyackey/devrig/compare/v0.10.0...v0.10.1) (2026-02-24)
 
 
