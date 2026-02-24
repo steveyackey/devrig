@@ -96,9 +96,10 @@ fn addon_helm_values_roundtrip() {
             version,
             values,
             port_forward,
+            ..
         } => {
             assert_eq!(chart, "grafana/grafana");
-            assert_eq!(repo, "https://grafana.github.io/helm-charts");
+            assert_eq!(repo.as_deref(), Some("https://grafana.github.io/helm-charts"));
             assert_eq!(namespace, "monitoring");
             assert_eq!(version.as_deref(), Some("7.0.0"));
             assert!(values.contains_key("replicas"));
@@ -141,5 +142,124 @@ fn addon_manifest_config_parses() {
             assert_eq!(namespace.as_deref(), Some("monitoring"));
         }
         _ => panic!("expected Manifest addon"),
+    }
+}
+
+/// Verify that a local Helm addon (no repo) parses correctly.
+#[test]
+fn addon_local_helm_config_parses() {
+    let project = TestProject::new(
+        r#"
+        [project]
+        name = "test-local-helm"
+
+        [services.api]
+        command = "echo hi"
+
+        [cluster]
+
+        [cluster.addons.myapp]
+        type = "helm"
+        chart = "./charts/myapp"
+        namespace = "myapp"
+    "#,
+    );
+
+    let content = std::fs::read_to_string(&project.config_path).unwrap();
+    let config: devrig::config::model::DevrigConfig = toml::from_str(&content).unwrap();
+
+    let cluster = config.cluster.unwrap();
+    let myapp = cluster.addons.get("myapp").unwrap();
+    match myapp {
+        devrig::config::model::AddonConfig::Helm {
+            chart,
+            repo,
+            namespace,
+            ..
+        } => {
+            assert_eq!(chart, "./charts/myapp");
+            assert!(repo.is_none());
+            assert_eq!(namespace, "myapp");
+        }
+        _ => panic!("expected Helm addon"),
+    }
+}
+
+/// Verify that values_files round-trips through config parsing.
+#[test]
+fn addon_local_helm_with_values_files() {
+    let project = TestProject::new(
+        r#"
+        [project]
+        name = "test-values-files"
+
+        [services.api]
+        command = "echo hi"
+
+        [cluster]
+
+        [cluster.addons.myapp]
+        type = "helm"
+        chart = "./charts/myapp"
+        namespace = "myapp"
+        values_files = ["charts/myapp/values-dev.yaml"]
+
+        [cluster.addons.myapp.values]
+        "image.tag" = "dev"
+    "#,
+    );
+
+    let content = std::fs::read_to_string(&project.config_path).unwrap();
+    let config: devrig::config::model::DevrigConfig = toml::from_str(&content).unwrap();
+
+    let cluster = config.cluster.unwrap();
+    let myapp = cluster.addons.get("myapp").unwrap();
+    match myapp {
+        devrig::config::model::AddonConfig::Helm {
+            values_files,
+            values,
+            ..
+        } => {
+            assert_eq!(values_files.len(), 1);
+            assert_eq!(values_files[0], "charts/myapp/values-dev.yaml");
+            assert!(values.contains_key("image.tag"));
+        }
+        _ => panic!("expected Helm addon"),
+    }
+}
+
+/// Verify that kustomize addon config parses correctly.
+#[test]
+fn addon_kustomize_config_parses() {
+    let project = TestProject::new(
+        r#"
+        [project]
+        name = "test-kustomize-addon"
+
+        [services.api]
+        command = "echo hi"
+
+        [cluster]
+
+        [cluster.addons.platform]
+        type = "kustomize"
+        path = "k8s/overlays/dev"
+        namespace = "platform"
+    "#,
+    );
+
+    let content = std::fs::read_to_string(&project.config_path).unwrap();
+    let config: devrig::config::model::DevrigConfig = toml::from_str(&content).unwrap();
+
+    let cluster = config.cluster.unwrap();
+    let platform = cluster.addons.get("platform").unwrap();
+    match platform {
+        devrig::config::model::AddonConfig::Kustomize {
+            path, namespace, ..
+        } => {
+            assert_eq!(path, "k8s/overlays/dev");
+            assert_eq!(namespace.as_deref(), Some("platform"));
+        }
+        _ => panic!("expected Kustomize addon"),
     }
 }

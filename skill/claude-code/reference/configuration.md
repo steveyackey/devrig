@@ -172,11 +172,12 @@ password = "$REGISTRY_TOKEN"
 
 Types: `helm`, `manifest`, `kustomize`. All support `namespace` and `port_forward`.
 
-- **Helm**: `chart`, `repo` (required), `version`, `values`
+- **Helm**: `chart` (required), `repo` (optional — omit for local charts), `version`, `values`, `values_files`
 - **Manifest**: `path` (required)
 - **Kustomize**: `path` (required)
 
 ```toml
+# Remote chart
 [cluster.addons.traefik]
 type = "helm"
 chart = "traefik/traefik"
@@ -185,6 +186,13 @@ namespace = "traefik"
 version = "26.0.0"
 [cluster.addons.traefik.port_forward]
 8080 = "svc/traefik:80"
+
+# Local chart (no repo)
+[cluster.addons.myapp]
+type = "helm"
+chart = "./charts/myapp"
+namespace = "myapp"
+values_files = ["charts/myapp/values-dev.yaml"]
 ```
 
 ---

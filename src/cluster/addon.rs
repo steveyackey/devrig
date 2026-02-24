@@ -95,33 +95,54 @@ async fn run_kubectl(
 async fn install_helm_addon(
     name: &str,
     chart: &str,
-    repo: &str,
+    repo: Option<&str>,
     namespace: &str,
     version: Option<&str>,
     values: &BTreeMap<String, toml::Value>,
+    values_files: &[String],
     kubeconfig: &Path,
+    config_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<()> {
-    // Add repo (idempotent)
-    run_helm(
-        &["repo", "add", name, repo, "--force-update"],
-        kubeconfig,
-        cancel,
-    )
-    .await
-    .with_context(|| format!("adding helm repo for addon '{}'", name))?;
-
-    // Update repo
-    run_helm(&["repo", "update", name], kubeconfig, cancel)
+    // Resolve chart reference: remote repo or local path
+    let resolved_chart = if let Some(repo_url) = repo {
+        // Remote chart — add and update repo
+        run_helm(
+            &["repo", "add", name, repo_url, "--force-update"],
+            kubeconfig,
+            cancel,
+        )
         .await
-        .with_context(|| format!("updating helm repo for addon '{}'", name))?;
+        .with_context(|| format!("adding helm repo for addon '{}'", name))?;
+
+        run_helm(&["repo", "update", name], kubeconfig, cancel)
+            .await
+            .with_context(|| format!("updating helm repo for addon '{}'", name))?;
+
+        chart.to_string()
+    } else {
+        // Local chart — resolve relative to config dir
+        let chart_path = if Path::new(chart).is_absolute() {
+            std::path::PathBuf::from(chart)
+        } else {
+            config_dir.join(chart)
+        };
+        if !chart_path.exists() {
+            bail!(
+                "local helm chart path '{}' does not exist (resolved from '{}')",
+                chart_path.display(),
+                chart
+            );
+        }
+        chart_path.to_string_lossy().to_string()
+    };
 
     // Build install args
     let mut args: Vec<String> = vec![
         "upgrade".to_string(),
         "--install".to_string(),
         name.to_string(),
-        chart.to_string(),
+        resolved_chart,
         "--namespace".to_string(),
         namespace.to_string(),
         "--create-namespace".to_string(),
@@ -133,6 +154,17 @@ async fn install_helm_addon(
     if let Some(v) = version {
         args.push("--version".to_string());
         args.push(v.to_string());
+    }
+
+    // Add -f for each values file
+    for vf in values_files {
+        let vf_path = if Path::new(vf).is_absolute() {
+            std::path::PathBuf::from(vf)
+        } else {
+            config_dir.join(vf)
+        };
+        args.push("-f".to_string());
+        args.push(vf_path.to_string_lossy().to_string());
     }
 
     // Add --set for each value
@@ -189,7 +221,11 @@ async fn install_kustomize_addon(
     config_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<()> {
-    let kustomize_path = config_dir.join(path);
+    let kustomize_path = if Path::new(path).is_absolute() {
+        std::path::PathBuf::from(path)
+    } else {
+        config_dir.join(path)
+    };
     let kustomize_str = kustomize_path.to_string_lossy().to_string();
 
     let mut args = vec!["apply", "-k", &kustomize_str];
@@ -232,16 +268,19 @@ pub async fn install_addons(
                 namespace,
                 version,
                 values,
+                values_files,
                 ..
             } => {
                 install_helm_addon(
                     name,
                     chart,
-                    repo,
+                    repo.as_deref(),
                     namespace,
                     version.as_deref(),
                     values,
+                    values_files,
                     kubeconfig,
+                    config_dir,
                     cancel,
                 )
                 .await?;
@@ -342,7 +381,11 @@ pub async fn uninstall_addons(
             AddonConfig::Kustomize {
                 path, namespace, ..
             } => {
-                let kustomize_path = config_dir.join(path);
+                let kustomize_path = if Path::new(path.as_str()).is_absolute() {
+                    std::path::PathBuf::from(path)
+                } else {
+                    config_dir.join(path)
+                };
                 let kustomize_str = kustomize_path.to_string_lossy().to_string();
                 let mut args = vec!["delete", "-k", &kustomize_str, "--ignore-not-found"];
                 let ns_str;

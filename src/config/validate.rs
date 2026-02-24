@@ -806,17 +806,19 @@ pub fn validate(
                             addon: name.clone(),
                         });
                     }
-                    if repo.trim().is_empty() {
-                        errors.push(ConfigDiagnostic::EmptyAddonRepo {
-                            src: src.clone(),
-                            span: find_field_span(
-                                source,
-                                &format!("cluster.addons.{}", name),
-                                name,
-                                "repo",
-                            ),
-                            addon: name.clone(),
-                        });
+                    if let Some(r) = repo {
+                        if r.trim().is_empty() {
+                            errors.push(ConfigDiagnostic::EmptyAddonRepo {
+                                src: src.clone(),
+                                span: find_field_span(
+                                    source,
+                                    &format!("cluster.addons.{}", name),
+                                    name,
+                                    "repo",
+                                ),
+                                addon: name.clone(),
+                            });
+                        }
                     }
                     if namespace.trim().is_empty() {
                         errors.push(ConfigDiagnostic::EmptyAddonNamespace {
@@ -1952,6 +1954,68 @@ chart = "traefik/traefik"
 repo = "https://traefik.github.io/charts"
 namespace = "traefik"
 port_forward = { 9000 = "svc/traefik:9000" }
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn validate_local_helm_no_repo_is_valid() {
+        let source = r#"
+[project]
+name = "test"
+
+[services.api]
+command = "cargo run"
+port = 3000
+
+[cluster]
+
+[cluster.addons.myapp]
+type = "helm"
+chart = "./charts/myapp"
+namespace = "myapp"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        assert!(validate(&config, source, TEST_FILENAME).is_ok());
+    }
+
+    #[test]
+    fn validate_helm_empty_repo_string_errors() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster.addons.traefik]
+type = "helm"
+chart = "traefik/traefik"
+repo = ""
+namespace = "traefik"
+"#;
+        let config: DevrigConfig = toml::from_str(source).unwrap();
+        let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
+        assert!(errs.iter().any(|e| matches!(
+            e,
+            ConfigDiagnostic::EmptyAddonRepo { addon, .. } if addon == "traefik"
+        )));
+    }
+
+    #[test]
+    fn validate_helm_with_values_files_is_valid() {
+        let source = r#"
+[project]
+name = "test"
+
+[cluster]
+
+[cluster.addons.myapp]
+type = "helm"
+chart = "./charts/myapp"
+namespace = "myapp"
+values_files = ["charts/myapp/values-dev.yaml"]
+
+[cluster.addons.myapp.values]
+"image.tag" = "dev"
 "#;
         let config: DevrigConfig = toml::from_str(source).unwrap();
         assert!(validate(&config, source, TEST_FILENAME).is_ok());

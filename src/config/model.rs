@@ -337,12 +337,15 @@ pub enum AddonConfig {
     #[serde(rename = "helm")]
     Helm {
         chart: String,
-        repo: String,
+        #[serde(default)]
+        repo: Option<String>,
         namespace: String,
         #[serde(default)]
         version: Option<String>,
         #[serde(default)]
         values: BTreeMap<String, toml::Value>,
+        #[serde(default)]
+        values_files: Vec<String>,
         #[serde(default)]
         port_forward: BTreeMap<String, String>,
     },
@@ -1438,9 +1441,10 @@ mod tests {
                 version,
                 values,
                 port_forward,
+                ..
             } => {
                 assert_eq!(chart, "traefik/traefik");
-                assert_eq!(repo, "https://traefik.github.io/charts");
+                assert_eq!(repo.as_deref(), Some("https://traefik.github.io/charts"));
                 assert_eq!(namespace, "traefik");
                 assert_eq!(version.as_deref(), Some("26.0.0"));
                 assert_eq!(values.len(), 1);
@@ -1568,10 +1572,11 @@ mod tests {
     fn addon_config_helper_methods() {
         let helm = AddonConfig::Helm {
             chart: "test".to_string(),
-            repo: "https://example.com".to_string(),
+            repo: Some("https://example.com".to_string()),
             namespace: "default".to_string(),
             version: None,
             values: BTreeMap::new(),
+            values_files: Vec::new(),
             port_forward: BTreeMap::from([("8080".to_string(), "svc/test:80".to_string())]),
         };
         assert_eq!(helm.addon_type(), "helm");
@@ -1586,6 +1591,101 @@ mod tests {
         assert_eq!(manifest.addon_type(), "manifest");
         assert_eq!(manifest.namespace(), None);
         assert!(manifest.port_forward().is_empty());
+    }
+
+    #[test]
+    fn parse_addon_local_helm_no_repo() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.myapp]
+            type = "helm"
+            chart = "./charts/myapp"
+            namespace = "myapp"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        match &cluster.addons["myapp"] {
+            AddonConfig::Helm {
+                chart,
+                repo,
+                namespace,
+                values_files,
+                ..
+            } => {
+                assert_eq!(chart, "./charts/myapp");
+                assert!(repo.is_none());
+                assert_eq!(namespace, "myapp");
+                assert!(values_files.is_empty());
+            }
+            other => panic!("expected Helm addon, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_addon_local_helm_with_values_files() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.myapp]
+            type = "helm"
+            chart = "./charts/myapp"
+            namespace = "myapp"
+            values_files = ["charts/myapp/values-dev.yaml", "charts/myapp/values-local.yaml"]
+
+            [cluster.addons.myapp.values]
+            "image.tag" = "dev"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        match &cluster.addons["myapp"] {
+            AddonConfig::Helm {
+                chart,
+                repo,
+                values,
+                values_files,
+                ..
+            } => {
+                assert_eq!(chart, "./charts/myapp");
+                assert!(repo.is_none());
+                assert_eq!(values_files.len(), 2);
+                assert_eq!(values_files[0], "charts/myapp/values-dev.yaml");
+                assert_eq!(values_files[1], "charts/myapp/values-local.yaml");
+                assert!(values.contains_key("image.tag"));
+            }
+            other => panic!("expected Helm addon, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_addon_remote_helm_with_values_files() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [cluster.addons.traefik]
+            type = "helm"
+            chart = "traefik/traefik"
+            repo = "https://traefik.github.io/charts"
+            namespace = "traefik"
+            values_files = ["helm/traefik-values.yaml"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cluster = config.cluster.unwrap();
+        match &cluster.addons["traefik"] {
+            AddonConfig::Helm {
+                repo,
+                values_files,
+                ..
+            } => {
+                assert_eq!(repo.as_deref(), Some("https://traefik.github.io/charts"));
+                assert_eq!(values_files.len(), 1);
+                assert_eq!(values_files[0], "helm/traefik-values.yaml");
+            }
+            other => panic!("expected Helm addon, got {:?}", other),
+        }
     }
 
     #[test]
