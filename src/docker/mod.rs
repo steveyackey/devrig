@@ -11,7 +11,7 @@ use bollard::Docker;
 use std::collections::HashSet;
 
 use crate::config::model::{DockerConfig, Port};
-use crate::docker::container::PortMap;
+use crate::docker::container::{ContainerCmdOptions, PortMap};
 use crate::docker::network::resource_labels;
 use crate::orchestrator::ports::resolve_port;
 use crate::orchestrator::state::DockerState;
@@ -165,6 +165,12 @@ impl DockerManager {
 
         let network_name = self.network_name();
 
+        // Build command/entrypoint overrides
+        let cmd_options = ContainerCmdOptions {
+            cmd: config.command.as_ref().map(|s| s.as_slice().to_vec()),
+            entrypoint: config.entrypoint.as_ref().map(|s| s.as_slice().to_vec()),
+        };
+
         // Create and start container
         let container_name = format!("devrig-{}-{}", self.slug, name);
         let container_id = container::create_container(
@@ -176,6 +182,7 @@ impl DockerManager {
             &port_maps,
             &volume_binds,
             &network_name,
+            &cmd_options,
         )
         .await?;
 

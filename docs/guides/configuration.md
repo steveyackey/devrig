@@ -201,6 +201,8 @@ type = "pg_isready"
 | `ports`         | map of ports       | No       | `{}`    | Named port mappings for multi-port services.  |
 | `env`           | map of strings     | No       | `{}`    | Container environment variables.              |
 | `volumes`       | list of strings    | No       | `[]`    | Volume mounts (named `"vol:/path"` or bind `"/host:/path"`). |
+| `command`       | string or list     | No       | (none)  | Override the image CMD.                        |
+| `entrypoint`    | string or list     | No       | (none)  | Override the image ENTRYPOINT.                 |
 | `ready_check`   | table              | No       | (none)  | Health check configuration.                   |
 | `init`          | list of strings    | No       | `[]`    | SQL/commands to run after first ready.         |
 | `depends_on`    | list of strings    | No       | `[]`    | Other docker or compose dependencies.          |
@@ -314,6 +316,32 @@ volumes = [
 Bind mounts are detected when the source starts with `/`, `./`, or `../`.
 No Docker volume is created for bind mounts — the host path is passed
 directly to Docker. Bind mounts are **not** removed by `devrig delete`.
+
+#### Command and entrypoint
+
+Override the image's default `CMD` and/or `ENTRYPOINT`. Both accept a string
+or a list of strings:
+
+```toml
+# Override CMD only — pass flags to the image's default entrypoint
+[docker.redis]
+image = "redis:7-alpine"
+command = ["redis-server", "--appendonly", "yes"]
+
+# Override ENTRYPOINT and CMD together
+[docker.worker]
+image = "python:3.12-slim"
+entrypoint = ["python", "-u"]
+command = ["worker.py", "--verbose"]
+
+# String form (single element)
+[docker.app]
+image = "myapp:latest"
+entrypoint = "/custom-entrypoint.sh"
+```
+
+When `entrypoint` is set, `command` provides the default arguments (matching
+Docker semantics).
 
 #### Docker vs Compose — when to use which
 

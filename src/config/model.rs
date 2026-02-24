@@ -96,6 +96,10 @@ pub struct DockerConfig {
     #[serde(default)]
     pub volumes: Vec<String>,
     #[serde(default)]
+    pub command: Option<StringOrList>,
+    #[serde(default)]
+    pub entrypoint: Option<StringOrList>,
+    #[serde(default)]
     pub ready_check: Option<ReadyCheck>,
     #[serde(default)]
     pub init: Vec<String>,
@@ -103,6 +107,52 @@ pub struct DockerConfig {
     pub depends_on: Vec<String>,
     #[serde(default)]
     pub registry_auth: Option<RegistryAuth>,
+}
+
+/// A value that can be either a single string or a list of strings.
+/// When given a string, it is kept as a single-element list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringOrList(pub Vec<String>);
+
+impl StringOrList {
+    pub fn into_vec(self) -> Vec<String> {
+        self.0
+    }
+
+    pub fn as_slice(&self) -> &[String] {
+        &self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for StringOrList {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct StringOrListVisitor;
+
+        impl<'de> de::Visitor<'de> for StringOrListVisitor {
+            type Value = StringOrList;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a string or a list of strings")
+            }
+
+            fn visit_str<E: de::Error>(self, value: &str) -> Result<StringOrList, E> {
+                Ok(StringOrList(vec![value.to_string()]))
+            }
+
+            fn visit_seq<A: de::SeqAccess<'de>>(self, mut seq: A) -> Result<StringOrList, A::Error> {
+                let mut values = Vec::new();
+                while let Some(value) = seq.next_element::<String>()? {
+                    values.push(value);
+                }
+                Ok(StringOrList(values))
+            }
+        }
+
+        deserializer.deserialize_any(StringOrListVisitor)
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
@@ -1965,5 +2015,105 @@ mod tests {
         assert!(config.services["api"].env_file.is_none());
         assert!(config.docker["postgres"].registry_auth.is_none());
         assert!(config.cluster.unwrap().registries.is_empty());
+    }
+
+    #[test]
+    fn parse_docker_command_string() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.redis]
+            image = "redis:7-alpine"
+            command = "redis-server --appendonly yes"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cmd = config.docker["redis"].command.as_ref().unwrap();
+        assert_eq!(cmd.as_slice(), &["redis-server --appendonly yes"]);
+    }
+
+    #[test]
+    fn parse_docker_command_list() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.redis]
+            image = "redis:7-alpine"
+            command = ["redis-server", "--appendonly", "yes"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let cmd = config.docker["redis"].command.as_ref().unwrap();
+        assert_eq!(cmd.as_slice(), &["redis-server", "--appendonly", "yes"]);
+    }
+
+    #[test]
+    fn parse_docker_entrypoint_string() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.app]
+            image = "myapp:latest"
+            entrypoint = "/entrypoint.sh"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let ep = config.docker["app"].entrypoint.as_ref().unwrap();
+        assert_eq!(ep.as_slice(), &["/entrypoint.sh"]);
+    }
+
+    #[test]
+    fn parse_docker_entrypoint_list() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.app]
+            image = "myapp:latest"
+            entrypoint = ["python", "-u"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let ep = config.docker["app"].entrypoint.as_ref().unwrap();
+        assert_eq!(ep.as_slice(), &["python", "-u"]);
+    }
+
+    #[test]
+    fn parse_docker_command_and_entrypoint() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.app]
+            image = "python:3.12"
+            entrypoint = ["python", "-u"]
+            command = ["app.py", "--verbose"]
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        let docker = &config.docker["app"];
+        let ep = docker.entrypoint.as_ref().unwrap();
+        let cmd = docker.command.as_ref().unwrap();
+        assert_eq!(ep.as_slice(), &["python", "-u"]);
+        assert_eq!(cmd.as_slice(), &["app.py", "--verbose"]);
+    }
+
+    #[test]
+    fn parse_docker_without_command_or_entrypoint() {
+        let toml_str = r#"
+            [project]
+            name = "test"
+
+            [docker.redis]
+            image = "redis:7-alpine"
+            port = 6379
+        "#;
+        let config: DevrigConfig = toml::from_str(toml_str).unwrap();
+        assert!(config.docker["redis"].command.is_none());
+        assert!(config.docker["redis"].entrypoint.is_none());
+    }
+
+    #[test]
+    fn string_or_list_into_vec() {
+        let sol = StringOrList(vec!["a".to_string(), "b".to_string()]);
+        assert_eq!(sol.into_vec(), vec!["a".to_string(), "b".to_string()]);
     }
 }

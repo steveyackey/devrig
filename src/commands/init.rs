@@ -74,7 +74,14 @@ command = "{service_command}"
 # [docker.redis]
 # image = "redis:7-alpine"
 # port = 6379
+# command = ["redis-server", "--appendonly", "yes"]  # override CMD
 # ready_check = {{ type = "cmd", command = "redis-cli ping", expect = "PONG" }}
+#
+# -- Custom entrypoint --
+# [docker.worker]
+# image = "python:3.12-slim"
+# entrypoint = ["python", "-u"]    # override ENTRYPOINT
+# command = ["worker.py"]           # override CMD (args to entrypoint)
 #
 # -- Private registry images --
 # [docker.my-app]

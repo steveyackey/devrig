@@ -15,6 +15,15 @@ pub struct PortMap {
     pub host_port: u16,
 }
 
+/// Options for overriding a container's command and entrypoint.
+#[derive(Default)]
+pub struct ContainerCmdOptions {
+    /// Override the container's CMD (command to run).
+    pub cmd: Option<Vec<String>>,
+    /// Override the container's ENTRYPOINT.
+    pub entrypoint: Option<Vec<String>>,
+}
+
 /// Create a Docker container with the specified configuration.
 #[allow(clippy::too_many_arguments)]
 pub async fn create_container(
@@ -26,6 +35,7 @@ pub async fn create_container(
     port_maps: &[PortMap],
     volumes: &[(String, String)],
     network_name: &str,
+    cmd_options: &ContainerCmdOptions,
 ) -> Result<String> {
     let container_name = format!("devrig-{}-{}", slug, service_name);
     let labels = resource_labels(slug, service_name);
@@ -67,6 +77,8 @@ pub async fn create_container(
         exposed_ports: Some(exposed_ports),
         host_config: Some(host_config),
         labels: Some(labels),
+        cmd: cmd_options.cmd.clone(),
+        entrypoint: cmd_options.entrypoint.clone(),
         ..Default::default()
     };
 

@@ -132,6 +132,8 @@ mod tests {
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
             volumes: Vec::new(),
+            command: None,
+            entrypoint: None,
             ready_check: None,
             init: Vec::new(),
             depends_on: Vec::new(),
