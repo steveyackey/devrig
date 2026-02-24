@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/steveyackey/devrig/compare/v0.10.0...v0.10.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* suppress internal orchestration logs from terminal output ([24e8a98](https://github.com/steveyackey/devrig/commit/24e8a9800c2b0073b813b7aab6ba170408877ddd))
+
 ## [0.10.0](https://github.com/steveyackey/devrig/compare/v0.9.0...v0.10.0) (2026-02-24)
 
 
