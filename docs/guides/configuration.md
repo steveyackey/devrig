@@ -463,7 +463,7 @@ installs into the cluster after it is created but before services are deployed.
 Use addons for shared infrastructure like ingress controllers, cert-manager,
 or monitoring stacks.
 
-### Helm addon
+### Helm addon (remote chart)
 
 ```toml
 [cluster.addons.traefik]
@@ -478,6 +478,22 @@ deployment.replicas = 1
 
 [cluster.addons.traefik.port_forward]
 8080 = "svc/traefik:80"
+```
+
+### Helm addon (local chart)
+
+When `repo` is omitted, devrig treats `chart` as a local filesystem path
+(relative to the config file):
+
+```toml
+[cluster.addons.myapp]
+type = "helm"
+chart = "./charts/myapp"
+namespace = "myapp"
+values_files = ["charts/myapp/values-dev.yaml"]
+
+[cluster.addons.myapp.values]
+"image.tag" = "dev"
 ```
 
 ### Manifest addon
@@ -502,15 +518,16 @@ namespace = "platform"
 
 **Helm addons** (`type = "helm"`):
 
-| Field          | Type           | Required | Default | Description                              |
-|----------------|----------------|----------|---------|------------------------------------------|
-| `type`         | string         | Yes      | --      | Must be `"helm"`.                        |
-| `chart`        | string         | Yes      | --      | Chart reference (e.g. `repo/chart`).     |
-| `repo`         | string         | Yes      | --      | Helm repository URL.                     |
-| `namespace`    | string         | Yes      | --      | Kubernetes namespace for the release.    |
-| `version`      | string         | No       | (latest)| Chart version constraint.                |
-| `values`       | map            | No       | `{}`    | Values passed via `helm --set`.          |
-| `port_forward` | map            | No       | `{}`    | Local port-forwards (see below).         |
+| Field          | Type           | Required | Default | Description                                         |
+|----------------|----------------|----------|---------|-----------------------------------------------------|
+| `type`         | string         | Yes      | --      | Must be `"helm"`.                                   |
+| `chart`        | string         | Yes      | --      | Chart reference (`repo/chart`) or local path.       |
+| `repo`         | string         | No       | (none)  | Helm repository URL. Omit for local charts.         |
+| `namespace`    | string         | Yes      | --      | Kubernetes namespace for the release.               |
+| `version`      | string         | No       | (latest)| Chart version constraint.                           |
+| `values`       | map            | No       | `{}`    | Values passed via `helm --set`.                     |
+| `values_files` | list           | No       | `[]`    | Values files passed via `helm -f`. Relative to config. |
+| `port_forward` | map            | No       | `{}`    | Local port-forwards (see below).                    |
 
 **Manifest addons** (`type = "manifest"`):
 
@@ -1215,8 +1232,8 @@ Run `devrig validate` to check your config without starting services.
    be specified.
 8. **Restart policy is valid** -- If `[services.<name>.restart]` is present,
    `policy` must be one of `always`, `on-failure`, or `never`.
-9. **Addon charts are non-empty** -- Helm addons must have a non-empty `chart`
-   and `repo`.
+9. **Addon charts are non-empty** -- Helm addons must have a non-empty `chart`.
+   If `repo` is provided, it must also be non-empty.
 10. **Image context is non-empty** -- Cluster image entries must have a
     non-empty `context`.
 11. **Image names are unique** -- Cluster image names must not conflict with

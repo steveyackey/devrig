@@ -113,6 +113,13 @@ command = "{service_command}"
 # repo = "https://traefik.github.io/charts"
 # namespace = "traefik"
 #
+# -- Local chart (no repo needed) --
+# [cluster.addons.myapp]
+# type = "helm"
+# chart = "./charts/myapp"
+# namespace = "myapp"
+# values_files = ["charts/myapp/values-dev.yaml"]
+#
 # -- Private registry auth for cluster image pulls --
 # [[cluster.registries]]
 # url = "ghcr.io"
