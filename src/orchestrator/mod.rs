@@ -224,6 +224,77 @@ impl Orchestrator {
         }) || self.config.cluster.is_some();
 
         // ================================================================
+        // Phase 0.5: Dashboard + OTel collector (start early to capture all telemetry)
+        // ================================================================
+        let mut allocated_ports: HashSet<u16> = HashSet::new();
+        let mut dashboard_state: Option<state::DashboardState> = None;
+        let mut _otel_collector: Option<crate::otel::OtelCollector> = None;
+        // Clones of store/events for the log bridge (used later for docker + service logs)
+        let mut bridge_store: Option<Arc<tokio::sync::RwLock<crate::otel::storage::TelemetryStore>>> = None;
+        let mut bridge_events_tx: Option<broadcast::Sender<crate::otel::types::TelemetryEvent>> = None;
+
+        if dashboard_enabled {
+            let dash_config = self.config.dashboard.as_ref().unwrap();
+            let otel_config = dash_config.otel.clone().unwrap_or_default();
+
+            // Auto-resolve dashboard/OTel ports: use configured port if free,
+            // otherwise find an available one. This lets multiple devrig instances
+            // run without port conflicts.
+            let dash_port = resolve_dashboard_port(dash_config.port, "dashboard", &mut allocated_ports);
+            let otel_grpc = resolve_dashboard_port(otel_config.grpc_port, "otel-grpc", &mut allocated_ports);
+            let otel_http = resolve_dashboard_port(otel_config.http_port, "otel-http", &mut allocated_ports);
+
+            // Use resolved ports for the collector
+            let mut resolved_otel = otel_config;
+            resolved_otel.grpc_port = otel_grpc;
+            resolved_otel.http_port = otel_http;
+
+            let collector = crate::otel::OtelCollector::new(&resolved_otel);
+            collector
+                .start(self.cancel.clone())
+                .await
+                .context("starting OTel collector")?;
+            info!(
+                grpc_port = otel_grpc,
+                http_port = otel_http,
+                "OTel collector started"
+            );
+
+            let store = collector.store();
+            let events_tx = collector.events_tx();
+
+            // Clone for the log bridge
+            bridge_store = Some(Arc::clone(&store));
+            bridge_events_tx = Some(events_tx.clone());
+
+            let dash_cancel = self.cancel.clone();
+            let dash_config_path = Some(self.config_path.clone());
+            let dash_state_dir = Some(self.state_dir.clone());
+            self.tracker.spawn(async move {
+                if let Err(e) = crate::dashboard::server::start_dashboard_server(
+                    dash_port,
+                    store,
+                    events_tx,
+                    dash_cancel,
+                    dash_config_path,
+                    dash_state_dir,
+                )
+                .await
+                {
+                    warn!(error = %e, "Dashboard server failed");
+                }
+            });
+            info!(port = dash_port, "Dashboard server started");
+
+            dashboard_state = Some(state::DashboardState {
+                dashboard_port: dash_port,
+                grpc_port: otel_grpc,
+                http_port: otel_http,
+            });
+            _otel_collector = Some(collector);
+        }
+
+        // ================================================================
         // Phase 1: Docker network
         // ================================================================
         let docker_mgr = if has_docker {
@@ -300,7 +371,6 @@ impl Orchestrator {
         // Phase 3: Infrastructure containers (in dependency order)
         // ================================================================
         let mut docker_states: BTreeMap<String, DockerState> = BTreeMap::new();
-        let mut allocated_ports: HashSet<u16> = HashSet::new();
 
         // Pre-populate allocated ports from compose services
         for cs in compose_states.values() {
@@ -602,76 +672,6 @@ impl Orchestrator {
                 msg.push_str(&format!("  - {}\n", err));
             }
             bail!("{}", msg.trim_end());
-        }
-
-        // ================================================================
-        // Phase 4.5: Dashboard + OTel collector
-        // ================================================================
-        let mut dashboard_state: Option<state::DashboardState> = None;
-        let mut _otel_collector: Option<crate::otel::OtelCollector> = None;
-        // Clones of store/events for the log bridge (used in Phase 5)
-        let mut bridge_store: Option<Arc<tokio::sync::RwLock<crate::otel::storage::TelemetryStore>>> = None;
-        let mut bridge_events_tx: Option<broadcast::Sender<crate::otel::types::TelemetryEvent>> = None;
-
-        if dashboard_enabled {
-            let dash_config = self.config.dashboard.as_ref().unwrap();
-            let otel_config = dash_config.otel.clone().unwrap_or_default();
-
-            // Auto-resolve dashboard/OTel ports: use configured port if free,
-            // otherwise find an available one. This lets multiple devrig instances
-            // run without port conflicts.
-            let dash_port = resolve_dashboard_port(dash_config.port, "dashboard", &mut allocated_ports);
-            let otel_grpc = resolve_dashboard_port(otel_config.grpc_port, "otel-grpc", &mut allocated_ports);
-            let otel_http = resolve_dashboard_port(otel_config.http_port, "otel-http", &mut allocated_ports);
-
-            // Use resolved ports for the collector
-            let mut resolved_otel = otel_config;
-            resolved_otel.grpc_port = otel_grpc;
-            resolved_otel.http_port = otel_http;
-
-            let collector = crate::otel::OtelCollector::new(&resolved_otel);
-            collector
-                .start(self.cancel.clone())
-                .await
-                .context("starting OTel collector")?;
-            info!(
-                grpc_port = otel_grpc,
-                http_port = otel_http,
-                "OTel collector started"
-            );
-
-            let store = collector.store();
-            let events_tx = collector.events_tx();
-
-            // Clone for the log bridge (Phase 5)
-            bridge_store = Some(Arc::clone(&store));
-            bridge_events_tx = Some(events_tx.clone());
-
-            let dash_cancel = self.cancel.clone();
-            let dash_config_path = Some(self.config_path.clone());
-            let dash_state_dir = Some(self.state_dir.clone());
-            self.tracker.spawn(async move {
-                if let Err(e) = crate::dashboard::server::start_dashboard_server(
-                    dash_port,
-                    store,
-                    events_tx,
-                    dash_cancel,
-                    dash_config_path,
-                    dash_state_dir,
-                )
-                .await
-                {
-                    warn!(error = %e, "Dashboard server failed");
-                }
-            });
-            info!(port = dash_port, "Dashboard server started");
-
-            dashboard_state = Some(state::DashboardState {
-                dashboard_port: dash_port,
-                grpc_port: otel_grpc,
-                http_port: otel_http,
-            });
-            _otel_collector = Some(collector);
         }
 
         // ================================================================

@@ -116,9 +116,9 @@ const StatusView: Component = () => {
                             <span
                               data-testid="service-indicator"
                               class={`inline-block w-2 h-2 rounded-full border-solid ${
-                                isReporting() ? 'bg-success animate-pulse-live' : 'bg-surface-3'
+                                isReporting() ? 'bg-success animate-pulse-live' : 'bg-warning animate-pulse-live'
                               }`}
-                              style={isReporting() ? { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' } : {}}
+                              style={isReporting() ? { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' } : { "box-shadow": '0 0 6px rgba(251,191,36,0.3)' }}
                             />
                             <span class="font-display text-lg text-text-primary tracking-[0.06em] uppercase">{svc.name}</span>
                             <Badge variant="default">{svc.kind}</Badge>
