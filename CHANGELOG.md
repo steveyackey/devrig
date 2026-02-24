@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/steveyackey/devrig/compare/v0.6.0...v0.7.0) (2026-02-24)
+
+
+### Features
+
+* show dashboard port in startup summary and ps --all ([2b54373](https://github.com/steveyackey/devrig/commit/2b543735a53e0ef02f65ed5f38444b891ceda0c8))
+
 ## [0.6.0](https://github.com/steveyackey/devrig/compare/v0.5.0...v0.6.0) (2026-02-23)
 
 
