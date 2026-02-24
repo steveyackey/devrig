@@ -78,6 +78,11 @@ impl Orchestrator {
     /// Loads and parses the config, validates it, and computes the project
     /// identity and state directory. Performs .env loading and $VAR expansion.
     pub fn from_config(config_path: PathBuf) -> Result<Self> {
+        // Canonicalize so the dashboard config API (and state_dir) always resolve
+        // correctly regardless of working-directory changes.
+        let config_path = config_path
+            .canonicalize()
+            .with_context(|| format!("canonicalizing config path {}", config_path.display()))?;
         let (config, source, _secret_registry) = config::load_config_with_secrets(&config_path)
             .with_context(|| format!("loading config from {}", config_path.display()))?;
 

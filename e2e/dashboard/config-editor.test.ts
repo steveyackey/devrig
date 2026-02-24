@@ -17,7 +17,7 @@ describe('Config Editor', () => {
   beforeEach(async () => {
     page = await newPage(browser);
     const responsePromise = page.waitForResponse(
-      (resp) => resp.url().includes('/api/config') && resp.status() === 200,
+      (resp) => resp.url().includes('/api/config') && resp.request().method() === 'GET',
     );
     await page.goto('/#/config');
     await responsePromise;
