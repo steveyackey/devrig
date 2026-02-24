@@ -22,11 +22,12 @@ pub fn run() -> Result<()> {
 name = "{project_name}"
 # env_file = ".env"            # Load shared secrets from a .env file
 
-# -- Global env vars shared by all services --
+# -- Global env vars shared by all services (supports {{{{ }}}} templates) --
 # [env]
 # RUST_LOG = "debug"
 # NODE_ENV = "development"
 # SECRET_KEY = "$MY_SECRET_KEY" # $VAR expands from .env or host environment
+# DATABASE_URL = "postgres://devrig:devrig@localhost:{{{{ docker.postgres.port }}}}/{project_name}"
 
 # -- Dashboard + OpenTelemetry --
 # Built-in dashboard and OTel collector. Services automatically receive
@@ -114,18 +115,23 @@ command = "{service_command}"
 # watch = true
 # depends_on = ["job-runner"]   # ensures image is built before deploy
 #
-# [cluster.addons.traefik]
+# [cluster.addons.cert-manager]
 # type = "helm"
-# chart = "traefik/traefik"
-# repo = "https://traefik.github.io/charts"
-# namespace = "traefik"
+# chart = "cert-manager/cert-manager"
+# repo = "https://charts.jetstack.io"
+# namespace = "cert-manager"
 #
-# -- Local chart (no repo needed) --
+# -- Local chart with dependencies and image tag template --
 # [cluster.addons.myapp]
 # type = "helm"
 # chart = "./charts/myapp"
 # namespace = "myapp"
+# depends_on = ["cert-manager"]  # installs after cert-manager
+# wait = false                    # don't block on readiness (default: true)
+# timeout = "10m"                 # helm timeout (default: "5m")
 # values_files = ["charts/myapp/values-dev.yaml"]
+# [cluster.addons.myapp.values]
+# "image.tag" = "{{{{ cluster.image.myapp.tag }}}}"
 #
 # -- Private registry auth for cluster image pulls --
 # [[cluster.registries]]

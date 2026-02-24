@@ -1,6 +1,6 @@
 use comfy_table::modifiers::UTF8_ROUND_CORNERS;
 use comfy_table::presets::UTF8_FULL_CONDENSED;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
+use comfy_table::{Cell, CellAlignment, Color, ContentArrangement, Table};
 use is_terminal::IsTerminal;
 use owo_colors::OwoColorize;
 
@@ -78,23 +78,24 @@ pub fn print_startup_summary(
             })
             .unwrap_or_else(|| "-".to_string());
 
-        let status_text = if use_color {
+        let status_text = format!("\u{25cf} {}", svc.status);
+        let status_color = if use_color {
             match svc.status.as_str() {
-                "running" => format!("{} {}", "\u{25cf}".green(), "running".green()),
-                "ready" => format!("{} {}", "\u{25cf}".green(), "ready".green()),
-                "starting" => format!("{} {}", "\u{25cf}".yellow(), "starting".yellow()),
-                "failed" => format!("{} {}", "\u{25cf}".red(), "failed".red()),
-                other => format!("\u{25cf} {}", other),
+                "running" | "ready" => Some(Color::Green),
+                "starting" => Some(Color::Yellow),
+                "failed" => Some(Color::Red),
+                _ => None,
             }
         } else {
-            format!("\u{25cf} {}", svc.status)
+            None
         };
 
-        table.add_row(vec![
-            Cell::new(name),
-            Cell::new(&url),
-            Cell::new(&status_text),
-        ]);
+        let mut status_cell = Cell::new(&status_text);
+        if let Some(color) = status_color {
+            status_cell = status_cell.fg(color);
+        }
+
+        table.add_row(vec![Cell::new(name), Cell::new(&url), status_cell]);
     }
 
     // Indent the table by 2 spaces

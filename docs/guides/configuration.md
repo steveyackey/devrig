@@ -519,9 +519,12 @@ type = "helm"
 chart = "./charts/myapp"
 namespace = "myapp"
 values_files = ["charts/myapp/values-dev.yaml"]
+depends_on = ["cert-manager"]
+wait = false       # don't block on readiness (default: true)
+timeout = "10m"    # helm timeout (default: "5m", only used when wait = true)
 
 [cluster.addons.myapp.values]
-"image.tag" = "dev"
+"image.tag" = "{{ cluster.image.myapp.tag }}"
 ```
 
 ### Manifest addon
@@ -546,16 +549,19 @@ namespace = "platform"
 
 **Helm addons** (`type = "helm"`):
 
-| Field          | Type           | Required | Default | Description                                         |
-|----------------|----------------|----------|---------|-----------------------------------------------------|
-| `type`         | string         | Yes      | --      | Must be `"helm"`.                                   |
-| `chart`        | string         | Yes      | --      | Chart reference (`repo/chart`) or local path.       |
-| `repo`         | string         | No       | (none)  | Helm repository URL. Omit for local charts.         |
-| `namespace`    | string         | Yes      | --      | Kubernetes namespace for the release.               |
-| `version`      | string         | No       | (latest)| Chart version constraint.                           |
-| `values`       | map            | No       | `{}`    | Values passed via `helm --set`.                     |
-| `values_files` | list           | No       | `[]`    | Values files passed via `helm -f`. Relative to config. |
-| `port_forward` | map            | No       | `{}`    | Local port-forwards (see below).                    |
+| Field          | Type           | Required | Default   | Description                                         |
+|----------------|----------------|----------|-----------|-----------------------------------------------------|
+| `type`         | string         | Yes      | --        | Must be `"helm"`.                                   |
+| `chart`        | string         | Yes      | --        | Chart reference (`repo/chart`) or local path.       |
+| `repo`         | string         | No       | (none)    | Helm repository URL. Omit for local charts.         |
+| `namespace`    | string         | Yes      | --        | Kubernetes namespace for the release.               |
+| `version`      | string         | No       | (latest)  | Chart version constraint.                           |
+| `values`       | map            | No       | `{}`      | Values passed via `helm --set`. Supports `{{ }}` templates. |
+| `values_files` | list           | No       | `[]`      | Values files passed via `helm -f`. Relative to config. |
+| `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).                    |
+| `wait`         | bool           | No       | `true`    | Whether helm waits for readiness (`--wait`).        |
+| `timeout`      | string         | No       | `"5m"`    | Helm timeout duration (only used when `wait = true`). |
+| `depends_on`   | list           | No       | `[]`      | Other addon names to install before this one.       |
 
 **Manifest addons** (`type = "manifest"`):
 
@@ -565,6 +571,7 @@ namespace = "platform"
 | `path`         | string         | Yes      | --        | Path to YAML manifest, relative to config.|
 | `namespace`    | string         | No       | `default` | Namespace for `kubectl apply`.           |
 | `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).         |
+| `depends_on`   | list           | No       | `[]`      | Other addon names to install before this one. |
 
 **Kustomize addons** (`type = "kustomize"`):
 
@@ -574,6 +581,7 @@ namespace = "platform"
 | `path`         | string         | Yes      | --        | Path to kustomization directory.         |
 | `namespace`    | string         | No       | `default` | Namespace for `kubectl apply -k`.        |
 | `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).         |
+| `depends_on`   | list           | No       | `[]`      | Other addon names to install before this one. |
 
 ### Port forwarding
 
@@ -592,10 +600,10 @@ with exponential backoff if the connection drops.
 
 ### Lifecycle
 
-- `devrig start` installs addons in alphabetical order after the cluster is
-  created and before services are deployed. Installation is idempotent
-  (`helm upgrade --install`).
-- `devrig delete` uninstalls addons in reverse alphabetical order before
+- `devrig start` installs addons in dependency order (topological sort with
+  alphabetical tie-breaking) after the cluster is created and before services
+  are deployed. Installation is idempotent (`helm upgrade --install`).
+- `devrig delete` uninstalls addons in reverse dependency order before
   deleting the cluster.
 - Addons appear in the startup summary as `[addon] name`.
 
@@ -900,9 +908,11 @@ to **every** service:
 [env]
 RUST_LOG = "debug"
 NODE_ENV = "development"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 ```
 
-Per-service `env` values override global `env` values with the same key.
+Values support `{{ }}` template expressions (same as service env). Per-service
+`env` values override global `env` values with the same key.
 
 ## `[network]` section
 
@@ -917,26 +927,38 @@ If omitted, devrig creates a network named `devrig-{slug}-net`.
 
 ## Template expressions
 
-Service env values support `{{ dotted.path }}` template expressions that
-resolve to values from the config and resolved ports:
+Both `[env]` and `[services.*.env]` values support `{{ dotted.path }}`
+template expressions that resolve to values from the config, resolved ports,
+and cluster image builds:
 
 ```toml
-[services.api.env]
+[env]
 DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
+
+[services.api.env]
 SMTP_PORT = "{{ docker.mailpit.ports.smtp }}"
+SMTP_PORT_ALT = "{{ docker.mailpit.port_smtp }}"  # short alias for ports.smtp
 APP_NAME = "{{ project.name }}"
 ```
 
+Helm addon `values` also support templates for cluster image tags (see
+[addons](#cluster-addons-section)).
+
 ### Available template variables
 
-| Variable                       | Example value |
-|--------------------------------|---------------|
-| `project.name`                 | `myapp`       |
-| `services.<name>.port`         | `3000`        |
-| `docker.<name>.port`            | `5432`        |
-| `docker.<name>.ports.<portname>`| `1025`        |
-| `compose.<name>.port`          | `6379`        |
-| `cluster.name`                 | `myapp-dev`   |
+| Variable                             | Example value | Context                    |
+|--------------------------------------|---------------|----------------------------|
+| `project.name`                       | `myapp`       | All                        |
+| `services.<name>.port`               | `3000`        | All                        |
+| `docker.<name>.port`                 | `5432`        | All                        |
+| `docker.<name>.ports.<portname>`     | `1025`        | All                        |
+| `docker.<name>.port_<portname>`      | `1025`        | All (alias for `ports.*`)  |
+| `compose.<name>.port`                | `6379`        | All                        |
+| `cluster.name`                       | `myapp-dev`   | All (when cluster defined) |
+| `cluster.image.<name>.tag`           | `main-abc1234-20260224` | Addon values + service env |
+| `dashboard.port`                     | `4000`        | All                        |
+| `dashboard.otel.grpc_port`           | `4317`        | All                        |
+| `dashboard.otel.http_port`           | `4318`        | All                        |
 
 The `cluster.name` variable is available when a `[cluster]` section is
 defined. It resolves to the cluster name and is useful in Kubernetes
@@ -946,8 +968,13 @@ manifests for referencing images in the local registry:
 image: k3d-{{ cluster.name }}-reg:5000/api:latest
 ```
 
+The `cluster.image.<name>.tag` variables are populated after cluster images
+are built (Phase 3.5). They are available in addon helm values and in
+service env vars.
+
 Templates are resolved after all ports are assigned (Phase 4 of startup).
-Unresolved references produce an error before any services are started.
+Unresolved references produce an error with a "did you mean?" suggestion
+if a close match exists.
 
 ## Service discovery (`DEVRIG_*` variables)
 
@@ -1270,5 +1297,9 @@ Run `devrig validate` to check your config without starting services.
     deploy names.
 13. **Addon ports are unique** -- Port-forward local ports must not conflict
     with service ports.
+14. **Addon dependencies must exist** -- Every entry in an addon's `depends_on`
+    must reference another addon name. Typos trigger a "did you mean?"
+    suggestion.
+15. **No addon cycles** -- Addon dependency graphs must be acyclic.
 
 All validation errors are reported together so you can fix them in one pass.

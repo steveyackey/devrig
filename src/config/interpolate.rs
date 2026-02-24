@@ -1,8 +1,12 @@
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::LazyLock;
 
 use crate::config::model::DevrigConfig;
+use crate::orchestrator::state::ClusterDeployState;
+
+/// Minimum Jaro-Winkler score to consider a template variable a close match.
+const TEMPLATE_SUGGESTION_THRESHOLD: f64 = 0.8;
 
 /// Compiled pattern matching `{{ path.to.value }}` template expressions.
 static TEMPLATE_RE: LazyLock<Regex> =
@@ -10,8 +14,24 @@ static TEMPLATE_RE: LazyLock<Regex> =
 
 #[derive(Debug, thiserror::Error)]
 pub enum TemplateError {
-    #[error("unresolved variable '{{{{{{ {variable} }}}}}}' in {field}")]
-    UnresolvedVariable { field: String, variable: String },
+    #[error("unresolved variable '{{{{{{ {variable} }}}}}}' in {field}{}", suggestion.as_ref().map(|s| format!(" (did you mean `{}`?)", s)).unwrap_or_default())]
+    UnresolvedVariable {
+        field: String,
+        variable: String,
+        suggestion: Option<String>,
+    },
+}
+
+/// Find the closest matching template variable name using Jaro-Winkler similarity.
+fn find_closest_template_var<'a>(name: &str, vars: &'a HashMap<String, String>) -> Option<&'a str> {
+    let mut best: Option<(&str, f64)> = None;
+    for key in vars.keys() {
+        let score = strsim::jaro_winkler(name, key);
+        if score >= TEMPLATE_SUGGESTION_THRESHOLD && best.is_none_or(|(_, s)| score > s) {
+            best = Some((key.as_str(), score));
+        }
+    }
+    best.map(|(name, _)| name)
 }
 
 /// Resolve all `{{ var }}` expressions in `input` using `vars`.
@@ -35,9 +55,11 @@ pub fn resolve_template(
             if vars.contains_key(&variable) {
                 None
             } else {
+                let suggestion = find_closest_template_var(&variable, vars).map(String::from);
                 Some(TemplateError::UnresolvedVariable {
                     field: field_context.to_string(),
                     variable,
+                    suggestion,
                 })
             }
         })
@@ -91,11 +113,13 @@ pub fn build_template_vars(
             vars.insert(format!("docker.{name}.port"), port.to_string());
         }
 
-        // Named ports
+        // Named ports (canonical + short alias)
         for pname in docker_cfg.ports.keys() {
             let port_key = format!("docker:{name}:{pname}");
             if let Some(&port) = resolved_ports.get(&port_key) {
-                vars.insert(format!("docker.{name}.ports.{pname}"), port.to_string());
+                let val = port.to_string();
+                vars.insert(format!("docker.{name}.ports.{pname}"), val.clone());
+                vars.insert(format!("docker.{name}.port_{pname}"), val);
             }
         }
     }
@@ -127,7 +151,25 @@ pub fn build_template_vars(
     vars
 }
 
-/// Walk every service env value in `config` and resolve template expressions.
+/// Build template variables from cluster image build results.
+///
+/// Produced keys:
+///   - `cluster.image.{name}.tag`  (the image tag after build+push)
+pub fn build_cluster_image_vars(
+    deployed: &BTreeMap<String, ClusterDeployState>,
+) -> HashMap<String, String> {
+    let mut vars = HashMap::new();
+    for (name, state) in deployed {
+        vars.insert(
+            format!("cluster.image.{name}.tag"),
+            state.image_tag.clone(),
+        );
+    }
+    vars
+}
+
+/// Walk every service env value and project-level `[env]` value in `config`
+/// and resolve template expressions.
 ///
 /// All errors across all fields are collected and returned together.
 pub fn resolve_config_templates(
@@ -136,6 +178,16 @@ pub fn resolve_config_templates(
 ) -> Result<(), Vec<TemplateError>> {
     let mut all_errors: Vec<TemplateError> = Vec::new();
 
+    // Resolve project-level [env] templates
+    for (env_key, env_val) in &mut config.env {
+        let field_context = format!("env.{env_key}");
+        match resolve_template(env_val, vars, &field_context) {
+            Ok(resolved) => *env_val = resolved,
+            Err(mut errs) => all_errors.append(&mut errs),
+        }
+    }
+
+    // Resolve per-service env templates
     for (svc_name, svc) in &mut config.services {
         for (env_key, env_val) in &mut svc.env {
             let field_context = format!("services.{svc_name}.env.{env_key}");
@@ -196,11 +248,40 @@ mod tests {
         let errors = result.unwrap_err();
         assert_eq!(errors.len(), 1);
         match &errors[0] {
-            TemplateError::UnresolvedVariable { field, variable } => {
+            TemplateError::UnresolvedVariable {
+                field, variable, ..
+            } => {
                 assert_eq!(field, "services.api.env.DB_HOST");
                 assert_eq!(variable, "docker.mysql.port");
             }
         }
+    }
+
+    #[test]
+    fn unresolved_variable_suggests_close_match() {
+        let vars = make_vars();
+        let result = resolve_template(
+            "port={{ docker.postgres.prot }}",
+            &vars,
+            "services.api.env.PORT",
+        );
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            TemplateError::UnresolvedVariable { suggestion, .. } => {
+                assert_eq!(suggestion.as_deref(), Some("docker.postgres.port"));
+            }
+        }
+    }
+
+    #[test]
+    fn port_alias_works_in_template() {
+        let mut vars = make_vars();
+        vars.insert("docker.mailpit.port_smtp".to_string(), "1025".to_string());
+        let result =
+            resolve_template("smtp={{ docker.mailpit.port_smtp }}", &vars, "test").unwrap();
+        assert_eq!(result, "smtp=1025");
     }
 
     #[test]
@@ -300,6 +381,9 @@ mod tests {
         assert_eq!(vars.get("docker.postgres.port").unwrap(), "5432");
         assert_eq!(vars.get("docker.mailpit.ports.smtp").unwrap(), "1025");
         assert_eq!(vars.get("docker.mailpit.ports.ui").unwrap(), "8025");
+        // Short aliases
+        assert_eq!(vars.get("docker.mailpit.port_smtp").unwrap(), "1025");
+        assert_eq!(vars.get("docker.mailpit.port_ui").unwrap(), "8025");
     }
 
     #[test]
@@ -368,5 +452,39 @@ mod tests {
         config.cluster.as_mut().unwrap().name = None;
         let vars = build_template_vars(&config, &resolved_ports);
         assert_eq!(vars.get("cluster.name").unwrap(), "myapp-dev");
+    }
+
+    #[test]
+    fn resolve_config_templates_resolves_global_env() {
+        let mut config = DevrigConfig {
+            project: ProjectConfig {
+                name: "myapp".to_string(),
+                env_file: None,
+            },
+            services: BTreeMap::new(),
+            docker: BTreeMap::new(),
+            compose: None,
+            cluster: None,
+            dashboard: None,
+            env: BTreeMap::from([
+                (
+                    "DATABASE_URL".to_string(),
+                    "postgres://localhost:{{ docker.postgres.port }}/mydb".to_string(),
+                ),
+                ("PLAIN".to_string(), "no-templates-here".to_string()),
+            ]),
+            network: None,
+        };
+
+        let mut vars = HashMap::new();
+        vars.insert("docker.postgres.port".to_string(), "5432".to_string());
+
+        resolve_config_templates(&mut config, &vars).unwrap();
+
+        assert_eq!(
+            config.env.get("DATABASE_URL").unwrap(),
+            "postgres://localhost:5432/mydb"
+        );
+        assert_eq!(config.env.get("PLAIN").unwrap(), "no-templates-here");
     }
 }

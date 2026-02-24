@@ -198,10 +198,33 @@ manifests = "k8s/api"
 depends_on = ["job-runner"]   # ensures image exists before deploy
 ```
 
+**Cluster addons with dependencies and image tag templates:**
+
+```toml
+[cluster.addons.cert-manager]
+type = "helm"
+chart = "cert-manager/cert-manager"
+repo = "https://charts.jetstack.io"
+namespace = "cert-manager"
+
+[cluster.addons.myapp]
+type = "helm"
+chart = "./charts/myapp"
+namespace = "default"
+depends_on = ["cert-manager"]  # installs after cert-manager
+wait = false                    # don't block on readiness
+timeout = "10m"                 # helm timeout (default: 5m)
+[cluster.addons.myapp.values]
+"image.tag" = "{{ cluster.image.myapp.tag }}"
+```
+
 ### Environment Variables
 
 - `$VAR` / `${VAR}` expands from `.env` files or host environment
-- `{{ docker.postgres.port }}` templates reference other services' ports
+- `{{ docker.postgres.port }}` templates work in `[env]` and `[services.*.env]`
+- `{{ docker.mailpit.port_smtp }}` is a short alias for `{{ docker.mailpit.ports.smtp }}`
+- `{{ cluster.image.<name>.tag }}` references built cluster image tags (in addon values + service env)
+- Unresolved template variables show "did you mean?" suggestions
 - `$$` for a literal `$`
 - Every service receives `DEVRIG_<NAME>_HOST`, `DEVRIG_<NAME>_PORT`, `DEVRIG_<NAME>_URL` for all other services
 - When dashboard is enabled, every service gets `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_SERVICE_NAME`, `DEVRIG_DASHBOARD_URL`

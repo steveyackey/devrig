@@ -560,6 +560,7 @@ impl Orchestrator {
                             path: manifest_path.to_string_lossy().to_string(),
                             namespace: None,
                             port_forward: BTreeMap::new(),
+                            depends_on: vec![],
                         },
                     );
                     debug!("Fluent Bit log collector manifest generated");
@@ -572,8 +573,14 @@ impl Orchestrator {
                     count = combined_addons.len(),
                     "installing cluster addons"
                 );
+
+                // Build template vars from cluster image build results
+                let addon_template_vars =
+                    crate::config::interpolate::build_cluster_image_vars(&deployed);
+
                 crate::cluster::addon::install_addons(
                     &combined_addons,
+                    &addon_template_vars,
                     k3d_mgr.kubeconfig_path(),
                     &config_dir,
                     &self.cancel,
@@ -664,6 +671,13 @@ impl Orchestrator {
             if let Some(port) = state.port {
                 template_vars.insert(format!("compose.{}.port", name), port.to_string());
             }
+        }
+
+        // Merge cluster image tag vars into service template vars
+        if let Some(ref cs) = cluster_state {
+            let image_vars =
+                crate::config::interpolate::build_cluster_image_vars(&cs.deployed_services);
+            template_vars.extend(image_vars);
         }
 
         if let Err(errors) = resolve_config_templates(&mut self.config, &template_vars) {
@@ -1253,6 +1267,7 @@ impl Orchestrator {
                             path: log_collector_manifest.to_string_lossy().to_string(),
                             namespace: None,
                             port_forward: BTreeMap::new(),
+                            depends_on: vec![],
                         },
                     );
                 }

@@ -29,12 +29,13 @@ Config file: `devrig.toml`. Located by walking up from cwd; override with `-f <p
 
 ## `[env]`
 
-Global env vars passed to every service. Per-service env overrides these.
+Global env vars passed to every service. Supports `{{ }}` template expressions. Per-service env overrides these.
 
 ```toml
 [env]
 RUST_LOG = "debug"
 NODE_ENV = "development"
+DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/myapp"
 ```
 
 ---
@@ -172,29 +173,32 @@ password = "$REGISTRY_TOKEN"
 
 ### `[cluster.addons.*]`
 
-Types: `helm`, `manifest`, `kustomize`. All support `namespace` and `port_forward`.
+Types: `helm`, `manifest`, `kustomize`. All support `namespace`, `port_forward`, and `depends_on`.
 
-- **Helm**: `chart` (required), `repo` (optional — omit for local charts), `version`, `values`, `values_files`
+- **Helm**: `chart` (required), `repo` (optional — omit for local charts), `version`, `values` (supports `{{ }}` templates), `values_files`, `wait` (default: `true`), `timeout` (default: `"5m"`)
 - **Manifest**: `path` (required)
 - **Kustomize**: `path` (required)
 
+Addons install in dependency order (topological sort, alphabetical tie-break).
+
 ```toml
 # Remote chart
-[cluster.addons.traefik]
+[cluster.addons.cert-manager]
 type = "helm"
-chart = "traefik/traefik"
-repo = "https://traefik.github.io/charts"
-namespace = "traefik"
-version = "26.0.0"
-[cluster.addons.traefik.port_forward]
-8080 = "svc/traefik:80"
+chart = "cert-manager/cert-manager"
+repo = "https://charts.jetstack.io"
+namespace = "cert-manager"
 
-# Local chart (no repo)
+# Local chart with dependencies and image tag template
 [cluster.addons.myapp]
 type = "helm"
 chart = "./charts/myapp"
 namespace = "myapp"
-values_files = ["charts/myapp/values-dev.yaml"]
+depends_on = ["cert-manager"]
+wait = false
+timeout = "10m"
+[cluster.addons.myapp.values]
+"image.tag" = "{{ cluster.image.myapp.tag }}"
 ```
 
 ---
@@ -234,16 +238,23 @@ DATABASE_URL = "postgres://user:${DB_PASS}@localhost:{{ docker.postgres.port }}/
 
 ## Template Expressions
 
-Service env values support `{{ dotted.path }}` templates:
+`[env]`, `[services.*.env]`, and addon `values` support `{{ dotted.path }}` templates:
 
-| Variable                         | Example value |
-|----------------------------------|---------------|
-| `project.name`                   | `myapp`       |
-| `services.<name>.port`           | `3000`        |
-| `docker.<name>.port`             | `5432`        |
-| `docker.<name>.ports.<portname>` | `1025`        |
-| `compose.<name>.port`            | `6379`        |
-| `cluster.name`                   | `myapp-dev`   |
+| Variable                             | Example value                 | Context                    |
+|--------------------------------------|-------------------------------|----------------------------|
+| `project.name`                       | `myapp`                       | All                        |
+| `services.<name>.port`               | `3000`                        | All                        |
+| `docker.<name>.port`                 | `5432`                        | All                        |
+| `docker.<name>.ports.<portname>`     | `1025`                        | All                        |
+| `docker.<name>.port_<portname>`      | `1025`                        | All (alias for `ports.*`)  |
+| `compose.<name>.port`                | `6379`                        | All                        |
+| `cluster.name`                       | `myapp-dev`                   | All (when cluster defined) |
+| `cluster.image.<name>.tag`           | `main-abc1234-20260224`       | Addon values + service env |
+| `dashboard.port`                     | `4000`                        | All                        |
+| `dashboard.otel.grpc_port`           | `4317`                        | All                        |
+| `dashboard.otel.http_port`           | `4318`                        | All                        |
+
+Unresolved variables produce an error with a "did you mean?" suggestion if a close match exists.
 
 ```toml
 DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/mydb"

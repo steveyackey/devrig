@@ -240,6 +240,29 @@ pub enum ConfigDiagnostic {
         name: String,
     },
 
+    #[error("unknown addon dependency `{dependency}`")]
+    #[diagnostic(code(devrig::missing_addon_dependency))]
+    MissingAddonDependency {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("addon `{addon}` depends on `{dependency}`, which does not exist")]
+        span: SourceSpan,
+        #[help]
+        advice: String,
+        addon: String,
+        dependency: String,
+    },
+
+    #[error("addon dependency cycle detected involving `{addon}`")]
+    #[diagnostic(code(devrig::addon_dependency_cycle))]
+    AddonDependencyCycle {
+        #[source_code]
+        src: NamedSource<String>,
+        #[label("cycle involves this addon")]
+        span: SourceSpan,
+        addon: String,
+    },
+
     #[error("docker `{service}` has empty registry_auth credentials after expansion")]
     #[diagnostic(
         code(devrig::empty_registry_auth),
@@ -894,6 +917,30 @@ pub fn validate(
                 }
             }
 
+            // Check addon depends_on targets exist (must reference other addon names)
+            let addon_names: Vec<String> = cluster.addons.keys().cloned().collect();
+            for dep in addon.depends_on() {
+                if !cluster.addons.contains_key(dep) {
+                    let suggestion = find_closest_match(dep, &addon_names);
+                    let advice = match suggestion {
+                        Some(s) => format!("did you mean `{}`?", s),
+                        None => format!("available addons: {:?}", addon_names),
+                    };
+                    errors.push(ConfigDiagnostic::MissingAddonDependency {
+                        src: src.clone(),
+                        span: find_depends_on_value(
+                            source,
+                            "cluster.addons",
+                            name,
+                            dep,
+                        ),
+                        advice,
+                        addon: name.clone(),
+                        dependency: dep.clone(),
+                    });
+                }
+            }
+
             // Check addon names don't conflict with deploy names
             if cluster.deploy.contains_key(name) {
                 errors.push(ConfigDiagnostic::AddonNameConflict {
@@ -901,6 +948,58 @@ pub fn validate(
                     span: find_table_span(source, "cluster.addons", name),
                     name: name.clone(),
                 });
+            }
+        }
+
+        // Check for addon dependency cycles
+        {
+            let mut addon_deps: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+            for (name, addon) in &cluster.addons {
+                addon_deps.insert(
+                    name.as_str(),
+                    addon
+                        .depends_on()
+                        .iter()
+                        .filter(|d| cluster.addons.contains_key(d.as_str()))
+                        .map(|d| d.as_str())
+                        .collect(),
+                );
+            }
+
+            let mut visited: HashSet<&str> = HashSet::new();
+            let mut in_stack: HashSet<&str> = HashSet::new();
+
+            for &start in addon_deps.keys() {
+                if visited.contains(start) {
+                    continue;
+                }
+
+                let mut stack: Vec<(&str, usize)> = vec![(start, 0)];
+                in_stack.insert(start);
+
+                while let Some((node, idx)) = stack.last_mut() {
+                    let deps = &addon_deps[*node];
+                    if *idx < deps.len() {
+                        let dep = deps[*idx];
+                        *idx += 1;
+
+                        if in_stack.contains(dep) {
+                            errors.push(ConfigDiagnostic::AddonDependencyCycle {
+                                src: src.clone(),
+                                span: find_table_span(source, "cluster.addons", dep),
+                                addon: dep.to_string(),
+                            });
+                        } else if !visited.contains(dep) {
+                            in_stack.insert(dep);
+                            stack.push((dep, 0));
+                        }
+                    } else {
+                        let finished = *node;
+                        visited.insert(finished);
+                        in_stack.remove(finished);
+                        stack.pop();
+                    }
+                }
             }
         }
     }

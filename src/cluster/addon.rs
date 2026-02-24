@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Duration;
 
@@ -9,7 +9,10 @@ use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{debug, error, warn};
 
+use std::collections::HashMap;
+
 use crate::config::model::AddonConfig;
+use crate::config::interpolate::resolve_template;
 use crate::orchestrator::state::AddonState;
 
 // ---------------------------------------------------------------------------
@@ -100,6 +103,8 @@ async fn install_helm_addon(
     version: Option<&str>,
     values: &BTreeMap<String, toml::Value>,
     values_files: &[String],
+    wait: bool,
+    timeout: &str,
     kubeconfig: &Path,
     config_dir: &Path,
     cancel: &CancellationToken,
@@ -146,10 +151,13 @@ async fn install_helm_addon(
         "--namespace".to_string(),
         namespace.to_string(),
         "--create-namespace".to_string(),
-        "--wait".to_string(),
-        "--timeout".to_string(),
-        "5m".to_string(),
     ];
+
+    if wait {
+        args.push("--wait".to_string());
+        args.push("--timeout".to_string());
+        args.push(timeout.to_string());
+    }
 
     if let Some(v) = version {
         args.push("--version".to_string());
@@ -245,20 +253,120 @@ async fn install_kustomize_addon(
 }
 
 // ---------------------------------------------------------------------------
+// Topological sort for addon install ordering
+// ---------------------------------------------------------------------------
+
+/// Topologically sort addons by `depends_on` using Kahn's algorithm.
+///
+/// Tie-breaking is alphabetical (deterministic). Returns an error if a cycle
+/// is detected.
+pub fn topo_sort_addons(addons: &BTreeMap<String, AddonConfig>) -> Result<Vec<String>> {
+    // Build in-degree map and adjacency list
+    let mut in_degree: BTreeMap<&str, usize> = BTreeMap::new();
+    let mut dependents: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
+
+    for name in addons.keys() {
+        in_degree.entry(name.as_str()).or_insert(0);
+    }
+
+    for (name, addon) in addons {
+        for dep in addon.depends_on() {
+            // Only count deps that are actually in the addons map
+            if addons.contains_key(dep.as_str()) {
+                dependents
+                    .entry(dep.as_str())
+                    .or_default()
+                    .insert(name.as_str());
+                *in_degree.entry(name.as_str()).or_insert(0) += 1;
+            }
+        }
+    }
+
+    // Seed the queue with nodes that have zero in-degree (BTreeSet for alphabetical order)
+    let mut ready: BTreeSet<&str> = BTreeSet::new();
+    for (&name, &deg) in &in_degree {
+        if deg == 0 {
+            ready.insert(name);
+        }
+    }
+
+    let mut sorted: Vec<String> = Vec::with_capacity(addons.len());
+
+    while let Some(&name) = ready.iter().next() {
+        ready.remove(name);
+        sorted.push(name.to_string());
+
+        if let Some(deps) = dependents.get(name) {
+            for &dependent in deps {
+                let deg = in_degree.get_mut(dependent).unwrap();
+                *deg -= 1;
+                if *deg == 0 {
+                    ready.insert(dependent);
+                }
+            }
+        }
+    }
+
+    if sorted.len() != addons.len() {
+        // Find cycle participants
+        let in_cycle: Vec<String> = in_degree
+            .iter()
+            .filter(|(_, &deg)| deg > 0)
+            .map(|(&name, _)| name.to_string())
+            .collect();
+        bail!(
+            "addon dependency cycle detected involving: {}",
+            in_cycle.join(", ")
+        );
+    }
+
+    Ok(sorted)
+}
+
+// ---------------------------------------------------------------------------
 // Bulk install/uninstall
 // ---------------------------------------------------------------------------
 
-/// Install all addons in BTreeMap order (alphabetical).
+/// Resolve `{{ }}` templates in the string values of a TOML values map.
+fn resolve_values_templates(
+    values: &BTreeMap<String, toml::Value>,
+    template_vars: &HashMap<String, String>,
+    addon_name: &str,
+) -> Result<BTreeMap<String, toml::Value>> {
+    let mut resolved = BTreeMap::new();
+    for (key, value) in values {
+        let resolved_val = match value {
+            toml::Value::String(s) => {
+                let field_ctx = format!("cluster.addons.{addon_name}.values.{key}");
+                match resolve_template(s, template_vars, &field_ctx) {
+                    Ok(r) => toml::Value::String(r),
+                    Err(errs) => {
+                        let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
+                        bail!("{}", msgs.join("; "));
+                    }
+                }
+            }
+            other => other.clone(),
+        };
+        resolved.insert(key.clone(), resolved_val);
+    }
+    Ok(resolved)
+}
+
+/// Install all addons in dependency order (topological sort, alphabetical tie-break).
 /// Returns a map of addon states for persistence.
 pub async fn install_addons(
     addons: &BTreeMap<String, AddonConfig>,
+    template_vars: &HashMap<String, String>,
     kubeconfig: &Path,
     config_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<BTreeMap<String, AddonState>> {
     let mut states = BTreeMap::new();
+    let install_order = topo_sort_addons(addons)?;
 
-    for (name, addon) in addons {
+    for name in &install_order {
+        let addon = &addons[name];
         debug!(addon = %name, type_ = %addon.addon_type(), "installing addon");
 
         match addon {
@@ -269,16 +377,22 @@ pub async fn install_addons(
                 version,
                 values,
                 values_files,
+                wait,
+                timeout,
                 ..
             } => {
+                let resolved_values =
+                    resolve_values_templates(values, template_vars, name)?;
                 install_helm_addon(
                     name,
                     chart,
                     repo.as_deref(),
                     namespace,
                     version.as_deref(),
-                    values,
+                    &resolved_values,
                     values_files,
+                    *wait,
+                    timeout,
                     kubeconfig,
                     config_dir,
                     cancel,
@@ -348,8 +462,14 @@ pub async fn uninstall_addons(
     config_dir: &Path,
     cancel: &CancellationToken,
 ) {
-    // Uninstall in reverse alphabetical order
-    for (name, addon) in addons.iter().rev() {
+    // Uninstall in reverse dependency order (dependents first)
+    let uninstall_order: Vec<String> = match topo_sort_addons(addons) {
+        Ok(order) => order.into_iter().rev().collect(),
+        Err(_) => addons.keys().rev().cloned().collect(), // fallback to reverse-alpha
+    };
+
+    for name in &uninstall_order {
+        let addon = &addons[name];
         debug!(addon = %name, "uninstalling addon");
         let result = match addon {
             AddonConfig::Helm { namespace, .. } => {
@@ -584,5 +704,74 @@ mod tests {
             toml::Value::String("c".to_string()),
         ]);
         assert_eq!(toml_value_to_helm_set(&val), "{a,b,c}");
+    }
+
+    /// Helper to build a minimal Manifest addon for topo-sort tests.
+    fn manifest_addon(deps: Vec<&str>) -> AddonConfig {
+        AddonConfig::Manifest {
+            path: "./test.yaml".to_string(),
+            namespace: None,
+            port_forward: BTreeMap::new(),
+            depends_on: deps.into_iter().map(String::from).collect(),
+        }
+    }
+
+    #[test]
+    fn topo_sort_no_deps_is_alphabetical() {
+        let mut addons = BTreeMap::new();
+        addons.insert("charlie".to_string(), manifest_addon(vec![]));
+        addons.insert("alpha".to_string(), manifest_addon(vec![]));
+        addons.insert("bravo".to_string(), manifest_addon(vec![]));
+
+        let order = topo_sort_addons(&addons).unwrap();
+        assert_eq!(order, vec!["alpha", "bravo", "charlie"]);
+    }
+
+    #[test]
+    fn topo_sort_respects_depends_on() {
+        let mut addons = BTreeMap::new();
+        addons.insert("app".to_string(), manifest_addon(vec!["cert-manager"]));
+        addons.insert("cert-manager".to_string(), manifest_addon(vec![]));
+
+        let order = topo_sort_addons(&addons).unwrap();
+        assert_eq!(order, vec!["cert-manager", "app"]);
+    }
+
+    #[test]
+    fn topo_sort_diamond_deps() {
+        let mut addons = BTreeMap::new();
+        addons.insert("d".to_string(), manifest_addon(vec!["b", "c"]));
+        addons.insert("b".to_string(), manifest_addon(vec!["a"]));
+        addons.insert("c".to_string(), manifest_addon(vec!["a"]));
+        addons.insert("a".to_string(), manifest_addon(vec![]));
+
+        let order = topo_sort_addons(&addons).unwrap();
+        // a must come before b and c; b and c before d
+        let pos = |n: &str| order.iter().position(|x| x == n).unwrap();
+        assert!(pos("a") < pos("b"));
+        assert!(pos("a") < pos("c"));
+        assert!(pos("b") < pos("d"));
+        assert!(pos("c") < pos("d"));
+    }
+
+    #[test]
+    fn topo_sort_detects_cycle() {
+        let mut addons = BTreeMap::new();
+        addons.insert("a".to_string(), manifest_addon(vec!["b"]));
+        addons.insert("b".to_string(), manifest_addon(vec!["a"]));
+
+        let result = topo_sort_addons(&addons);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("cycle"));
+    }
+
+    #[test]
+    fn topo_sort_ignores_external_deps() {
+        // depends_on referencing non-addon names should be silently ignored
+        let mut addons = BTreeMap::new();
+        addons.insert("app".to_string(), manifest_addon(vec!["external-thing"]));
+
+        let order = topo_sort_addons(&addons).unwrap();
+        assert_eq!(order, vec!["app"]);
     }
 }

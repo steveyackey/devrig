@@ -381,6 +381,10 @@ impl<'de> Deserialize<'de> for NamespaceFilter {
     }
 }
 
+fn default_helm_timeout() -> String {
+    "5m".to_string()
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum AddonConfig {
@@ -398,6 +402,12 @@ pub enum AddonConfig {
         values_files: Vec<String>,
         #[serde(default)]
         port_forward: BTreeMap<String, String>,
+        #[serde(default = "default_true")]
+        wait: bool,
+        #[serde(default = "default_helm_timeout")]
+        timeout: String,
+        #[serde(default)]
+        depends_on: Vec<String>,
     },
     #[serde(rename = "manifest")]
     Manifest {
@@ -406,6 +416,8 @@ pub enum AddonConfig {
         namespace: Option<String>,
         #[serde(default)]
         port_forward: BTreeMap<String, String>,
+        #[serde(default)]
+        depends_on: Vec<String>,
     },
     #[serde(rename = "kustomize")]
     Kustomize {
@@ -414,6 +426,8 @@ pub enum AddonConfig {
         namespace: Option<String>,
         #[serde(default)]
         port_forward: BTreeMap<String, String>,
+        #[serde(default)]
+        depends_on: Vec<String>,
     },
 }
 
@@ -450,6 +464,15 @@ impl AddonConfig {
             AddonConfig::Helm { .. } => "helm",
             AddonConfig::Manifest { .. } => "manifest",
             AddonConfig::Kustomize { .. } => "kustomize",
+        }
+    }
+
+    /// Returns the depends_on list for any addon variant.
+    pub fn depends_on(&self) -> &[String] {
+        match self {
+            AddonConfig::Helm { depends_on, .. } => depends_on,
+            AddonConfig::Manifest { depends_on, .. } => depends_on,
+            AddonConfig::Kustomize { depends_on, .. } => depends_on,
         }
     }
 }
@@ -1628,19 +1651,25 @@ mod tests {
             values: BTreeMap::new(),
             values_files: Vec::new(),
             port_forward: BTreeMap::from([("8080".to_string(), "svc/test:80".to_string())]),
+            wait: true,
+            timeout: "5m".to_string(),
+            depends_on: vec![],
         };
         assert_eq!(helm.addon_type(), "helm");
         assert_eq!(helm.namespace(), Some("default"));
         assert_eq!(helm.port_forward().len(), 1);
+        assert!(helm.depends_on().is_empty());
 
         let manifest = AddonConfig::Manifest {
             path: "./test.yaml".to_string(),
             namespace: None,
             port_forward: BTreeMap::new(),
+            depends_on: vec![],
         };
         assert_eq!(manifest.addon_type(), "manifest");
         assert_eq!(manifest.namespace(), None);
         assert!(manifest.port_forward().is_empty());
+        assert!(manifest.depends_on().is_empty());
     }
 
     #[test]
