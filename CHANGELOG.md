@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.12.1](https://github.com/steveyackey/devrig/compare/v0.12.0...v0.12.1) (2026-02-24)
+
+
+### Bug Fixes
+
+* resolve relative bind mount paths to absolute for Docker ([8c8401b](https://github.com/steveyackey/devrig/commit/8c8401bb097a6a9eed7817b50521100c4d44943d))
+
 ## [0.12.0](https://github.com/steveyackey/devrig/compare/v0.11.0...v0.12.0) (2026-02-24)
 
 
