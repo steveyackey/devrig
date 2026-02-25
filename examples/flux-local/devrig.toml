@@ -1,0 +1,25 @@
+[project]
+name = "flux-local"
+
+[dashboard]
+
+[services.git-server]
+command = "bash setup.sh"
+port = 9080
+
+[cluster]
+ports = ["8080:30080"]
+
+[cluster.addons.flux]
+type = "helm"
+chart = "fluxcd-community/flux2"
+repo = "https://fluxcd-community.github.io/helm-charts"
+namespace = "flux-system"
+wait = true
+timeout = "10m"
+
+[cluster.addons.flux-bootstrap]
+type = "manifest"
+path = "k8s/bootstrap.yaml"
+namespace = "flux-system"
+depends_on = ["flux"]
