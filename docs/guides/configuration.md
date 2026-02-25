@@ -393,10 +393,15 @@ registry = true
 | `name`     | string          | No       | `devrig-{slug}` | k3d cluster name.                                 |
 | `agents`   | integer         | No       | `1`             | Number of k3d agent nodes.                        |
 | `ports`    | list of strings | No       | `[]`            | Port mappings from host to cluster load balancer.  |
+| `volumes`  | list of strings | No       | `[]`            | Host directory mounts into cluster nodes.          |
 | `registry` | boolean         | No       | `true`          | Whether to create a local container registry.      |
 
 Port mappings use the format `"hostPort:containerPort"`. The host port is
 bound on `localhost` and forwarded through the k3d load balancer.
+
+Volume mounts use k3d format: `"/host/path:/container/path@server:*"`. The
+`@server:*` suffix mounts on all server nodes; use `@agent:*` for agent nodes
+or `@all` for both.
 
 ## `[cluster.deploy.*]` section
 
@@ -964,6 +969,7 @@ Helm addon `values` also support templates for cluster image tags (see
 | `docker.<name>.port_<portname>`      | `1025`        | All (alias for `ports.*`)  |
 | `compose.<name>.port`                | `6379`        | All                        |
 | `cluster.name`                       | `myapp-dev`   | All (when cluster defined) |
+| `cluster.kubeconfig`                 | `.devrig/myapp-abc123/kubeconfig` | Service env (when cluster defined) |
 | `cluster.registry`                   | `k3d-devrig-abc123-reg:5000` | Addon values (when registry enabled) |
 | `cluster.image.<name>.tag`           | `1234567890`  | Addon values + service env |
 | `dashboard.port`                     | `4000`        | All                        |

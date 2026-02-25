@@ -470,6 +470,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
@@ -492,6 +493,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
@@ -520,6 +522,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([(
@@ -552,6 +555,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([(
@@ -589,6 +593,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([
@@ -612,6 +617,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([(
@@ -674,6 +680,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([("runner".to_string(), make_image("./runner", vec![]))]),
             deploy: BTreeMap::new(),
@@ -696,6 +703,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([("runner".to_string(), make_image("./runner", vec![]))]),
             deploy: BTreeMap::from([(
@@ -730,6 +738,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([(
                 "migrator".to_string(),
@@ -753,6 +762,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([(
                 "runner".to_string(),

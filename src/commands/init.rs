@@ -48,6 +48,7 @@ command = "{service_command}"
 #
 # [services.{service_name}.env]
 # DATABASE_URL = "postgres://user:${{DB_PASS}}@localhost:{{{{ docker.postgres.port }}}}/mydb"
+# KUBECONFIG = "{{{{ cluster.kubeconfig }}}}"  # when service needs k3d access
 #
 # [services.{service_name}.restart]
 # policy = "on-failure"
@@ -104,6 +105,7 @@ command = "{service_command}"
 # [cluster]
 # agents = 1
 # ports = ["8080:80"]
+# volumes = ["../:/workspace@server:*"]  # mount host dirs into cluster nodes
 #
 # [cluster.image.job-runner]
 # context = "./tools/job-runner"

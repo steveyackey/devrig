@@ -16,15 +16,15 @@ pub async fn run_create(config_file: Option<&Path>) -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no [cluster] section in config"))?;
 
-    let state_dir = config_path
+    let config_dir = config_path
         .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(".devrig");
+        .unwrap_or_else(|| Path::new("."));
+    let state_dir = config_dir.join(".devrig");
 
     // Need network name - use the slug-based convention
     let network_name = format!("devrig-{}-net", identity.slug);
 
-    let k3d_mgr = K3dManager::new(&identity.slug, cluster_config, &state_dir, &network_name);
+    let k3d_mgr = K3dManager::new(&identity.slug, cluster_config, &state_dir, &network_name, config_dir);
     k3d_mgr
         .create_cluster()
         .await
@@ -49,14 +49,14 @@ pub async fn run_delete(config_file: Option<&Path>) -> Result<()> {
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no [cluster] section in config"))?;
 
-    let state_dir = config_path
+    let config_dir = config_path
         .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(".devrig");
+        .unwrap_or_else(|| Path::new("."));
+    let state_dir = config_dir.join(".devrig");
 
     let network_name = format!("devrig-{}-net", identity.slug);
 
-    let k3d_mgr = K3dManager::new(&identity.slug, cluster_config, &state_dir, &network_name);
+    let k3d_mgr = K3dManager::new(&identity.slug, cluster_config, &state_dir, &network_name, config_dir);
     k3d_mgr
         .delete_cluster()
         .await

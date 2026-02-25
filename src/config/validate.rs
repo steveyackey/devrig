@@ -1658,6 +1658,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: true,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "./k8s", vec![]))]),
@@ -1680,6 +1681,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: true,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([(
@@ -1701,6 +1703,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("", "./k8s", vec![]))]),
@@ -1723,6 +1726,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([("api".to_string(), make_deploy("./api", "", vec![]))]),
@@ -1749,6 +1753,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([(
@@ -1774,6 +1779,7 @@ mod tests {
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::new(),
             deploy: BTreeMap::from([(
@@ -2221,6 +2227,7 @@ context = "./tools/job-runner"
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([("job-runner".to_string(), make_image("", vec![]))]),
             deploy: BTreeMap::new(),
@@ -2243,6 +2250,7 @@ context = "./tools/job-runner"
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: true,
             images: BTreeMap::from([("api".to_string(), make_image("./tools/api", vec![]))]),
             deploy: BTreeMap::from([(
@@ -2272,6 +2280,7 @@ context = "./tools/job-runner"
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([(
                 "postgres".to_string(),
@@ -2297,6 +2306,7 @@ context = "./tools/job-runner"
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: false,
             images: BTreeMap::from([(
                 "job-runner".to_string(),
@@ -2330,6 +2340,7 @@ context = "./tools/job-runner"
             name: None,
             agents: 1,
             ports: vec![],
+            volumes: vec![],
             registry: true,
             images: BTreeMap::from([(
                 "job-runner".to_string(),

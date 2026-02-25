@@ -334,6 +334,8 @@ pub struct ClusterConfig {
     pub agents: u32,
     #[serde(default)]
     pub ports: Vec<String>,
+    #[serde(default)]
+    pub volumes: Vec<String>,
     #[serde(default = "default_registry")]
     pub registry: bool,
     #[serde(default, rename = "image")]

@@ -36,6 +36,7 @@ Run `devrig skill reference` to see the complete field reference for all config 
 - `{{ docker.<name>.port }}` — resolved docker port
 - `{{ docker.<name>.ports.<portname> }}` — named port (alias: `{{ docker.<name>.port_<portname> }}`)
 - `{{ cluster.image.<name>.tag }}` — built cluster image tag
+- `{{ cluster.kubeconfig }}` — path to the k3d cluster kubeconfig
 - `{{ project.name }}`, `{{ dashboard.port }}`, `{{ dashboard.otel.grpc_port }}`, etc.
 
 Unresolved variables produce an error with "did you mean?" suggestions.

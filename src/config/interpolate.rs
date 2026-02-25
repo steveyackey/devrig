@@ -438,6 +438,7 @@ mod tests {
                 name: Some("my-cluster".to_string()),
                 agents: 1,
                 ports: vec![],
+                volumes: vec![],
                 registry: false,
                 images: BTreeMap::new(),
                 deploy: BTreeMap::new(),

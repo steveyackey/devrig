@@ -255,6 +255,7 @@ DATABASE_URL = "postgres://user:${DB_PASS}@localhost:{{ docker.postgres.port }}/
 | `docker.<name>.port_<portname>`      | `1025`                        | All (alias for `ports.*`)  |
 | `compose.<name>.port`                | `6379`                        | All                        |
 | `cluster.name`                       | `myapp-dev`                   | All (when cluster defined) |
+| `cluster.kubeconfig`                 | `.devrig/myapp-abc123/kubeconfig` | Service env (when cluster defined) |
 | `cluster.registry`                   | `k3d-devrig-abc123-reg:5000`  | Addon values (when registry enabled) |
 | `cluster.image.<name>.tag`           | `1234567890`                  | Addon values + service env |
 | `dashboard.port`                     | `4000`                        | All                        |

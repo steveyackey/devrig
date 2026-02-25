@@ -425,6 +425,7 @@ impl Orchestrator {
                 cluster_config,
                 &self.state_dir,
                 network,
+                &config_dir,
             );
 
             debug!(cluster = %k3d_mgr.cluster_name(), "creating k3d cluster");
@@ -679,11 +680,15 @@ impl Orchestrator {
             }
         }
 
-        // Merge cluster image tag vars into service template vars
+        // Merge cluster vars into service template vars
         if let Some(ref cs) = cluster_state {
             let image_vars =
                 crate::config::interpolate::build_cluster_image_vars(&cs.deployed_services);
             template_vars.extend(image_vars);
+            template_vars.insert(
+                "cluster.kubeconfig".to_string(),
+                cs.kubeconfig_path.clone(),
+            );
         }
 
         if let Err(errors) = resolve_config_templates(&mut self.config, &template_vars) {
@@ -1254,11 +1259,16 @@ impl Orchestrator {
                     .as_ref()
                     .and_then(|s| s.network_name.as_deref())
                     .unwrap_or("devrig-net");
+                let delete_config_dir = self
+                    .config_path
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."));
                 let k3d_mgr = K3dManager::new(
                     &self.identity.slug,
                     cluster_config,
                     &self.state_dir,
                     network,
+                    delete_config_dir,
                 );
 
                 // Uninstall addons (including synthetic log collector) before deleting the cluster

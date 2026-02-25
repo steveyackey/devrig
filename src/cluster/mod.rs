@@ -17,12 +17,19 @@ pub struct K3dManager {
     slug: String,
     kubeconfig_path: PathBuf,
     network_name: String,
+    config_dir: PathBuf,
     config: ClusterConfig,
 }
 
 impl K3dManager {
     /// Create a new K3dManager for the given project slug and cluster configuration.
-    pub fn new(slug: &str, config: &ClusterConfig, state_dir: &Path, network_name: &str) -> Self {
+    pub fn new(
+        slug: &str,
+        config: &ClusterConfig,
+        state_dir: &Path,
+        network_name: &str,
+        config_dir: &Path,
+    ) -> Self {
         let cluster_name = format!("devrig-{}", slug);
         let kubeconfig_path = state_dir.join("kubeconfig");
         Self {
@@ -30,6 +37,7 @@ impl K3dManager {
             slug: slug.to_string(),
             kubeconfig_path,
             network_name: network_name.to_string(),
+            config_dir: config_dir.to_path_buf(),
             config: config.clone(),
         }
     }
@@ -58,6 +66,11 @@ impl K3dManager {
         for entry in &self.config.ports {
             args.push("-p".to_string());
             args.push(entry.clone());
+        }
+
+        for entry in &self.config.volumes {
+            args.push("--volume".to_string());
+            args.push(self.resolve_volume_path(entry));
         }
 
         if self.config.registry {
@@ -253,6 +266,26 @@ impl K3dManager {
         &self.kubeconfig_path
     }
 
+    /// Resolve a k3d volume spec, making the host path absolute relative to config_dir.
+    ///
+    /// Format: `host_path:container_path[@node_filter]`
+    /// If `host_path` is relative, it's resolved against `config_dir`.
+    fn resolve_volume_path(&self, spec: &str) -> String {
+        // Split on first ':' to get host_path and the rest
+        if let Some((host_path, rest)) = spec.split_once(':') {
+            let path = Path::new(host_path);
+            if path.is_relative() {
+                let resolved = self.config_dir.join(path);
+                // Canonicalize if possible, otherwise use the joined path
+                let absolute = resolved
+                    .canonicalize()
+                    .unwrap_or(resolved);
+                return format!("{}:{}", absolute.display(), rest);
+            }
+        }
+        spec.to_string()
+    }
+
     /// Return the Docker network name the cluster is attached to.
     pub fn network_name(&self) -> &str {
         &self.network_name
@@ -289,6 +322,7 @@ fn generate_registries_yaml(registries: &[ClusterRegistryAuth]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::BTreeMap;
 
     #[test]
     fn registries_yaml_single_registry() {
@@ -329,5 +363,50 @@ mod tests {
     fn registries_yaml_empty() {
         let yaml = generate_registries_yaml(&[]);
         assert_eq!(yaml, "mirrors:\nconfigs:\n");
+    }
+
+    fn make_k3d_mgr(config_dir: &Path) -> K3dManager {
+        K3dManager::new(
+            "test-abc123",
+            &ClusterConfig {
+                name: None,
+                agents: 1,
+                ports: vec![],
+                volumes: vec![],
+                registry: false,
+                images: BTreeMap::new(),
+                deploy: BTreeMap::new(),
+                addons: BTreeMap::new(),
+                logs: None,
+                registries: vec![],
+            },
+            &config_dir.join(".devrig"),
+            "test-net",
+            config_dir,
+        )
+    }
+
+    #[test]
+    fn resolve_volume_absolute_path_unchanged() {
+        let mgr = make_k3d_mgr(Path::new("/home/user/project"));
+        assert_eq!(
+            mgr.resolve_volume_path("/data:/workspace@server:*"),
+            "/data:/workspace@server:*"
+        );
+    }
+
+    #[test]
+    fn resolve_volume_relative_path_joined_with_config_dir() {
+        let mgr = make_k3d_mgr(Path::new("/home/user/project"));
+        let resolved = mgr.resolve_volume_path("../:/workspace@server:*");
+        // Should start with the resolved absolute path, not "../"
+        assert!(!resolved.starts_with("../"), "expected absolute path, got: {resolved}");
+        assert!(resolved.ends_with(":/workspace@server:*"));
+    }
+
+    #[test]
+    fn resolve_volume_no_colon_unchanged() {
+        let mgr = make_k3d_mgr(Path::new("/home/user/project"));
+        assert_eq!(mgr.resolve_volume_path("just-a-name"), "just-a-name");
     }
 }
