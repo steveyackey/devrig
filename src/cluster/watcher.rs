@@ -11,6 +11,7 @@ use tracing::{debug, error, warn};
 
 use crate::cluster::deploy;
 use crate::config::model::{ClusterDeployConfig, ClusterImageConfig};
+use crate::orchestrator::state::ClusterDeployState;
 
 const IGNORED_DIRS: &[&str] = &[
     ".git",
@@ -73,6 +74,7 @@ pub async fn start_image_watchers(
     images: &BTreeMap<String, ClusterImageConfig>,
     registry_port: Option<u16>,
     config_dir: PathBuf,
+    deployed: BTreeMap<String, ClusterDeployState>,
     cancel: CancellationToken,
     tracker: &TaskTracker,
 ) -> Result<()> {
@@ -84,6 +86,7 @@ pub async fn start_image_watchers(
         let name = name.clone();
         let image_config = image_config.clone();
         let config_dir = config_dir.clone();
+        let deployed = deployed.clone();
         let cancel = cancel.clone();
 
         tracker.spawn(async move {
@@ -92,6 +95,7 @@ pub async fn start_image_watchers(
                 image_config,
                 registry_port,
                 config_dir,
+                deployed,
                 cancel,
             )
             .await
@@ -111,6 +115,7 @@ async fn watch_and_rebuild_image(
     image_config: ClusterImageConfig,
     registry_port: Option<u16>,
     config_dir: PathBuf,
+    deployed: BTreeMap<String, ClusterDeployState>,
     cancel: CancellationToken,
 ) -> Result<()> {
     let watch_path = config_dir.join(&image_config.context);
@@ -197,12 +202,14 @@ async fn watch_and_rebuild_image(
                 let rebuild_config = image_config.clone();
                 let rebuild_config_dir = config_dir.clone();
 
+                let rebuild_deployed = deployed.clone();
                 tokio::spawn(async move {
                     match deploy::rebuild_image(
                         &rebuild_name,
                         &rebuild_config,
                         registry_port,
                         &rebuild_config_dir,
+                        &rebuild_deployed,
                         &child_cancel,
                     )
                     .await

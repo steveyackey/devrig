@@ -476,6 +476,7 @@ impl Orchestrator {
                     image_config,
                     registry_port,
                     &config_dir,
+                    &deployed,
                     &self.cancel,
                 )
                 .await
@@ -527,6 +528,7 @@ impl Orchestrator {
                 &cluster_config.images,
                 registry_port,
                 config_dir.clone(),
+                deployed.clone(),
                 self.cancel.clone(),
                 &self.tracker,
             )

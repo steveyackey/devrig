@@ -1632,6 +1632,7 @@ mod tests {
             watch: false,
             depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
             build_secrets: BTreeMap::new(),
+            build_args: BTreeMap::new(),
         }
     }
 

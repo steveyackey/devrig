@@ -176,6 +176,7 @@ password = "$REGISTRY_TOKEN"
 | `watch`         | bool    | No       | `false`      | Auto-rebuild on file changes        |
 | `depends_on`    | list    | No       | `[]`         | Docker/deploy dependencies          |
 | `build_secrets` | map     | No       | `{}`         | BuildKit secrets: `{ id = "~/path" }` → `--secret id=<key>,src=<path>` |
+| `build_args`    | map     | No       | `{}`         | Docker build args: `{ KEY = "value" }` → `--build-arg KEY=value`. Supports `{{ cluster.image.<name>.tag }}` interpolation. |
 
 ### `[cluster.addons.*]`
 

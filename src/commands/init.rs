@@ -113,6 +113,8 @@ command = "{service_command}"
 # watch = true
 # # [cluster.image.job-runner.build_secrets]
 # # cargo_token = "~/.cargo/credentials.toml"  # BuildKit --secret
+# # [cluster.image.job-runner.build_args]
+# # SERVER_IMAGE = "{{{{ cluster.image.server.tag }}}}"  # reference another image
 #
 # [cluster.deploy.api]
 # context = "./services/api"

@@ -72,16 +72,21 @@ fn expand_home(path: &str) -> String {
     path.to_string()
 }
 
-/// Build docker build args including `--secret` flags from build_secrets config.
+/// Build docker build args including `--secret` and `--build-arg` flags.
 fn docker_build_args<'a>(
     tag: &'a str,
     dockerfile: &'a str,
     secret_args: &'a [String],
+    build_args: &'a [String],
 ) -> Vec<&'a str> {
     let mut args = vec!["build", "-t", tag, "-f", dockerfile];
     for secret_arg in secret_args {
         args.push("--secret");
         args.push(secret_arg);
+    }
+    for build_arg in build_args {
+        args.push("--build-arg");
+        args.push(build_arg);
     }
     args.push(".");
     args
@@ -93,6 +98,31 @@ fn format_secret_args(build_secrets: &BTreeMap<String, String>) -> Vec<String> {
         .iter()
         .map(|(id, path)| format!("id={id},src={}", expand_home(path)))
         .collect()
+}
+
+/// Format build_args into `key=value` strings, interpolating `{{ cluster.image.<name>.tag }}`
+/// references using already-built image tags from `deployed`.
+fn format_build_args(
+    build_args: &BTreeMap<String, String>,
+    deployed: &BTreeMap<String, ClusterDeployState>,
+) -> Vec<String> {
+    build_args
+        .iter()
+        .map(|(key, value)| {
+            let interpolated = interpolate_image_refs(value, deployed);
+            format!("{key}={interpolated}")
+        })
+        .collect()
+}
+
+/// Replace `{{ cluster.image.<name>.tag }}` patterns in a string with actual image tags.
+fn interpolate_image_refs(value: &str, deployed: &BTreeMap<String, ClusterDeployState>) -> String {
+    let mut result = value.to_string();
+    for (name, state) in deployed {
+        let pattern = format!("{{{{ cluster.image.{name}.tag }}}}");
+        result = result.replace(&pattern, &state.image_tag);
+    }
+    result
 }
 
 /// Build, push (if registry is available), and apply manifests for a cluster deploy entry.
@@ -121,7 +151,7 @@ pub async fn run_deploy(
     // Docker build
     debug!(name, tag, "building image");
     let secret_args = format_secret_args(&deploy_config.build_secrets);
-    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[]);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -181,7 +211,7 @@ pub async fn run_rebuild(
     // Docker build
     debug!(name, tag, "rebuilding image");
     let secret_args = format_secret_args(&deploy_config.build_secrets);
-    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[]);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -236,6 +266,7 @@ pub async fn run_image_build(
     image_config: &ClusterImageConfig,
     registry_port: Option<u16>,
     config_dir: &Path,
+    deployed: &BTreeMap<String, ClusterDeployState>,
     cancel: &CancellationToken,
 ) -> Result<ClusterDeployState> {
     let context_path = config_dir.join(&image_config.context);
@@ -253,7 +284,8 @@ pub async fn run_image_build(
     // Docker build
     debug!(name, tag, "building image");
     let secret_args = format_secret_args(&image_config.build_secrets);
-    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args);
+    let build_args = format_build_args(&image_config.build_args, deployed);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -279,6 +311,7 @@ pub async fn rebuild_image(
     image_config: &ClusterImageConfig,
     registry_port: Option<u16>,
     config_dir: &Path,
+    deployed: &BTreeMap<String, ClusterDeployState>,
     cancel: &CancellationToken,
 ) -> Result<()> {
     let context_path = config_dir.join(&image_config.context);
@@ -296,7 +329,8 @@ pub async fn rebuild_image(
     // Docker build
     debug!(name, tag, "rebuilding image");
     let secret_args = format_secret_args(&image_config.build_secrets);
-    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args);
+    let build_args = format_build_args(&image_config.build_args, deployed);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -310,4 +344,64 @@ pub async fn rebuild_image(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    #[test]
+    fn interpolate_image_refs_replaces_tags() {
+        let mut deployed = BTreeMap::new();
+        deployed.insert(
+            "bloom".to_string(),
+            ClusterDeployState {
+                image_tag: "localhost:12345/bloom:1700000000".to_string(),
+                last_deployed: Utc::now(),
+            },
+        );
+
+        let result =
+            interpolate_image_refs("{{ cluster.image.bloom.tag }}", &deployed);
+        assert_eq!(result, "localhost:12345/bloom:1700000000");
+    }
+
+    #[test]
+    fn interpolate_image_refs_no_match_unchanged() {
+        let deployed = BTreeMap::new();
+        let result = interpolate_image_refs("some-static-value", &deployed);
+        assert_eq!(result, "some-static-value");
+    }
+
+    #[test]
+    fn format_build_args_interpolates_and_formats() {
+        let mut build_args = BTreeMap::new();
+        build_args.insert(
+            "SERVER_IMAGE".to_string(),
+            "{{ cluster.image.bloom.tag }}".to_string(),
+        );
+        build_args.insert("STATIC_ARG".to_string(), "hello".to_string());
+
+        let mut deployed = BTreeMap::new();
+        deployed.insert(
+            "bloom".to_string(),
+            ClusterDeployState {
+                image_tag: "localhost:5000/bloom:123".to_string(),
+                last_deployed: Utc::now(),
+            },
+        );
+
+        let result = format_build_args(&build_args, &deployed);
+        assert!(result.contains(&"SERVER_IMAGE=localhost:5000/bloom:123".to_string()));
+        assert!(result.contains(&"STATIC_ARG=hello".to_string()));
+    }
+
+    #[test]
+    fn docker_build_args_includes_build_args() {
+        let build_args = vec!["SERVER_IMAGE=foo:latest".to_string()];
+        let args = docker_build_args("tag:1", "Dockerfile", &[], &build_args);
+        assert!(args.contains(&"--build-arg"));
+        assert!(args.contains(&"SERVER_IMAGE=foo:latest"));
+    }
 }

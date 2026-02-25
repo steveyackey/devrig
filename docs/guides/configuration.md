@@ -477,6 +477,7 @@ depends_on = ["postgres"]
 | `watch`         | boolean         | No       | `false`      | Enable file watching for automatic rebuild+push.       |
 | `depends_on`    | list of strings | No       | `[]`         | Docker, image, or deploy services to start before this.|
 | `build_secrets` | map             | No       | `{}`         | Docker BuildKit secrets: `{ id = "path/to/file" }`. Passed as `--secret id=<key>,src=<value>`. Supports `~` and `$HOME`. |
+| `build_args`    | map             | No       | `{}`         | Docker build arguments: `{ KEY = "value" }`. Passed as `--build-arg KEY=value`. Values support `{{ cluster.image.<name>.tag }}` interpolation. |
 
 When `watch = true`, devrig monitors the build context directory for changes,
 debounces with a 500ms window, and rebuilds+pushes the image. No rollout

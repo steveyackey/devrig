@@ -533,6 +533,11 @@ pub struct ClusterImageConfig {
     /// Passed as `--secret id=<key>,src=<value>` to `docker build`.
     #[serde(default)]
     pub build_secrets: BTreeMap<String, String>,
+    /// Docker build arguments: `{ SERVER_IMAGE = "{{ cluster.image.bloom.tag }}" }`
+    /// Passed as `--build-arg key=value` to `docker build`.
+    /// Values support `{{ cluster.image.<name>.tag }}` interpolation.
+    #[serde(default)]
+    pub build_args: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
