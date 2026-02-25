@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.19.0](https://github.com/steveyackey/devrig/compare/v0.18.0...v0.19.0) (2026-02-25)
+
+
+### Features
+
+* add cluster/addon dashboard view and protocol support ([8a66f71](https://github.com/steveyackey/devrig/commit/8a66f71daeaa0457d6fa277e7d9fe661a5fc48e5))
+* add flux-local example with Flux CD, Headlamp, and local git server ([b1bc0b9](https://github.com/steveyackey/devrig/commit/b1bc0b9c6db26a1fe4225b1c8b65427cfa5dde69))
+
 ## [0.18.0](https://github.com/steveyackey/devrig/compare/v0.17.0...v0.18.0) (2026-02-25)
 
 
