@@ -109,6 +109,8 @@ command = "{service_command}"
 # context = "./tools/job-runner"
 # # dockerfile = "Dockerfile"   # optional, defaults to Dockerfile
 # watch = true
+# # [cluster.image.job-runner.build_secrets]
+# # cargo_token = "~/.cargo/credentials.toml"  # BuildKit --secret
 #
 # [cluster.deploy.api]
 # context = "./services/api"

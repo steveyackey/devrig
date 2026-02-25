@@ -1631,6 +1631,7 @@ mod tests {
             dockerfile: "Dockerfile".to_string(),
             watch: false,
             depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+            build_secrets: BTreeMap::new(),
         }
     }
 
@@ -1641,6 +1642,7 @@ mod tests {
             manifests: manifests.to_string(),
             watch: false,
             depends_on: deps.into_iter().map(|s| s.to_string()).collect(),
+            build_secrets: BTreeMap::new(),
         }
     }
 

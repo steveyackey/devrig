@@ -168,13 +168,14 @@ password = "$REGISTRY_TOKEN"
 
 ### `[cluster.deploy.*]`
 
-| Field        | Type    | Required | Default      | Description                         |
-|--------------|---------|----------|--------------|-------------------------------------|
-| `context`    | string  | Yes      | --           | Docker build context dir            |
-| `dockerfile` | string  | No       | `Dockerfile` | Dockerfile path relative to context |
-| `manifests`  | list    | Yes      | --           | K8s manifest files to apply         |
-| `watch`      | bool    | No       | `false`      | Auto-rebuild on file changes        |
-| `depends_on` | list    | No       | `[]`         | Docker/deploy dependencies          |
+| Field           | Type    | Required | Default      | Description                         |
+|-----------------|---------|----------|--------------|-------------------------------------|
+| `context`       | string  | Yes      | --           | Docker build context dir            |
+| `dockerfile`    | string  | No       | `Dockerfile` | Dockerfile path relative to context |
+| `manifests`     | list    | Yes      | --           | K8s manifest files to apply         |
+| `watch`         | bool    | No       | `false`      | Auto-rebuild on file changes        |
+| `depends_on`    | list    | No       | `[]`         | Docker/deploy dependencies          |
+| `build_secrets` | map     | No       | `{}`         | BuildKit secrets: `{ id = "~/path" }` → `--secret id=<key>,src=<path>` |
 
 ### `[cluster.addons.*]`
 

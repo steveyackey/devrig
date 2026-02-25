@@ -424,13 +424,14 @@ depends_on = ["postgres"]
 
 ### Deploy fields
 
-| Field        | Type            | Required | Default      | Description                                            |
-|--------------|-----------------|----------|--------------|--------------------------------------------------------|
-| `context`    | string          | Yes      | --           | Docker build context directory, relative to config.    |
-| `dockerfile` | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
-| `manifests`  | list of strings | Yes      | --           | Kubernetes manifest files to apply, relative to config.|
-| `watch`      | boolean         | No       | `false`      | Enable file watching for automatic rebuild/redeploy.   |
-| `depends_on` | list of strings | No       | `[]`         | Docker or other deploy services to start before this.   |
+| Field           | Type            | Required | Default      | Description                                            |
+|-----------------|-----------------|----------|--------------|--------------------------------------------------------|
+| `context`       | string          | Yes      | --           | Docker build context directory, relative to config.    |
+| `dockerfile`    | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
+| `manifests`     | list of strings | Yes      | --           | Kubernetes manifest files to apply, relative to config.|
+| `watch`         | boolean         | No       | `false`      | Enable file watching for automatic rebuild/redeploy.   |
+| `depends_on`    | list of strings | No       | `[]`         | Docker or other deploy services to start before this.   |
+| `build_secrets` | map             | No       | `{}`         | Docker BuildKit secrets: `{ id = "path/to/file" }`. Passed as `--secret id=<key>,src=<value>`. Supports `~` and `$HOME`. |
 
 When `watch = true`, devrig monitors the build context directory for changes,
 debounces with a 500ms window, rebuilds the Docker image, pushes it to the
@@ -464,12 +465,13 @@ depends_on = ["postgres"]
 
 ### Image fields
 
-| Field        | Type            | Required | Default      | Description                                            |
-|--------------|-----------------|----------|--------------|--------------------------------------------------------|
-| `context`    | string          | Yes      | --           | Docker build context directory, relative to config.    |
-| `dockerfile` | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
-| `watch`      | boolean         | No       | `false`      | Enable file watching for automatic rebuild+push.       |
-| `depends_on` | list of strings | No       | `[]`         | Docker, image, or deploy services to start before this.|
+| Field           | Type            | Required | Default      | Description                                            |
+|-----------------|-----------------|----------|--------------|--------------------------------------------------------|
+| `context`       | string          | Yes      | --           | Docker build context directory, relative to config.    |
+| `dockerfile`    | string          | No       | `Dockerfile` | Dockerfile path, relative to context.                  |
+| `watch`         | boolean         | No       | `false`      | Enable file watching for automatic rebuild+push.       |
+| `depends_on`    | list of strings | No       | `[]`         | Docker, image, or deploy services to start before this.|
+| `build_secrets` | map             | No       | `{}`         | Docker BuildKit secrets: `{ id = "path/to/file" }`. Passed as `--secret id=<key>,src=<value>`. Supports `~` and `$HOME`. |
 
 When `watch = true`, devrig monitors the build context directory for changes,
 debounces with a 500ms window, and rebuilds+pushes the image. No rollout

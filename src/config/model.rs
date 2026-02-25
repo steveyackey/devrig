@@ -523,6 +523,10 @@ pub struct ClusterImageConfig {
     pub watch: bool,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    /// Docker BuildKit secrets: `{ cargo_token = "~/.cargo/credentials.toml" }`
+    /// Passed as `--secret id=<key>,src=<value>` to `docker build`.
+    #[serde(default)]
+    pub build_secrets: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -535,6 +539,10 @@ pub struct ClusterDeployConfig {
     pub watch: bool,
     #[serde(default)]
     pub depends_on: Vec<String>,
+    /// Docker BuildKit secrets: `{ cargo_token = "~/.cargo/credentials.toml" }`
+    /// Passed as `--secret id=<key>,src=<value>` to `docker build`.
+    #[serde(default)]
+    pub build_secrets: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

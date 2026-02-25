@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use chrono::Utc;
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::time::SystemTime;
 use tokio::process::Command;
@@ -51,6 +52,49 @@ async fn run_cmd(
     Ok(())
 }
 
+/// Expand `~` and `$HOME` in a path string to the actual home directory.
+fn expand_home(path: &str) -> String {
+    if let Some(home) = std::env::var_os("HOME") {
+        let home = home.to_string_lossy();
+        if path.starts_with("~/") {
+            return format!("{}{}", home, &path[1..]);
+        }
+        if path.starts_with("$HOME/") || path.starts_with("$HOME\\") {
+            return format!("{}{}", home, &path[5..]);
+        }
+        if path == "~" {
+            return home.to_string();
+        }
+        if path == "$HOME" {
+            return home.to_string();
+        }
+    }
+    path.to_string()
+}
+
+/// Build docker build args including `--secret` flags from build_secrets config.
+fn docker_build_args<'a>(
+    tag: &'a str,
+    dockerfile: &'a str,
+    secret_args: &'a [String],
+) -> Vec<&'a str> {
+    let mut args = vec!["build", "-t", tag, "-f", dockerfile];
+    for secret_arg in secret_args {
+        args.push("--secret");
+        args.push(secret_arg);
+    }
+    args.push(".");
+    args
+}
+
+/// Format build_secrets into `--secret` arg values: `id=<key>,src=<expanded_path>`.
+fn format_secret_args(build_secrets: &BTreeMap<String, String>) -> Vec<String> {
+    build_secrets
+        .iter()
+        .map(|(id, path)| format!("id={id},src={}", expand_home(path)))
+        .collect()
+}
+
 /// Build, push (if registry is available), and apply manifests for a cluster deploy entry.
 /// Returns the deploy state with the image tag and timestamp.
 pub async fn run_deploy(
@@ -76,15 +120,9 @@ pub async fn run_deploy(
 
     // Docker build
     debug!(name, tag, "building image");
-    let dockerfile = &deploy_config.dockerfile;
-    run_cmd(
-        "docker",
-        &["build", "-t", &tag, "-f", dockerfile, "."],
-        Some(&context_path),
-        None,
-        cancel,
-    )
-    .await?;
+    let secret_args = format_secret_args(&deploy_config.build_secrets);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args);
+    run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
         bail!("cancelled");
@@ -142,15 +180,9 @@ pub async fn run_rebuild(
 
     // Docker build
     debug!(name, tag, "rebuilding image");
-    let dockerfile = &deploy_config.dockerfile;
-    run_cmd(
-        "docker",
-        &["build", "-t", &tag, "-f", dockerfile, "."],
-        Some(&context_path),
-        None,
-        cancel,
-    )
-    .await?;
+    let secret_args = format_secret_args(&deploy_config.build_secrets);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args);
+    run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
         bail!("cancelled");
@@ -220,15 +252,9 @@ pub async fn run_image_build(
 
     // Docker build
     debug!(name, tag, "building image");
-    let dockerfile = &image_config.dockerfile;
-    run_cmd(
-        "docker",
-        &["build", "-t", &tag, "-f", dockerfile, "."],
-        Some(&context_path),
-        None,
-        cancel,
-    )
-    .await?;
+    let secret_args = format_secret_args(&image_config.build_secrets);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args);
+    run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
         bail!("cancelled");
@@ -269,15 +295,9 @@ pub async fn rebuild_image(
 
     // Docker build
     debug!(name, tag, "rebuilding image");
-    let dockerfile = &image_config.dockerfile;
-    run_cmd(
-        "docker",
-        &["build", "-t", &tag, "-f", dockerfile, "."],
-        Some(&context_path),
-        None,
-        cancel,
-    )
-    .await?;
+    let secret_args = format_secret_args(&image_config.build_secrets);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args);
+    run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
         bail!("cancelled");
