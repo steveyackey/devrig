@@ -154,16 +154,20 @@ pub fn build_template_vars(
 /// Build template variables from cluster image build results.
 ///
 /// Produced keys:
-///   - `cluster.image.{name}.tag`  (the image tag after build+push)
+///   - `cluster.image.{name}.tag`  (just the tag portion, e.g. `1234567890`)
 pub fn build_cluster_image_vars(
     deployed: &BTreeMap<String, ClusterDeployState>,
 ) -> HashMap<String, String> {
     let mut vars = HashMap::new();
     for (name, state) in deployed {
-        vars.insert(
-            format!("cluster.image.{name}.tag"),
-            state.image_tag.clone(),
-        );
+        // image_tag is the full reference: "localhost:5000/name:tag" or "devrig-name:tag".
+        // Extract just the tag portion after the last ':'.
+        let tag = state
+            .image_tag
+            .rsplit_once(':')
+            .map(|(_, t)| t)
+            .unwrap_or(&state.image_tag);
+        vars.insert(format!("cluster.image.{name}.tag"), tag.to_string());
     }
     vars
 }
