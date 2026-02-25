@@ -62,7 +62,8 @@ command = "{service_command}"
 #
 # [docker.postgres]
 # image = "postgres:16-alpine"
-# port = 5432
+# port = 5432                                     # host port
+# # container_port = 5432                         # internal port (if different from host port)
 # volumes = ["pgdata:/var/lib/postgresql/data"]   # named volume
 # # volumes = ["./data:/var/lib/postgresql/data"] # or bind mount (host dir)
 # ready_check = {{ type = "pg_isready" }}

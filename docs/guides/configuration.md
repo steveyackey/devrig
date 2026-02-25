@@ -197,7 +197,8 @@ type = "pg_isready"
 | Field           | Type               | Required | Default | Description                                   |
 |-----------------|--------------------|----------|---------|-----------------------------------------------|
 | `image`         | string             | Yes      | --      | Docker image (e.g. `postgres:16-alpine`).     |
-| `port`          | integer or `"auto"`| No       | (none)  | Single port mapping (host:container).         |
+| `port`          | integer or `"auto"`| No       | (none)  | Host port mapping.                            |
+| `container_port`| integer            | No       | same as `port` | Internal port the service listens on inside the container. Use when host and container ports differ (e.g. `port = 5433, container_port = 5432`). |
 | `ports`         | map of ports       | No       | `{}`    | Named port mappings for multi-port services.  |
 | `env`           | map of strings     | No       | `{}`    | Container environment variables.              |
 | `volumes`       | list of strings    | No       | `[]`    | Volume mounts (named `"vol:/path"` or bind `"/host:/path"`). |

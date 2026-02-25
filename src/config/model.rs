@@ -89,6 +89,12 @@ pub struct DockerConfig {
     pub image: String,
     #[serde(default)]
     pub port: Option<Port>,
+    /// The port the service listens on inside the container.
+    /// When the host port differs from the container port (e.g. mapping
+    /// host:5433 → container:5432 for PostgreSQL), set this to the
+    /// internal port. Defaults to the same as `port`.
+    #[serde(default)]
+    pub container_port: Option<u16>,
     #[serde(default)]
     pub ports: BTreeMap<String, Port>,
     #[serde(default)]

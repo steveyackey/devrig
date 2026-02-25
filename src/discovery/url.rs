@@ -45,6 +45,7 @@ mod tests {
         DockerConfig {
             image: image.to_string(),
             port: None,
+            container_port: None,
             ports: BTreeMap::new(),
             env: BTreeMap::new(),
             volumes: Vec::new(),

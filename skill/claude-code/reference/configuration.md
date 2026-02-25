@@ -71,7 +71,8 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/my
 | Field           | Type               | Required | Default | Description                              |
 |-----------------|--------------------|----------|---------|------------------------------------------|
 | `image`         | string             | Yes      | --      | Docker image                             |
-| `port`          | int or `"auto"`    | No       | (none)  | Single port mapping (host:container)     |
+| `port`          | int or `"auto"`    | No       | (none)  | Host port mapping                        |
+| `container_port`| int                | No       | same as `port` | Internal port inside container (when host ≠ container port) |
 | `ports`         | map                | No       | `{}`    | Named port mappings (multi-port)         |
 | `env`           | map                | No       | `{}`    | Container env vars                       |
 | `volumes`       | list               | No       | `[]`    | Volume mounts: named (`"vol:/path"`) or bind (`"/host:/path"`, `"./rel:/path"`) |

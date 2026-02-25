@@ -326,6 +326,7 @@ mod tests {
             DockerConfig {
                 image: "postgres:16".to_string(),
                 port: Some(Port::Fixed(5432)),
+                container_port: None,
                 ports: BTreeMap::new(),
                 env: BTreeMap::new(),
                 volumes: vec![],
@@ -342,6 +343,7 @@ mod tests {
             DockerConfig {
                 image: "axllent/mailpit:latest".to_string(),
                 port: None,
+                container_port: None,
                 ports: mailpit_ports,
                 env: BTreeMap::new(),
                 volumes: vec![],

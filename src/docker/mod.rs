@@ -148,13 +148,12 @@ impl DockerManager {
         // Build port mappings
         let mut port_maps = Vec::new();
         if let Some(host_port) = port {
-            // Use the container's default port (from image) — we need to know it.
-            // For single-port services, the container port is the same as the default
-            // port for the service type, or we use the host port.
-            let container_port = match &config.port {
+            // If container_port is explicitly set, use it. Otherwise fall back to
+            // the configured port value (which equals host_port for Fixed ports).
+            let container_port = config.container_port.unwrap_or(match &config.port {
                 Some(Port::Fixed(p)) => *p,
                 _ => host_port,
-            };
+            });
             port_maps.push(PortMap {
                 container_port,
                 host_port,
