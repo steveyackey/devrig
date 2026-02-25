@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0](https://github.com/steveyackey/devrig/compare/v0.15.1...v0.16.0) (2026-02-25)
+
+
+### Features
+
+* add cluster.registry template variable for addon values ([8cdf067](https://github.com/steveyackey/devrig/commit/8cdf067b0f737dd3b0ceb0343eaa4c9b0c35b350))
+
+
+### Bug Fixes
+
+* default cluster.registry to true ([f76076f](https://github.com/steveyackey/devrig/commit/f76076f299e0a9d753782a8d3b31026e9bce7ffe))
+
 ## [0.15.1](https://github.com/steveyackey/devrig/compare/v0.15.0...v0.15.1) (2026-02-25)
 
 
