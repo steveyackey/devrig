@@ -1,3 +1,4 @@
+pub mod cluster;
 pub mod config;
 pub mod env;
 pub mod logs;
@@ -38,6 +39,7 @@ pub fn api_router(state: DashboardState) -> Router {
             get(config::get_config).put(config::update_config),
         )
         .route("/api/services", get(services::get_services))
+        .route("/api/cluster", get(cluster::get_cluster))
         .route("/api/config/validate", post(config::validate_config))
         .with_state(state)
 }

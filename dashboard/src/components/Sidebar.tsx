@@ -39,6 +39,12 @@ const navItems: NavItem[] = [
     match: (r) => r.startsWith('/metrics'),
   },
   {
+    label: 'Cluster',
+    code: 'K8S',
+    route: '#/cluster',
+    match: (r) => r.startsWith('/cluster'),
+  },
+  {
     label: 'Config',
     code: 'CFG',
     route: '#/config',

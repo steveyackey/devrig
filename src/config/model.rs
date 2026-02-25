@@ -34,6 +34,10 @@ pub struct ServiceConfig {
     pub command: String,
     #[serde(default)]
     pub port: Option<Port>,
+    /// Protocol for this service's port: "http" (default), "https", "tcp", "udp".
+    /// Used by the dashboard to generate correct clickable links.
+    #[serde(default)]
+    pub protocol: Option<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
     #[serde(default)]
@@ -95,6 +99,10 @@ pub struct DockerConfig {
     /// internal port. Defaults to the same as `port`.
     #[serde(default)]
     pub container_port: Option<u16>,
+    /// Protocol for this service's port: "http" (default), "https", "tcp", "udp".
+    /// Used by the dashboard to generate correct clickable links.
+    #[serde(default)]
+    pub protocol: Option<String>,
     #[serde(default)]
     pub ports: BTreeMap<String, Port>,
     #[serde(default)]
@@ -1438,6 +1446,7 @@ mod tests {
             path: None,
             command: "echo hi".to_string(),
             port: Some(Port::Fixed(3000)),
+            protocol: None,
             env: BTreeMap::new(),
             env_file: None,
             depends_on: vec![],

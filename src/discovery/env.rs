@@ -130,6 +130,7 @@ mod tests {
             image: image.to_string(),
             port: None,
             container_port: None,
+            protocol: None,
             ports: BTreeMap::new(),
             env: env
                 .into_iter()
@@ -150,6 +151,7 @@ mod tests {
             path: None,
             command: command.to_string(),
             port: port.map(Port::Fixed),
+            protocol: None,
             env: BTreeMap::new(),
             env_file: None,
             depends_on: Vec::new(),

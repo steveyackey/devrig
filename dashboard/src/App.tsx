@@ -9,6 +9,7 @@ import LogsView from './views/LogsView';
 import MetricsView from './views/MetricsView';
 import StatusView from './views/StatusView';
 import ConfigView from './views/ConfigView';
+import ClusterView from './views/ClusterView';
 import { ToastProvider } from './components/ui';
 import { initTheme } from './lib/theme';
 
@@ -67,6 +68,7 @@ const App: Component = () => {
     if (r === '/traces') return 'traces';
     if (r === '/logs') return 'logs';
     if (r === '/metrics') return 'metrics';
+    if (r === '/cluster') return 'cluster';
     if (r === '/config') return 'config';
     return 'status'; // fallback
   };
@@ -104,6 +106,9 @@ const App: Component = () => {
               </Match>
               <Match when={routeSegment() === 'status'}>
                 <StatusView />
+              </Match>
+              <Match when={routeSegment() === 'cluster'}>
+                <ClusterView />
               </Match>
               <Match when={routeSegment() === 'config'}>
                 <ConfigView />

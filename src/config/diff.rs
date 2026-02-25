@@ -119,6 +119,7 @@ mod tests {
             path: None,
             command: command.to_string(),
             port: port.map(Port::Fixed),
+            protocol: None,
             env: BTreeMap::new(),
             env_file: None,
             depends_on: vec![],

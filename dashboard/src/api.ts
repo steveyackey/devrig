@@ -188,12 +188,45 @@ export interface ServiceInfo {
   port: number | null;
   kind: string;
   port_auto: boolean;
+  protocol?: string;
   phase?: string;
   exit_code?: number | null;
 }
 
 export function fetchServices(): Promise<ServiceInfo[]> {
   return fetchJson<ServiceInfo[]>(`${BASE_URL}/api/services`);
+}
+
+// ---- Cluster API ----
+
+export interface RegistryInfo {
+  name: string;
+  port: number;
+}
+
+export interface DeployedServiceInfo {
+  name: string;
+  image_tag: string;
+  last_deployed: string;
+}
+
+export interface AddonInfo {
+  name: string;
+  addon_type: string;
+  namespace: string;
+  installed_at: string;
+}
+
+export interface ClusterResponse {
+  cluster_name: string;
+  kubeconfig_path: string;
+  registry: RegistryInfo | null;
+  deployed_services: DeployedServiceInfo[];
+  addons: AddonInfo[];
+}
+
+export function fetchCluster(): Promise<ClusterResponse | null> {
+  return fetchJson<ClusterResponse | null>(`${BASE_URL}/api/cluster`);
 }
 
 // ---- Config API ----

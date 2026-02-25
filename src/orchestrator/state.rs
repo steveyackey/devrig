@@ -51,6 +51,8 @@ pub struct ServiceState {
     pub port: Option<u16>,
     pub port_auto: bool,
     #[serde(default)]
+    pub protocol: Option<String>,
+    #[serde(default)]
     pub phase: Option<String>,
     #[serde(default)]
     pub exit_code: Option<i32>,
@@ -62,6 +64,8 @@ pub struct DockerState {
     pub container_name: String,
     pub port: Option<u16>,
     pub port_auto: bool,
+    #[serde(default)]
+    pub protocol: Option<String>,
     pub named_ports: BTreeMap<String, u16>,
     pub init_completed: bool,
     pub init_completed_at: Option<DateTime<Utc>>,

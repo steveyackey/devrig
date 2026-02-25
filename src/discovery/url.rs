@@ -46,6 +46,7 @@ mod tests {
             image: image.to_string(),
             port: None,
             container_port: None,
+            protocol: None,
             ports: BTreeMap::new(),
             env: BTreeMap::new(),
             volumes: Vec::new(),

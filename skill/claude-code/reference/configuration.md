@@ -47,11 +47,12 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/my
 | `command`    | string             | Yes      | --           | Shell command (via `sh -c`)                  |
 | `path`       | string             | No       | config dir   | Working directory relative to config file    |
 | `port`       | int or `"auto"`    | No       | (none)       | Port the service listens on                  |
+| `protocol`   | string             | No       | `"http"`     | Port protocol: `"http"`, `"https"`, `"tcp"`, `"udp"`. Controls dashboard link scheme. |
 | `env`        | map                | No       | `{}`         | Service-specific env vars                    |
 | `env_file`   | string             | No       | (none)       | Per-service `.env` file path                 |
 | `depends_on` | list               | No       | `[]`         | Services/docker/compose to start before this |
 
-**Port values:** `3000` (fixed, verified available), `"auto"` (ephemeral, sticky across restarts), omitted (no management). When set, `PORT` env var is injected.
+**Port values:** `3000` (fixed, verified available), `"auto"` (ephemeral, sticky across restarts), omitted (no management). When set, `PORT` env var is injected. **Prefer `"auto"` unless the service requires a specific port** (e.g. well-known ports for external clients, callback URLs). Auto ports avoid conflicts and are stable across restarts.
 
 ### `[services.<name>.restart]`
 
@@ -73,6 +74,7 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/my
 | `image`         | string             | Yes      | --      | Docker image                             |
 | `port`          | int or `"auto"`    | No       | (none)  | Host port mapping                        |
 | `container_port`| int                | No       | same as `port` | Internal port inside container (when host ≠ container port) |
+| `protocol`      | string             | No       | `"http"` | Port protocol: `"http"`, `"https"`, `"tcp"`, `"udp"`. Controls dashboard link scheme. |
 | `ports`         | map                | No       | `{}`    | Named port mappings (multi-port)         |
 | `env`           | map                | No       | `{}`    | Container env vars                       |
 | `volumes`       | list               | No       | `[]`    | Volume mounts: named (`"vol:/path"`) or bind (`"/host:/path"`, `"./rel:/path"`) |
@@ -111,17 +113,17 @@ timeout = 120
 
 ## `[dashboard]`
 
-| Field     | Type    | Default | Description                         |
-|-----------|---------|---------|-------------------------------------|
-| `port`    | int     | `4000`  | Dashboard web UI and API port       |
-| `enabled` | bool    | `true`  | Whether to start the dashboard      |
+| Field     | Type            | Default | Description                         |
+|-----------|-----------------|---------|-------------------------------------|
+| `port`    | int or `"auto"` | `4000`  | Dashboard web UI and API port       |
+| `enabled` | bool            | `true`  | Whether to start the dashboard      |
 
 ### `[dashboard.otel]`
 
-| Field           | Type    | Default   | Description                        |
-|-----------------|---------|-----------|------------------------------------|
-| `grpc_port`     | int     | `4317`    | OTLP gRPC receiver port            |
-| `http_port`     | int     | `4318`    | OTLP HTTP receiver port            |
+| Field           | Type            | Default   | Description                        |
+|-----------------|-----------------|-----------|-------------------------------------|
+| `grpc_port`     | int or `"auto"` | `4317`    | OTLP gRPC receiver port            |
+| `http_port`     | int or `"auto"` | `4318`    | OTLP HTTP receiver port            |
 | `trace_buffer`  | int     | `10000`   | Max spans in memory                |
 | `metric_buffer` | int     | `50000`   | Max metric data points             |
 | `log_buffer`    | int     | `100000`  | Max log records                    |

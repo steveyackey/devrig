@@ -229,6 +229,7 @@ impl DockerManager {
             container_name,
             port,
             port_auto,
+            protocol: config.protocol.clone(),
             named_ports,
             init_completed,
             init_completed_at,

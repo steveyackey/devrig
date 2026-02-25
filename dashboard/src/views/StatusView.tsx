@@ -145,16 +145,27 @@ const StatusView: Component = () => {
                               </Badge>
                             </Show>
                             <Show when={svc.port}>
-                              <a
-                                data-testid="service-port-link"
-                                href={`http://localhost:${svc.port}`}
-                                target="_blank"
-                                rel="noopener"
-                                class="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-accent transition-colors"
-                              >
-                                :{svc.port}
-                                <ExternalLink size={10} />
-                              </a>
+                              {(() => {
+                                const proto = svc.protocol || 'http';
+                                const isLinkable = proto === 'http' || proto === 'https';
+                                return isLinkable ? (
+                                  <a
+                                    data-testid="service-port-link"
+                                    href={`${proto}://localhost:${svc.port}`}
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-accent transition-colors"
+                                  >
+                                    :{svc.port}
+                                    <ExternalLink size={10} />
+                                  </a>
+                                ) : (
+                                  <span class="inline-flex items-center gap-1 text-xs font-mono text-text-muted">
+                                    :{svc.port}
+                                    <Badge variant="default">{proto}</Badge>
+                                  </span>
+                                );
+                              })()}
                               <Show when={svc.port_auto}>
                                 <span class="text-[10px] text-text-muted">(auto)</span>
                               </Show>

@@ -980,6 +980,7 @@ impl Orchestrator {
                     pid: 0,
                     port,
                     port_auto,
+                    protocol: svc.protocol.clone(),
                     phase: Some("starting".to_string()),
                     exit_code: None,
                 },

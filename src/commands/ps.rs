@@ -225,6 +225,7 @@ mod tests {
                 pid: 0,
                 port: Some(3000),
                 port_auto: false,
+                protocol: None,
                 phase: None,
                 exit_code: None,
             },
