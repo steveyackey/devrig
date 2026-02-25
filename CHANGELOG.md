@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/steveyackey/devrig/compare/v0.15.0...v0.15.1) (2026-02-25)
+
+
+### Bug Fixes
+
+* extract tag portion from cluster image reference for templates ([27b2951](https://github.com/steveyackey/devrig/commit/27b295135788c820d65db239e05a6da539465571))
+
 ## [0.15.0](https://github.com/steveyackey/devrig/compare/v0.14.0...v0.15.0) (2026-02-25)
 
 
