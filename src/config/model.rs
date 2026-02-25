@@ -318,6 +318,10 @@ fn default_agents() -> u32 {
     1
 }
 
+fn default_registry() -> bool {
+    true
+}
+
 fn default_dockerfile() -> String {
     "Dockerfile".to_string()
 }
@@ -330,7 +334,7 @@ pub struct ClusterConfig {
     pub agents: u32,
     #[serde(default)]
     pub ports: Vec<String>,
-    #[serde(default)]
+    #[serde(default = "default_registry")]
     pub registry: bool,
     #[serde(default, rename = "image")]
     pub images: BTreeMap<String, ClusterImageConfig>,
@@ -1166,7 +1170,7 @@ mod tests {
         assert!(cluster.name.is_none());
         assert_eq!(cluster.agents, 1);
         assert!(cluster.ports.is_empty());
-        assert!(!cluster.registry);
+        assert!(cluster.registry);
         assert!(cluster.deploy.is_empty());
     }
 
