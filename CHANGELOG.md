@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.18.0](https://github.com/steveyackey/devrig/compare/v0.17.0...v0.18.0) (2026-02-25)
+
+
+### Features
+
+* support auto port selection for dashboard and OTel ports ([307226b](https://github.com/steveyackey/devrig/commit/307226b11904282399ae5064d5342db12d2b5bcb))
+
 ## [0.17.0](https://github.com/steveyackey/devrig/compare/v0.16.0...v0.17.0) (2026-02-25)
 
 
