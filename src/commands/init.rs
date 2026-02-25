@@ -134,6 +134,7 @@ command = "{service_command}"
 # timeout = "10m"                 # helm timeout (default: "5m")
 # values_files = ["charts/myapp/values-dev.yaml"]
 # [cluster.addons.myapp.values]
+# "image.repository" = "{{{{ cluster.registry }}}}/myapp"
 # "image.tag" = "{{{{ cluster.image.myapp.tag }}}}"
 #
 # -- Private registry auth for cluster image pulls --

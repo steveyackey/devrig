@@ -964,7 +964,8 @@ Helm addon `values` also support templates for cluster image tags (see
 | `docker.<name>.port_<portname>`      | `1025`        | All (alias for `ports.*`)  |
 | `compose.<name>.port`                | `6379`        | All                        |
 | `cluster.name`                       | `myapp-dev`   | All (when cluster defined) |
-| `cluster.image.<name>.tag`           | `main-abc1234-20260224` | Addon values + service env |
+| `cluster.registry`                   | `k3d-devrig-abc123-reg:5000` | Addon values (when registry enabled) |
+| `cluster.image.<name>.tag`           | `1234567890`  | Addon values + service env |
 | `dashboard.port`                     | `4000`        | All                        |
 | `dashboard.otel.grpc_port`           | `4317`        | All                        |
 | `dashboard.otel.http_port`           | `4318`        | All                        |

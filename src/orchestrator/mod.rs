@@ -574,9 +574,15 @@ impl Orchestrator {
                     "installing cluster addons"
                 );
 
-                // Build template vars from cluster image build results
-                let addon_template_vars =
+                // Build template vars from cluster image build results + registry
+                let mut addon_template_vars =
                     crate::config::interpolate::build_cluster_image_vars(&deployed);
+                if cluster_config.registry {
+                    addon_template_vars.insert(
+                        "cluster.registry".to_string(),
+                        format!("k3d-devrig-{}-reg:5000", self.identity.slug),
+                    );
+                }
 
                 crate::cluster::addon::install_addons(
                     &combined_addons,
