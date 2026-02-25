@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/steveyackey/devrig/compare/v0.14.0...v0.15.0) (2026-02-25)
+
+
+### Features
+
+* add build_secrets for cluster image/deploy Docker builds ([937c75c](https://github.com/steveyackey/devrig/commit/937c75c934c53669244b3804f38e6355a5613e47))
+
 ## [0.14.0](https://github.com/steveyackey/devrig/compare/v0.13.0...v0.14.0) (2026-02-25)
 
 
