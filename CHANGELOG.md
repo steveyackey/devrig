@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/steveyackey/devrig/compare/v0.13.0...v0.14.0) (2026-02-25)
+
+
+### Features
+
+* add container_port for Docker services ([ad3df47](https://github.com/steveyackey/devrig/commit/ad3df47b395ea0e824b367a656db0d4aaada9bc9))
+
 ## [0.13.0](https://github.com/steveyackey/devrig/compare/v0.12.1...v0.13.0) (2026-02-24)
 
 
