@@ -111,16 +111,24 @@ async fn install_helm_addon(
 ) -> Result<()> {
     // Resolve chart reference: remote repo or local path
     let resolved_chart = if let Some(repo_url) = repo {
+        // Derive the repo name from the chart reference (e.g. "fluxcd-community/flux2"
+        // → "fluxcd-community"). Fall back to the addon name if there's no slash.
+        let repo_name = chart
+            .split('/')
+            .next()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(name);
+
         // Remote chart — add and update repo
         run_helm(
-            &["repo", "add", name, repo_url, "--force-update"],
+            &["repo", "add", repo_name, repo_url, "--force-update"],
             kubeconfig,
             cancel,
         )
         .await
         .with_context(|| format!("adding helm repo for addon '{}'", name))?;
 
-        run_helm(&["repo", "update", name], kubeconfig, cancel)
+        run_helm(&["repo", "update", repo_name], kubeconfig, cancel)
             .await
             .with_context(|| format!("updating helm repo for addon '{}'", name))?;
 
