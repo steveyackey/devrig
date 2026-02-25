@@ -41,8 +41,8 @@ impl OtelCollector {
         Self {
             store,
             events_tx,
-            grpc_port: otel_config.grpc_port,
-            http_port: otel_config.http_port,
+            grpc_port: otel_config.grpc_port.as_fixed().expect("otel grpc_port must be resolved before creating collector"),
+            http_port: otel_config.http_port.as_fixed().expect("otel http_port must be resolved before creating collector"),
         }
     }
 

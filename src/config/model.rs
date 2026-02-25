@@ -237,16 +237,16 @@ pub struct NetworkConfig {
     pub name: Option<String>,
 }
 
-fn default_dashboard_port() -> u16 {
-    4000
+fn default_dashboard_port() -> Port {
+    Port::Fixed(4000)
 }
 
-fn default_grpc_port() -> u16 {
-    4317
+fn default_grpc_port() -> Port {
+    Port::Fixed(4317)
 }
 
-fn default_http_port() -> u16 {
-    4318
+fn default_http_port() -> Port {
+    Port::Fixed(4318)
 }
 
 fn default_trace_buffer() -> usize {
@@ -268,7 +268,7 @@ fn default_retention() -> String {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct DashboardConfig {
     #[serde(default = "default_dashboard_port")]
-    pub port: u16,
+    pub port: Port,
     #[serde(default)]
     pub enabled: Option<bool>,
     #[serde(default)]
@@ -278,9 +278,9 @@ pub struct DashboardConfig {
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct OtelConfig {
     #[serde(default = "default_grpc_port")]
-    pub grpc_port: u16,
+    pub grpc_port: Port,
     #[serde(default = "default_http_port")]
-    pub http_port: u16,
+    pub http_port: Port,
     #[serde(default = "default_trace_buffer")]
     pub trace_buffer: usize,
     #[serde(default = "default_metric_buffer")]
@@ -560,6 +560,15 @@ pub struct ClusterDeployConfig {
 pub enum Port {
     Fixed(u16),
     Auto,
+}
+
+impl Serialize for Port {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Port::Fixed(p) => serializer.serialize_u16(*p),
+            Port::Auto => serializer.serialize_str("auto"),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for Port {
@@ -1460,11 +1469,11 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         let dash = config.dashboard.unwrap();
-        assert_eq!(dash.port, 5000);
+        assert_eq!(dash.port, Port::Fixed(5000));
         assert_eq!(dash.enabled, Some(true));
         let otel = dash.otel.unwrap();
-        assert_eq!(otel.grpc_port, 14317);
-        assert_eq!(otel.http_port, 14318);
+        assert_eq!(otel.grpc_port, Port::Fixed(14317));
+        assert_eq!(otel.http_port, Port::Fixed(14318));
         assert_eq!(otel.trace_buffer, 5000);
         assert_eq!(otel.metric_buffer, 25000);
         assert_eq!(otel.log_buffer, 50000);
@@ -1482,7 +1491,7 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         let dash = config.dashboard.unwrap();
-        assert_eq!(dash.port, 9000);
+        assert_eq!(dash.port, Port::Fixed(9000));
         assert!(dash.enabled.is_none());
         assert!(dash.otel.is_none());
     }
@@ -1500,10 +1509,10 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         let dash = config.dashboard.unwrap();
-        assert_eq!(dash.port, 4000); // default
+        assert_eq!(dash.port, Port::Fixed(4000)); // default
         let otel = dash.otel.unwrap();
-        assert_eq!(otel.grpc_port, 4317); // default
-        assert_eq!(otel.http_port, 4318); // default
+        assert_eq!(otel.grpc_port, Port::Fixed(4317)); // default
+        assert_eq!(otel.http_port, Port::Fixed(4318)); // default
         assert_eq!(otel.trace_buffer, 20000);
         assert_eq!(otel.metric_buffer, 50000); // default
         assert_eq!(otel.log_buffer, 100000); // default
@@ -1520,9 +1529,51 @@ mod tests {
         "#;
         let config: DevrigConfig = toml::from_str(toml).unwrap();
         let dash = config.dashboard.unwrap();
-        assert_eq!(dash.port, 4000);
+        assert_eq!(dash.port, Port::Fixed(4000));
         assert!(dash.enabled.is_none());
         assert!(dash.otel.is_none());
+    }
+
+    #[test]
+    fn parse_dashboard_auto_ports() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [dashboard]
+            port = "auto"
+
+            [dashboard.otel]
+            grpc_port = "auto"
+            http_port = "auto"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let dash = config.dashboard.unwrap();
+        assert_eq!(dash.port, Port::Auto);
+        let otel = dash.otel.unwrap();
+        assert_eq!(otel.grpc_port, Port::Auto);
+        assert_eq!(otel.http_port, Port::Auto);
+    }
+
+    #[test]
+    fn parse_dashboard_mixed_auto_fixed_ports() {
+        let toml = r#"
+            [project]
+            name = "test"
+
+            [dashboard]
+            port = "auto"
+
+            [dashboard.otel]
+            grpc_port = 4317
+            http_port = "auto"
+        "#;
+        let config: DevrigConfig = toml::from_str(toml).unwrap();
+        let dash = config.dashboard.unwrap();
+        assert_eq!(dash.port, Port::Auto);
+        let otel = dash.otel.unwrap();
+        assert_eq!(otel.grpc_port, Port::Fixed(4317));
+        assert_eq!(otel.http_port, Port::Auto);
     }
 
     #[test]
@@ -1826,7 +1877,7 @@ mod tests {
     #[test]
     fn dashboard_config_partial_eq() {
         let a = DashboardConfig {
-            port: 4000,
+            port: Port::Fixed(4000),
             enabled: Some(true),
             otel: Some(OtelConfig::default()),
         };

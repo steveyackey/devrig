@@ -134,17 +134,16 @@ pub fn build_template_vars(
     }
 
     // dashboard.port, dashboard.otel.grpc_port, dashboard.otel.http_port
-    if let Some(dashboard) = &config.dashboard {
-        vars.insert("dashboard.port".to_string(), dashboard.port.to_string());
-        if let Some(otel) = &dashboard.otel {
-            vars.insert(
-                "dashboard.otel.grpc_port".to_string(),
-                otel.grpc_port.to_string(),
-            );
-            vars.insert(
-                "dashboard.otel.http_port".to_string(),
-                otel.http_port.to_string(),
-            );
+    // Use resolved ports from the map (keys: "dashboard", "otel-grpc", "otel-http")
+    if config.dashboard.is_some() {
+        if let Some(&port) = resolved_ports.get("dashboard") {
+            vars.insert("dashboard.port".to_string(), port.to_string());
+        }
+        if let Some(&port) = resolved_ports.get("otel-grpc") {
+            vars.insert("dashboard.otel.grpc_port".to_string(), port.to_string());
+        }
+        if let Some(&port) = resolved_ports.get("otel-http") {
+            vars.insert("dashboard.otel.http_port".to_string(), port.to_string());
         }
     }
 
@@ -405,11 +404,11 @@ mod tests {
             compose: None,
             cluster: None,
             dashboard: Some(DashboardConfig {
-                port: 5000,
+                port: Port::Fixed(5000),
                 enabled: None,
                 otel: Some(OtelConfig {
-                    grpc_port: 14317,
-                    http_port: 14318,
+                    grpc_port: Port::Fixed(14317),
+                    http_port: Port::Fixed(14318),
                     ..OtelConfig::default()
                 }),
             }),
@@ -417,7 +416,10 @@ mod tests {
             network: None,
         };
 
-        let resolved_ports = HashMap::new();
+        let mut resolved_ports = HashMap::new();
+        resolved_ports.insert("dashboard".to_string(), 5000u16);
+        resolved_ports.insert("otel-grpc".to_string(), 14317u16);
+        resolved_ports.insert("otel-http".to_string(), 14318u16);
         let vars = build_template_vars(&config, &resolved_ports);
         assert_eq!(vars.get("dashboard.port").unwrap(), "5000");
         assert_eq!(vars.get("dashboard.otel.grpc_port").unwrap(), "14317");

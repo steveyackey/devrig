@@ -38,15 +38,24 @@ use supervisor::{RestartPolicy, ServiceSupervisor};
 
 /// Resolve a dashboard/OTel port: use the configured port if available,
 /// otherwise auto-assign a free one. Tracks in `allocated` to avoid collisions.
-fn resolve_dashboard_port(preferred: u16, label: &str, allocated: &mut HashSet<u16>) -> u16 {
-    if !allocated.contains(&preferred) && check_port_available(preferred) {
-        allocated.insert(preferred);
-        preferred
-    } else {
-        let port = find_free_port_excluding(allocated);
-        warn!("{label}: port {preferred} in use, using {port} instead");
-        allocated.insert(port);
-        port
+fn resolve_dashboard_port(port_config: &Port, label: &str, allocated: &mut HashSet<u16>) -> u16 {
+    match port_config {
+        Port::Fixed(preferred) => {
+            if !allocated.contains(preferred) && check_port_available(*preferred) {
+                allocated.insert(*preferred);
+                *preferred
+            } else {
+                let port = find_free_port_excluding(allocated);
+                warn!("{label}: port {preferred} in use, using {port} instead");
+                allocated.insert(port);
+                port
+            }
+        }
+        Port::Auto => {
+            let port = find_free_port_excluding(allocated);
+            allocated.insert(port);
+            port
+        }
     }
 }
 
@@ -240,14 +249,14 @@ impl Orchestrator {
             // Auto-resolve dashboard/OTel ports: use configured port if free,
             // otherwise find an available one. This lets multiple devrig instances
             // run without port conflicts.
-            let dash_port = resolve_dashboard_port(dash_config.port, "dashboard", &mut allocated_ports);
-            let otel_grpc = resolve_dashboard_port(otel_config.grpc_port, "otel-grpc", &mut allocated_ports);
-            let otel_http = resolve_dashboard_port(otel_config.http_port, "otel-http", &mut allocated_ports);
+            let dash_port = resolve_dashboard_port(&dash_config.port, "dashboard", &mut allocated_ports);
+            let otel_grpc = resolve_dashboard_port(&otel_config.grpc_port, "otel-grpc", &mut allocated_ports);
+            let otel_http = resolve_dashboard_port(&otel_config.http_port, "otel-http", &mut allocated_ports);
 
             // Use resolved ports for the collector
             let mut resolved_otel = otel_config;
-            resolved_otel.grpc_port = otel_grpc;
-            resolved_otel.http_port = otel_http;
+            resolved_otel.grpc_port = Port::Fixed(otel_grpc);
+            resolved_otel.http_port = Port::Fixed(otel_http);
 
             let collector = crate::otel::OtelCollector::new(&resolved_otel);
             collector
@@ -539,9 +548,8 @@ impl Orchestrator {
             let mut combined_addons = cluster_config.addons.clone();
             if let Some(logs_config) = &cluster_config.logs {
                 if logs_config.enabled && logs_config.collector {
-                    let otel_http_port = self.config.dashboard.as_ref()
-                        .and_then(|d| d.otel.as_ref())
-                        .map(|o| o.http_port)
+                    let otel_http_port = dashboard_state.as_ref()
+                        .map(|ds| ds.http_port)
                         .unwrap_or(4318);
                     let otlp_endpoint = format!("host.k3d.internal:{}", otel_http_port);
                     let manifest_content = crate::cluster::log_collector::render_fluent_bit_manifest(
@@ -625,6 +633,13 @@ impl Orchestrator {
         // Phase 4: Resolve ports, templates, and env vars
         // ================================================================
         let mut resolved_ports: HashMap<String, u16> = HashMap::new();
+
+        // Dashboard/OTel resolved ports (for template interpolation)
+        if let Some(ref ds) = dashboard_state {
+            resolved_ports.insert("dashboard".to_string(), ds.dashboard_port);
+            resolved_ports.insert("otel-grpc".to_string(), ds.grpc_port);
+            resolved_ports.insert("otel-http".to_string(), ds.http_port);
+        }
 
         // Docker ports
         for (name, state) in &docker_states {
@@ -1103,11 +1118,13 @@ impl Orchestrator {
         }
 
         if let Some(ref ds) = dashboard_state {
+            let dash_config = self.config.dashboard.as_ref().unwrap();
+            let otel_config = dash_config.otel.clone().unwrap_or_default();
             summary_services.insert(
                 "[dashboard]".to_string(),
                 RunningService {
                     port: Some(ds.dashboard_port),
-                    port_auto: false,
+                    port_auto: dash_config.port.is_auto(),
                     status: "running".to_string(),
                 },
             );
@@ -1115,7 +1132,7 @@ impl Orchestrator {
                 "[otel] grpc".to_string(),
                 RunningService {
                     port: Some(ds.grpc_port),
-                    port_auto: false,
+                    port_auto: otel_config.grpc_port.is_auto(),
                     status: "running".to_string(),
                 },
             );
@@ -1123,7 +1140,7 @@ impl Orchestrator {
                 "[otel] http".to_string(),
                 RunningService {
                     port: Some(ds.http_port),
-                    port_auto: false,
+                    port_auto: otel_config.http_port.is_auto(),
                     status: "running".to_string(),
                 },
             );

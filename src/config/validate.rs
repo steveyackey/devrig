@@ -905,13 +905,15 @@ pub fn validate(
                     }
                     // Check against dashboard ports
                     if let Some(dashboard) = &config.dashboard {
-                        if dashboard.port == port {
-                            errors.push(ConfigDiagnostic::AddonPortConflict {
-                                src: src.clone(),
-                                span: find_table_span(source, "cluster.addons", name),
-                                port,
-                                conflict_with: "dashboard".to_string(),
-                            });
+                        if let Port::Fixed(dp) = &dashboard.port {
+                            if *dp == port {
+                                errors.push(ConfigDiagnostic::AddonPortConflict {
+                                    src: src.clone(),
+                                    span: find_table_span(source, "cluster.addons", name),
+                                    port,
+                                    conflict_with: "dashboard".to_string(),
+                                });
+                            }
                         }
                     }
                 }
@@ -1048,45 +1050,56 @@ pub fn validate(
 
     // Validate dashboard config
     if let Some(dashboard) = &config.dashboard {
-        let dash_port = dashboard.port;
-        let grpc_port = dashboard.otel.as_ref().map(|o| o.grpc_port).unwrap_or(4317);
-        let http_port = dashboard.otel.as_ref().map(|o| o.http_port).unwrap_or(4318);
+        let dash_port = dashboard.port.as_fixed();
+        let grpc_port = dashboard.otel.as_ref().and_then(|o| o.grpc_port.as_fixed()).or(Some(4317));
+        let http_port = dashboard.otel.as_ref().and_then(|o| o.http_port.as_fixed()).or(Some(4318));
 
-        // Check dashboard/otel ports are all distinct
-        if dash_port == grpc_port {
-            errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
-                src: src.clone(),
-                span: find_dashboard_span(source, "port"),
-                port: dash_port,
-                a: "dashboard.port".to_string(),
-                b: "dashboard.otel.grpc_port".to_string(),
-            });
+        // Check dashboard/otel ports are all distinct (only for fixed ports)
+        if let (Some(dp), Some(gp)) = (dash_port, grpc_port) {
+            if dp == gp {
+                errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
+                    src: src.clone(),
+                    span: find_dashboard_span(source, "port"),
+                    port: dp,
+                    a: "dashboard.port".to_string(),
+                    b: "dashboard.otel.grpc_port".to_string(),
+                });
+            }
         }
-        if dash_port == http_port {
-            errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
-                src: src.clone(),
-                span: find_dashboard_span(source, "port"),
-                port: dash_port,
-                a: "dashboard.port".to_string(),
-                b: "dashboard.otel.http_port".to_string(),
-            });
+        if let (Some(dp), Some(hp)) = (dash_port, http_port) {
+            if dp == hp {
+                errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
+                    src: src.clone(),
+                    span: find_dashboard_span(source, "port"),
+                    port: dp,
+                    a: "dashboard.port".to_string(),
+                    b: "dashboard.otel.http_port".to_string(),
+                });
+            }
         }
-        if grpc_port == http_port {
-            errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
-                src: src.clone(),
-                span: find_dashboard_otel_span(source, "grpc_port"),
-                port: grpc_port,
-                a: "dashboard.otel.grpc_port".to_string(),
-                b: "dashboard.otel.http_port".to_string(),
-            });
+        if let (Some(gp), Some(hp)) = (grpc_port, http_port) {
+            if gp == hp {
+                errors.push(ConfigDiagnostic::DashboardPortsNotDistinct {
+                    src: src.clone(),
+                    span: find_dashboard_otel_span(source, "grpc_port"),
+                    port: gp,
+                    a: "dashboard.otel.grpc_port".to_string(),
+                    b: "dashboard.otel.http_port".to_string(),
+                });
+            }
         }
 
-        // Check dashboard ports don't conflict with service/docker ports
-        let dash_ports = [
-            (dash_port, "dashboard.port"),
-            (grpc_port, "dashboard.otel.grpc_port"),
-            (http_port, "dashboard.otel.http_port"),
-        ];
+        // Check dashboard ports don't conflict with service/docker ports (only fixed)
+        let mut dash_ports: Vec<(u16, &str)> = Vec::new();
+        if let Some(dp) = dash_port {
+            dash_ports.push((dp, "dashboard.port"));
+        }
+        if let Some(gp) = grpc_port {
+            dash_ports.push((gp, "dashboard.otel.grpc_port"));
+        }
+        if let Some(hp) = http_port {
+            dash_ports.push((hp, "dashboard.otel.http_port"));
+        }
 
         for (dport, dname) in &dash_ports {
             for (svc_name, svc) in &config.services {

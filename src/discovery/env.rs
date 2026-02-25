@@ -75,19 +75,22 @@ pub fn build_service_env(
     }
     env.insert("HOST".to_string(), "localhost".to_string());
 
-    // 5. Inject OTel env vars when dashboard is enabled
+    // 5. Inject OTel env vars when dashboard is enabled (use resolved ports)
     if let Some(ref dash) = config.dashboard {
         if dash.enabled.unwrap_or(true) {
-            let otel = dash.otel.clone().unwrap_or_default();
-            env.insert(
-                "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
-                format!("http://localhost:{}", otel.http_port),
-            );
+            if let Some(&http_port) = resolved_ports.get("otel-http") {
+                env.insert(
+                    "OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
+                    format!("http://localhost:{}", http_port),
+                );
+            }
             env.insert("OTEL_SERVICE_NAME".to_string(), service_name.to_string());
-            env.insert(
-                "DEVRIG_DASHBOARD_URL".to_string(),
-                format!("http://localhost:{}", dash.port),
-            );
+            if let Some(&dash_port) = resolved_ports.get("dashboard") {
+                env.insert(
+                    "DEVRIG_DASHBOARD_URL".to_string(),
+                    format!("http://localhost:{}", dash_port),
+                );
+            }
         }
     }
 
