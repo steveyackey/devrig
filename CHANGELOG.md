@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.0](https://github.com/steveyackey/devrig/compare/v0.16.0...v0.17.0) (2026-02-25)
+
+
+### Features
+
+* add build_args support for cluster image builds ([3acfde7](https://github.com/steveyackey/devrig/commit/3acfde78b90b4900cf5d7914d22005bb84c79cc2))
+* add cluster.volumes and cluster.kubeconfig template variable ([2e67bc9](https://github.com/steveyackey/devrig/commit/2e67bc9d930950957ac9e4d833e82cade7354892))
+
 ## [0.16.0](https://github.com/steveyackey/devrig/compare/v0.15.1...v0.16.0) (2026-02-25)
 
 
