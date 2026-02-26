@@ -151,6 +151,7 @@ timeout = 120
 | `agents`   | int     | `1`             | Number of agent nodes          |
 | `ports`    | list    | `[]`            | Host-to-cluster port mappings  |
 | `registry` | bool    | `true`          | Create local container registry|
+| `k3s_args` | list    | `[]`            | Extra args passed to k3s via `--k3s-arg` |
 
 ### `[[cluster.registries]]`
 

@@ -73,6 +73,11 @@ impl K3dManager {
             args.push(self.resolve_volume_path(entry));
         }
 
+        for entry in &self.config.k3s_args {
+            args.push("--k3s-arg".to_string());
+            args.push(format!("{}@server:*", entry));
+        }
+
         if self.config.registry {
             args.push("--registry-create".to_string());
             args.push(format!("k3d-{}-reg:0.0.0.0:0", self.cluster_name));
@@ -379,6 +384,7 @@ mod tests {
                 addons: BTreeMap::new(),
                 logs: None,
                 registries: vec![],
+                k3s_args: vec![],
             },
             &config_dir.join(".devrig"),
             "test-net",

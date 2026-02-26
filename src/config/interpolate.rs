@@ -452,6 +452,7 @@ mod tests {
                 addons: BTreeMap::new(),
                 logs: None,
                 registries: vec![],
+                k3s_args: vec![],
             }),
             dashboard: None,
             env: BTreeMap::new(),

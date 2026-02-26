@@ -112,6 +112,7 @@ command = "{service_command}"
 # agents = 1
 # ports = ["8080:80"]
 # volumes = ["../:/workspace@server:*"]  # mount host dirs into cluster nodes
+# k3s_args = ["--disable=traefik"]       # extra flags passed to k3s
 #
 # [cluster.image.job-runner]
 # context = "./tools/job-runner"

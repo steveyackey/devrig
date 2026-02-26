@@ -1682,6 +1682,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[services.web]\ncommand = \"npm run dev\"\nport = 3000\ndepends_on = [\"api\"]\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1708,6 +1709,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster]\nregistry = true\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"postgres\"]\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());
@@ -1727,6 +1729,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1750,6 +1753,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1780,6 +1784,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.deploy.postgres]\ncontext = \"./pg\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -1806,6 +1811,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\ndepends_on = [\"nonexistent\"]\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -2251,6 +2257,7 @@ context = "./tools/job-runner"
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.image.job-runner]\ncontext = \"\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -2277,6 +2284,7 @@ context = "./tools/job-runner"
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.image.api]\ncontext = \"./tools/api\"\n\n[cluster.deploy.api]\ncontext = \"./api\"\nmanifests = \"./k8s\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -2307,6 +2315,7 @@ context = "./tools/job-runner"
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.image.postgres]\ncontext = \"./tools/pg\"\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -2333,6 +2342,7 @@ context = "./tools/job-runner"
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[cluster.image.job-runner]\ncontext = \"./tools/job-runner\"\ndepends_on = [\"nonexistent\"]\n";
         let errs = validate(&config, source, TEST_FILENAME).unwrap_err();
@@ -2367,6 +2377,7 @@ context = "./tools/job-runner"
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
         let source = "[project]\nname = \"test\"\n\n[docker.postgres]\nimage = \"postgres:16-alpine\"\nport = 5432\n\n[cluster.image.job-runner]\ncontext = \"./tools/job-runner\"\ndepends_on = [\"postgres\"]\n";
         assert!(validate(&config, source, TEST_FILENAME).is_ok());

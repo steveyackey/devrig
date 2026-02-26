@@ -11,6 +11,7 @@ command = "bash setup.sh"
 port = 9080
 
 [cluster]
+k3s_args = ["--disable=traefik"]
 
 [cluster.logs]
 namespaces = "all"

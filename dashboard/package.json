@@ -18,6 +18,7 @@
     "clsx": "^2.1.1",
     "codemirror": "^6.0.2",
     "lucide-solid": "^0.575.0",
+    "rollup": "^4.59.0",
     "smol-toml": "^1.6.0",
     "solid-js": "^1.9.0",
     "tailwind-merge": "^3.5.0",

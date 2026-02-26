@@ -395,6 +395,7 @@ registry = true
 | `ports`    | list of strings | No       | `[]`            | Port mappings from host to cluster load balancer.  |
 | `volumes`  | list of strings | No       | `[]`            | Host directory mounts into cluster nodes.          |
 | `registry` | boolean         | No       | `true`          | Whether to create a local container registry.      |
+| `k3s_args` | list of strings | No       | `[]`            | Extra arguments passed to k3s via `--k3s-arg`.     |
 
 Port mappings use the format `"hostPort:containerPort"`. The host port is
 bound on `localhost` and forwarded through the k3d load balancer.

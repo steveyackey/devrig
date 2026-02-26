@@ -480,6 +480,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -503,6 +504,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -535,6 +537,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -568,6 +571,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -606,6 +610,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -630,6 +635,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let err = DependencyResolver::from_config(&config).unwrap_err();
@@ -691,6 +697,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -717,6 +724,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -752,6 +760,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let resolver = DependencyResolver::from_config(&config).unwrap();
@@ -776,6 +785,7 @@ mod tests {
             addons: BTreeMap::new(),
             logs: None,
             registries: vec![],
+            k3s_args: vec![],
         });
 
         let err = DependencyResolver::from_config(&config).unwrap_err();

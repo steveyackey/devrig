@@ -358,6 +358,8 @@ pub struct ClusterConfig {
     pub logs: Option<ClusterLogsConfig>,
     #[serde(default)]
     pub registries: Vec<ClusterRegistryAuth>,
+    #[serde(default)]
+    pub k3s_args: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
