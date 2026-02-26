@@ -61,6 +61,7 @@ rust-embed = { version = "8", features = ["compression", "include-exclude"] }
 mime_guess = "2"
 humantime = "2"
 dashmap = "6"
+libc = "0.2"
 
 [dev-dependencies]
 assert_cmd = "2"

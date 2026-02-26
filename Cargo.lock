@@ -715,6 +715,7 @@ dependencies = [
  "hex",
  "humantime",
  "is-terminal",
+ "libc",
  "miette",
  "mime_guess",
  "nix",

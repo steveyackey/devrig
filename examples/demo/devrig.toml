@@ -3,7 +3,7 @@ name = "demo"
 
 [dashboard]
 
-[infra.postgres]
+[docker.postgres]
 image = "postgres:16-alpine"
 port = 5432
 volumes = ["pgdata:/var/lib/postgresql/data"]
@@ -12,7 +12,7 @@ init = [
   "CREATE TABLE IF NOT EXISTS todos (id SERIAL PRIMARY KEY, title TEXT NOT NULL, completed BOOLEAN DEFAULT false, created_at TIMESTAMPTZ DEFAULT NOW())",
 ]
 
-[infra.postgres.env]
+[docker.postgres.env]
 POSTGRES_USER = "demo"
 POSTGRES_PASSWORD = "demo"
 POSTGRES_DB = "demo"

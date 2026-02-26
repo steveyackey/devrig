@@ -903,7 +903,8 @@ impl Orchestrator {
         }
 
         // ================================================================
-        // Phase 5: Spawn service supervisors
+        // Phase 4.9: Save state and register (before spawning supervisors
+        // so that grace timers can update state.json without being overwritten)
         // ================================================================
         let service_names: Vec<String> = launch_order
             .iter()
@@ -911,6 +912,53 @@ impl Orchestrator {
             .map(|(n, _)| n.clone())
             .collect();
 
+        let mut service_states: BTreeMap<String, ServiceState> = BTreeMap::new();
+        for name in &service_names {
+            let svc = &self.config.services[name];
+            let port = resolved_ports.get(&format!("service:{}", name)).copied();
+            let port_auto = matches!(&svc.port, Some(Port::Auto));
+            service_states.insert(
+                name.clone(),
+                ServiceState {
+                    pid: 0,
+                    port,
+                    port_auto,
+                    protocol: svc.protocol.clone(),
+                    phase: Some("starting".to_string()),
+                    exit_code: None,
+                },
+            );
+        }
+
+        let project_state = ProjectState {
+            slug: self.identity.slug.clone(),
+            config_path: self.config_path.to_string_lossy().to_string(),
+            services: service_states,
+            started_at: Utc::now(),
+            docker: docker_states.clone(),
+            compose_services: compose_states.clone(),
+            network_name: network_name.clone(),
+            cluster: cluster_state.clone(),
+            dashboard: dashboard_state.clone(),
+        };
+        project_state
+            .save(&self.state_dir)
+            .context("saving project state")?;
+
+        let mut registry = InstanceRegistry::load();
+        registry.register(InstanceEntry {
+            slug: self.identity.slug.clone(),
+            config_path: self.config_path.to_string_lossy().to_string(),
+            state_dir: self.state_dir.to_string_lossy().to_string(),
+            started_at: Utc::now(),
+        });
+        if let Err(e) = registry.save() {
+            warn!(error = %e, "failed to save instance registry");
+        }
+
+        // ================================================================
+        // Phase 5: Spawn service supervisors
+        // ================================================================
         if !service_names.is_empty() {
             let max_name_len = launch_order.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
 
@@ -1068,16 +1116,13 @@ impl Orchestrator {
                         });
                     }
 
-                    // Update state.json with exit info
-                    if let Some(mut state) = ProjectState::load(&state_dir_clone) {
-                        if let Some(svc_state) = state.services.get_mut(&svc_name) {
-                            svc_state.phase = Some(phase);
-                            svc_state.exit_code = exit_code;
-                        }
-                        if let Err(e) = state.save(&state_dir_clone) {
-                            warn!(service = %svc_name, error = %e, "failed to update service exit state");
-                        }
-                    }
+                    // Update state.json with exit info (file-locked)
+                    ProjectState::update_service_exit(
+                        &state_dir_clone,
+                        &svc_name,
+                        &phase,
+                        exit_code,
+                    );
                 });
             }
 
@@ -1085,52 +1130,7 @@ impl Orchestrator {
             drop(log_tx);
         }
 
-        // ================================================================
-        // Save state and register
-        // ================================================================
-        let mut service_states: BTreeMap<String, ServiceState> = BTreeMap::new();
-        for name in &service_names {
-            let svc = &self.config.services[name];
-            let port = resolved_ports.get(&format!("service:{}", name)).copied();
-            let port_auto = matches!(&svc.port, Some(Port::Auto));
-            service_states.insert(
-                name.clone(),
-                ServiceState {
-                    pid: 0,
-                    port,
-                    port_auto,
-                    protocol: svc.protocol.clone(),
-                    phase: Some("starting".to_string()),
-                    exit_code: None,
-                },
-            );
-        }
-
-        let project_state = ProjectState {
-            slug: self.identity.slug.clone(),
-            config_path: self.config_path.to_string_lossy().to_string(),
-            services: service_states,
-            started_at: Utc::now(),
-            docker: docker_states.clone(),
-            compose_services: compose_states.clone(),
-            network_name: network_name.clone(),
-            cluster: cluster_state.clone(),
-            dashboard: dashboard_state.clone(),
-        };
-        project_state
-            .save(&self.state_dir)
-            .context("saving project state")?;
-
-        let mut registry = InstanceRegistry::load();
-        registry.register(InstanceEntry {
-            slug: self.identity.slug.clone(),
-            config_path: self.config_path.to_string_lossy().to_string(),
-            state_dir: self.state_dir.to_string_lossy().to_string(),
-            started_at: Utc::now(),
-        });
-        if let Err(e) = registry.save() {
-            warn!(error = %e, "failed to save instance registry");
-        }
+        // (State and registry already saved in Phase 4.9 above)
 
         // ================================================================
         // Print startup summary

@@ -117,6 +117,55 @@ impl ProjectState {
         project_dir.join(".devrig")
     }
 
+    /// Acquire an exclusive file lock on state.json.lock.
+    /// Returns the lock file handle (lock released on drop).
+    fn lock_state(state_dir: &Path) -> Option<std::fs::File> {
+        let lock_path = state_dir.join("state.json.lock");
+        let lock_file = std::fs::File::create(&lock_path).ok()?;
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            // SAFETY: fd is valid for the lifetime of lock_file
+            unsafe {
+                libc::flock(lock_file.as_raw_fd(), libc::LOCK_EX);
+            }
+        }
+
+        Some(lock_file)
+    }
+
+    /// Atomically update a single service's phase in state.json.
+    ///
+    /// Uses an exclusive file lock (`flock`) to prevent concurrent
+    /// read-modify-write races when multiple grace timers fire at once.
+    pub fn update_service_phase(state_dir: &Path, service: &str, phase: &str) {
+        let _lock = Self::lock_state(state_dir);
+        if let Some(mut state) = Self::load(state_dir) {
+            if let Some(svc) = state.services.get_mut(service) {
+                svc.phase = Some(phase.to_string());
+            }
+            let _ = state.save(state_dir);
+        }
+    }
+
+    /// Atomically update a service's phase and exit_code in state.json.
+    pub fn update_service_exit(
+        state_dir: &Path,
+        service: &str,
+        phase: &str,
+        exit_code: Option<i32>,
+    ) {
+        let _lock = Self::lock_state(state_dir);
+        if let Some(mut state) = Self::load(state_dir) {
+            if let Some(svc) = state.services.get_mut(service) {
+                svc.phase = Some(phase.to_string());
+                svc.exit_code = exit_code;
+            }
+            let _ = state.save(state_dir);
+        }
+    }
+
     pub fn reset_init(&mut self, docker_name: &str) -> bool {
         if let Some(state) = self.docker.get_mut(docker_name) {
             state.init_completed = false;

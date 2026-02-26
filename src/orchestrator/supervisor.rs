@@ -294,12 +294,7 @@ impl ServiceSupervisor {
                                 });
                             }
                             if let Some(ref dir) = sd {
-                                if let Some(mut state) = ProjectState::load(dir) {
-                                    if let Some(svc) = state.services.get_mut(&svc_name) {
-                                        svc.phase = Some("running".to_string());
-                                    }
-                                    let _ = state.save(dir);
-                                }
+                                ProjectState::update_service_phase(dir, &svc_name, "running");
                             }
                         }
                         _ = token.cancelled() => {}
