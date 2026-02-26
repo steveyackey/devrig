@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.20.1](https://github.com/steveyackey/devrig/compare/v0.20.0...v0.20.1) (2026-02-26)
+
+
+### Bug Fixes
+
+* show links/addons/cluster-ports before state file exists ([f99af11](https://github.com/steveyackey/devrig/commit/f99af11869c492f489245619301d9ffebc9f98b1))
+
 ## [0.20.0](https://github.com/steveyackey/devrig/compare/v0.19.0...v0.20.0) (2026-02-26)
 
 
