@@ -11,10 +11,26 @@ command = "bash setup.sh"
 port = 9080
 
 [cluster]
-ports = ["8080:30080"]
 
 [cluster.logs]
 namespaces = "all"
+
+[cluster.addons.traefik]
+type = "helm"
+chart = "traefik/traefik"
+repo = "https://traefik.github.io/charts"
+namespace = "traefik"
+wait = true
+port_forward = { 8080 = "svc/traefik:80" }
+
+[cluster.addons.traefik.values]
+"service.type" = "ClusterIP"
+"tracing.otlp.enabled" = true
+"tracing.otlp.http.endpoint" = "http://host.k3d.internal:4318/v1/traces"
+"tracing.sampleRate" = 1
+"metrics.otlp.enabled" = true
+"metrics.otlp.http.endpoint" = "http://host.k3d.internal:4318/v1/metrics"
+"metrics.otlp.pushInterval" = "10s"
 
 [cluster.addons.flux]
 type = "helm"
