@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.20.0](https://github.com/steveyackey/devrig/compare/v0.19.0...v0.20.0) (2026-02-26)
+
+
+### Features
+
+* show links, addons, and cluster ports in dashboard ([74a8546](https://github.com/steveyackey/devrig/commit/74a854604e3608ec2e62097f9d022cc4a04a83bc))
+
+
+### Bug Fixes
+
+* derive helm repo name from chart reference instead of addon name ([6cadfc0](https://github.com/steveyackey/devrig/commit/6cadfc0cb24409db1978afeab5d26d9ad3bf453f))
+
 ## [0.19.0](https://github.com/steveyackey/devrig/compare/v0.18.0...v0.19.0) (2026-02-25)
 
 
