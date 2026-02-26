@@ -11,6 +11,8 @@ use tokio_util::sync::CancellationToken;
 use tracing::{debug, error, warn};
 
 use crate::config::model::RestartConfig;
+use crate::otel::types::TelemetryEvent;
+use crate::orchestrator::state::ProjectState;
 use crate::platform;
 use crate::ui::logs::LogLine;
 
@@ -140,6 +142,18 @@ fn spawn_stream_reader(
     })
 }
 
+/// Cancels a grace timer on drop so stale timers never fire after the
+/// supervisor returns.
+struct GraceGuard(Option<CancellationToken>);
+
+impl Drop for GraceGuard {
+    fn drop(&mut self) {
+        if let Some(t) = self.0.take() {
+            t.cancel();
+        }
+    }
+}
+
 pub struct ServiceSupervisor {
     name: String,
     command: String,
@@ -148,6 +162,8 @@ pub struct ServiceSupervisor {
     policy: RestartPolicy,
     log_tx: broadcast::Sender<LogLine>,
     cancel: CancellationToken,
+    events_tx: Option<broadcast::Sender<TelemetryEvent>>,
+    state_dir: Option<PathBuf>,
 }
 
 impl ServiceSupervisor {
@@ -159,6 +175,8 @@ impl ServiceSupervisor {
         policy: RestartPolicy,
         log_tx: broadcast::Sender<LogLine>,
         cancel: CancellationToken,
+        events_tx: Option<broadcast::Sender<TelemetryEvent>>,
+        state_dir: Option<PathBuf>,
     ) -> Self {
         Self {
             name,
@@ -168,6 +186,8 @@ impl ServiceSupervisor {
             policy,
             log_tx,
             cancel,
+            events_tx,
+            state_dir,
         }
     }
 
@@ -178,10 +198,13 @@ impl ServiceSupervisor {
         let mut restart_count: u32 = 0;
         let mut startup_restart_count: u32 = 0;
         let mut last_status: Option<ExitStatus> = None;
-        // ServicePhase tracks lifecycle for future dashboard reporting.
-        // Currently write-only; when the dashboard needs per-service phase,
-        // send updates over a watch::Sender<ServicePhase>.
         let mut _phase = ServicePhase::Initial;
+
+        // Grace timer: fires once after startup_grace to mark service as "running".
+        // GraceGuard cancels the timer on drop so stale timers never fire after
+        // the supervisor returns.
+        let mut grace_guard = GraceGuard(None);
+        let mut grace_notified = false;
 
         // Track recent crash timestamps for crash rate detection
         let mut recent_crashes: VecDeque<Instant> = VecDeque::new();
@@ -245,6 +268,46 @@ impl ServiceSupervisor {
             );
 
             // -----------------------------------------------------------
+            // Start startup_grace timer (once per spawn attempt)
+            // -----------------------------------------------------------
+            if !grace_notified {
+                // Cancel any previous timer from a failed spawn
+                if let Some(t) = grace_guard.0.take() {
+                    t.cancel();
+                }
+
+                let token = CancellationToken::new();
+                grace_guard.0 = Some(token.clone());
+
+                let events = self.events_tx.clone();
+                let svc_name = self.name.clone();
+                let sd = self.state_dir.clone();
+                let grace = self.policy.startup_grace;
+
+                tokio::spawn(async move {
+                    tokio::select! {
+                        _ = tokio::time::sleep(grace) => {
+                            if let Some(tx) = &events {
+                                let _ = tx.send(TelemetryEvent::ServiceStatusChange {
+                                    service: svc_name.clone(),
+                                    status: "running".to_string(),
+                                });
+                            }
+                            if let Some(ref dir) = sd {
+                                if let Some(mut state) = ProjectState::load(dir) {
+                                    if let Some(svc) = state.services.get_mut(&svc_name) {
+                                        svc.phase = Some("running".to_string());
+                                    }
+                                    let _ = state.save(dir);
+                                }
+                            }
+                        }
+                        _ = token.cancelled() => {}
+                    }
+                });
+            }
+
+            // -----------------------------------------------------------
             // Wait for exit or cancellation
             // -----------------------------------------------------------
             let status = tokio::select! {
@@ -306,6 +369,7 @@ impl ServiceSupervisor {
             // Update phase to Running retroactively if it ran past startup_grace
             if !is_startup_failure {
                 _phase = ServicePhase::Running;
+                grace_notified = true;
             }
 
             // Track crash for rate detection
@@ -492,6 +556,8 @@ mod tests {
             },
             tx,
             cancel.clone(),
+            None,
+            None,
         );
 
         let status = supervisor.run().await.expect("run should succeed");
@@ -533,6 +599,8 @@ mod tests {
             },
             tx,
             cancel.clone(),
+            None,
+            None,
         );
 
         let status = supervisor.run().await.expect("run should succeed");
@@ -563,6 +631,8 @@ mod tests {
             RestartPolicy::default(),
             tx,
             cancel.clone(),
+            None,
+            None,
         );
 
         let handle = tokio::spawn(supervisor.run());
@@ -601,6 +671,8 @@ mod tests {
             },
             tx,
             cancel,
+            None,
+            None,
         );
 
         let status = supervisor.run().await.expect("run should succeed");
@@ -625,6 +697,8 @@ mod tests {
             },
             tx,
             cancel,
+            None,
+            None,
         );
 
         let status = supervisor.run().await.expect("run should succeed");

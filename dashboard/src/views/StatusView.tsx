@@ -109,9 +109,10 @@ const StatusView: Component = () => {
                       {(svc) => {
                         const isAddon = () => svc.kind === 'addon' || svc.kind === 'cluster-port';
                         const isLink = () => svc.kind === 'link';
-                        const isReporting = () => data().services.includes(svc.name);
                         const isExited = () => svc.phase === 'stopped' || svc.phase === 'failed';
                         const isFailedExit = () => svc.phase === 'failed' || (isExited() && svc.exit_code != null && svc.exit_code !== 0);
+
+                        const isRunning = () => svc.phase === 'running';
 
                         const indicatorClass = () => {
                           if (isAddon()) return 'bg-success';
@@ -119,7 +120,7 @@ const StatusView: Component = () => {
                           if (isExited()) {
                             return isFailedExit() ? 'bg-error' : 'bg-surface-3';
                           }
-                          return isReporting() ? 'bg-success animate-pulse-live' : 'bg-warning animate-pulse-live';
+                          return isRunning() ? 'bg-success animate-pulse-live' : 'bg-warning animate-pulse-live';
                         };
 
                         const indicatorShadow = () => {
@@ -130,7 +131,7 @@ const StatusView: Component = () => {
                           if (isExited()) {
                             return isFailedExit() ? { "box-shadow": '0 0 6px rgba(239,68,68,0.4)' } : {};
                           }
-                          return isReporting()
+                          return isRunning()
                             ? { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' }
                             : { "box-shadow": '0 0 6px rgba(251,191,36,0.3)' };
                         };

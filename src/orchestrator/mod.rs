@@ -409,6 +409,16 @@ impl Orchestrator {
                     }
                 }
 
+                // Compose services are running — broadcast "running" for each
+                if let Some(tx) = &bridge_events_tx {
+                    for cs_name in compose_states.keys() {
+                        let _ = tx.send(crate::otel::types::TelemetryEvent::ServiceStatusChange {
+                            service: cs_name.clone(),
+                            status: "running".to_string(),
+                        });
+                    }
+                }
+
                 debug!(count = compose_states.len(), "compose services started");
             }
         }
@@ -454,6 +464,14 @@ impl Orchestrator {
                 .with_context(|| format!("starting docker service '{}'", name))?;
 
             docker_states.insert(name.clone(), state);
+
+            // Docker service passed ready checks — broadcast "running"
+            if let Some(tx) = &bridge_events_tx {
+                let _ = tx.send(crate::otel::types::TelemetryEvent::ServiceStatusChange {
+                    service: name.clone(),
+                    status: "running".to_string(),
+                });
+            }
         }
 
         // ================================================================
@@ -1017,10 +1035,13 @@ impl Orchestrator {
                     policy,
                     log_tx.clone(),
                     self.cancel.clone(),
+                    bridge_events_tx.clone(),
+                    Some(self.state_dir.clone()),
                 );
 
                 let svc_name = name.clone();
                 let state_dir_clone = self.state_dir.clone();
+                let exit_events_tx = bridge_events_tx.clone();
                 self.tracker.spawn(async move {
                     let (phase, exit_code) = match supervisor.run().await {
                         Ok(status) => {
@@ -1038,6 +1059,14 @@ impl Orchestrator {
                             }
                         }
                     };
+
+                    // Broadcast exit event to dashboard
+                    if let Some(tx) = &exit_events_tx {
+                        let _ = tx.send(crate::otel::types::TelemetryEvent::ServiceStatusChange {
+                            service: svc_name.clone(),
+                            status: phase.clone(),
+                        });
+                    }
 
                     // Update state.json with exit info
                     if let Some(mut state) = ProjectState::load(&state_dir_clone) {
