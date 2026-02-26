@@ -28,56 +28,55 @@ pub struct ServiceInfo {
 pub async fn get_services(
     State(state): State<DashboardState>,
 ) -> Json<Vec<ServiceInfo>> {
-    let Some(state_dir) = &state.state_dir else {
-        return Json(vec![]);
-    };
-
-    let Some(project) = ProjectState::load(state_dir) else {
-        return Json(vec![]);
-    };
-
     let mut services = Vec::new();
 
-    for (name, svc) in &project.services {
-        services.push(ServiceInfo {
-            name: name.clone(),
-            port: svc.port,
-            kind: "service".to_string(),
-            port_auto: svc.port_auto,
-            protocol: svc.protocol.clone(),
-            phase: svc.phase.clone(),
-            exit_code: svc.exit_code,
-            addon_type: None,
-            url: None,
-        });
-    }
+    // Load runtime state (services, docker, compose)
+    if let Some(project) = state
+        .state_dir
+        .as_ref()
+        .and_then(|dir| ProjectState::load(dir))
+    {
+        for (name, svc) in &project.services {
+            services.push(ServiceInfo {
+                name: name.clone(),
+                port: svc.port,
+                kind: "service".to_string(),
+                port_auto: svc.port_auto,
+                protocol: svc.protocol.clone(),
+                phase: svc.phase.clone(),
+                exit_code: svc.exit_code,
+                addon_type: None,
+                url: None,
+            });
+        }
 
-    for (name, docker_svc) in &project.docker {
-        services.push(ServiceInfo {
-            name: name.clone(),
-            port: docker_svc.port,
-            kind: "docker".to_string(),
-            port_auto: docker_svc.port_auto,
-            protocol: docker_svc.protocol.clone(),
-            phase: None,
-            exit_code: None,
-            addon_type: None,
-            url: None,
-        });
-    }
+        for (name, docker_svc) in &project.docker {
+            services.push(ServiceInfo {
+                name: name.clone(),
+                port: docker_svc.port,
+                kind: "docker".to_string(),
+                port_auto: docker_svc.port_auto,
+                protocol: docker_svc.protocol.clone(),
+                phase: None,
+                exit_code: None,
+                addon_type: None,
+                url: None,
+            });
+        }
 
-    for (name, compose) in &project.compose_services {
-        services.push(ServiceInfo {
-            name: name.clone(),
-            port: compose.port,
-            kind: "compose".to_string(),
-            port_auto: false,
-            protocol: None,
-            phase: None,
-            exit_code: None,
-            addon_type: None,
-            url: None,
-        });
+        for (name, compose) in &project.compose_services {
+            services.push(ServiceInfo {
+                name: name.clone(),
+                port: compose.port,
+                kind: "compose".to_string(),
+                port_auto: false,
+                protocol: None,
+                phase: None,
+                exit_code: None,
+                addon_type: None,
+                url: None,
+            });
+        }
     }
 
     // Load config for links, addons, and cluster ports
