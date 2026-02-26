@@ -52,25 +52,7 @@ async fn run_cmd(
     Ok(())
 }
 
-/// Expand `~` and `$HOME` in a path string to the actual home directory.
-fn expand_home(path: &str) -> String {
-    if let Some(home) = std::env::var_os("HOME") {
-        let home = home.to_string_lossy();
-        if path.starts_with("~/") {
-            return format!("{}{}", home, &path[1..]);
-        }
-        if path.starts_with("$HOME/") || path.starts_with("$HOME\\") {
-            return format!("{}{}", home, &path[5..]);
-        }
-        if path == "~" {
-            return home.to_string();
-        }
-        if path == "$HOME" {
-            return home.to_string();
-        }
-    }
-    path.to_string()
-}
+use crate::platform;
 
 /// Build docker build args including `--secret` and `--build-arg` flags.
 fn docker_build_args<'a>(
@@ -96,7 +78,7 @@ fn docker_build_args<'a>(
 fn format_secret_args(build_secrets: &BTreeMap<String, String>) -> Vec<String> {
     build_secrets
         .iter()
-        .map(|(id, path)| format!("id={id},src={}", expand_home(path)))
+        .map(|(id, path)| format!("id={id},src={}", platform::expand_home(path)))
         .collect()
 }
 

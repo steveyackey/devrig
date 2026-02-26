@@ -23,6 +23,7 @@ use crate::config::interpolate::{build_template_vars, resolve_config_templates};
 use crate::config::model::{DevrigConfig, Port};
 use crate::config::validate::validate;
 use crate::discovery::env::build_service_env;
+use crate::platform;
 use crate::identity::ProjectIdentity;
 use crate::docker::DockerManager;
 use crate::ui::logs::{LogLine, LogWriter};
@@ -1063,11 +1064,17 @@ impl Orchestrator {
                 }
 
                 let working_dir = svc.path.as_ref().map(|p| {
-                    let base = self
-                        .config_path
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new("."));
-                    base.join(p)
+                    let expanded = platform::expand_home(p);
+                    let expanded_path = std::path::Path::new(&expanded);
+                    if expanded_path.is_absolute() {
+                        expanded_path.to_path_buf()
+                    } else {
+                        let base = self
+                            .config_path
+                            .parent()
+                            .unwrap_or_else(|| std::path::Path::new("."));
+                        base.join(&expanded)
+                    }
                 });
 
                 let policy = match &svc.restart {
@@ -1075,9 +1082,11 @@ impl Orchestrator {
                     None => RestartPolicy::default(),
                 };
 
+                let command = platform::expand_home(&svc.command);
+
                 let supervisor = ServiceSupervisor::new(
                     name.clone(),
-                    svc.command.clone(),
+                    command,
                     working_dir,
                     env,
                     policy,
