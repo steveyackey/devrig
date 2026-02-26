@@ -233,6 +233,7 @@ mod tests {
             dashboard: None,
             env: BTreeMap::new(),
             network: None,
+            links: BTreeMap::new(),
         }
     }
 

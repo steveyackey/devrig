@@ -3,6 +3,9 @@ name = "flux-local"
 
 [dashboard]
 
+[links]
+headlamp = "http://localhost:8080"
+
 [services.git-server]
 command = "bash setup.sh"
 port = 9080

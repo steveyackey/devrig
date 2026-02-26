@@ -191,6 +191,8 @@ export interface ServiceInfo {
   protocol?: string;
   phase?: string;
   exit_code?: number | null;
+  addon_type?: string;
+  url?: string;
 }
 
 export function fetchServices(): Promise<ServiceInfo[]> {

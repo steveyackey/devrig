@@ -18,6 +18,8 @@ pub struct DevrigConfig {
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub network: Option<NetworkConfig>,
+    #[serde(default)]
+    pub links: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Deserialize)]

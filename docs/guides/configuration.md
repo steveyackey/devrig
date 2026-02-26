@@ -929,6 +929,25 @@ DATABASE_URL = "postgres://devrig:devrig@localhost:{{ docker.postgres.port }}/my
 Values support `{{ }}` template expressions (same as service env). Per-service
 `env` values override global `env` values with the same key.
 
+## `[links]` section
+
+Named URLs for services that devrig doesn't manage directly (e.g., a service
+deployed by Flux, Argo, or running independently). Links appear in the
+dashboard with a blue indicator and a clickable port link.
+
+```toml
+[links]
+headlamp = "http://localhost:8080"
+grafana = "http://localhost:3000"
+```
+
+| Field       | Type   | Required | Description                       |
+|-------------|--------|----------|-----------------------------------|
+| `<name>`    | string | --       | Display name → URL mapping        |
+
+The port is parsed from the URL automatically. Links show as kind `link` in
+the dashboard services list.
+
 ## `[network]` section
 
 Optional custom Docker network configuration:

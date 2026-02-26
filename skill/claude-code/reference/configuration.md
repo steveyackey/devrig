@@ -10,6 +10,7 @@ Config file: `devrig.toml`. Located by walking up from cwd; override with `-f <p
 - [`[dashboard]` / `[dashboard.otel]`](#dashboard)
 - [`[compose]`](#compose)
 - [`[cluster]`](#cluster) — registries, deploy, addons
+- [`[links]`](#links)
 - [`[network]`](#network)
 - [Environment variable expansion](#environment-variable-expansion)
 - [Template expressions](#template-expressions)
@@ -208,6 +209,22 @@ wait = false
 timeout = "10m"
 [cluster.addons.myapp.values]
 "image.tag" = "{{ cluster.image.myapp.tag }}"
+```
+
+---
+
+## `[links]`
+
+Named URLs for services devrig doesn't manage (e.g., deployed by Flux). Shown in dashboard with blue indicator and clickable link.
+
+| Field    | Type   | Required | Description                |
+|----------|--------|----------|----------------------------|
+| `<name>` | string | --       | Display name → URL mapping |
+
+```toml
+[links]
+headlamp = "http://localhost:8080"
+grafana = "http://localhost:3000"
 ```
 
 ---

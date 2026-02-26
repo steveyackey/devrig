@@ -569,6 +569,7 @@ mod tests {
             dashboard: None,
             env: BTreeMap::from([("KEY".to_string(), "$TEST_SECRET".to_string())]),
             network: None,
+            links: BTreeMap::new(),
         };
 
         let env_file_vars =
@@ -596,6 +597,7 @@ mod tests {
             dashboard: None,
             env: BTreeMap::from([("PLAIN".to_string(), "no-vars-here".to_string())]),
             network: None,
+            links: BTreeMap::new(),
         };
 
         let env_file_vars = BTreeMap::new();

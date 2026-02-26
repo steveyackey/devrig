@@ -374,6 +374,7 @@ mod tests {
             dashboard: None,
             env: BTreeMap::new(),
             network: None,
+            links: BTreeMap::new(),
         };
 
         let mut resolved_ports = HashMap::new();
@@ -417,6 +418,7 @@ mod tests {
             }),
             env: BTreeMap::new(),
             network: None,
+            links: BTreeMap::new(),
         };
 
         let mut resolved_ports = HashMap::new();
@@ -454,6 +456,7 @@ mod tests {
             dashboard: None,
             env: BTreeMap::new(),
             network: None,
+            links: BTreeMap::new(),
         };
 
         let resolved_ports = HashMap::new();
@@ -486,6 +489,7 @@ mod tests {
                 ("PLAIN".to_string(), "no-templates-here".to_string()),
             ]),
             network: None,
+            links: BTreeMap::new(),
         };
 
         let mut vars = HashMap::new();

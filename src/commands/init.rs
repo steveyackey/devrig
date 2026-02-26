@@ -37,6 +37,12 @@ name = "{project_name}"
 # port = 4000                    # default; auto-resolves if in use
 # OTel defaults: grpc_port=4317, http_port=4318, retention="1h" — customize with [dashboard.otel]
 
+# -- Links --
+# Named URLs for services devrig doesn't manage (shown in dashboard).
+# [links]
+# headlamp = "http://localhost:8080"
+# grafana = "http://localhost:3000"
+
 # -- Services --
 [services.{service_name}]
 command = "{service_command}"

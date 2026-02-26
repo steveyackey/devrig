@@ -107,11 +107,13 @@ const StatusView: Component = () => {
                   <div>
                     <For each={serviceList()}>
                       {(svc) => {
+                        const isInfoKind = () => svc.kind === 'link' || svc.kind === 'addon' || svc.kind === 'cluster-port';
                         const isReporting = () => data().services.includes(svc.name);
                         const isExited = () => svc.phase === 'stopped' || svc.phase === 'failed';
                         const isFailedExit = () => svc.phase === 'failed' || (isExited() && svc.exit_code != null && svc.exit_code !== 0);
 
                         const indicatorClass = () => {
+                          if (isInfoKind()) return 'bg-info';
                           if (isExited()) {
                             return isFailedExit() ? 'bg-error' : 'bg-surface-3';
                           }
@@ -119,6 +121,7 @@ const StatusView: Component = () => {
                         };
 
                         const indicatorShadow = () => {
+                          if (isInfoKind()) return { "box-shadow": '0 0 6px rgba(96,165,250,0.3)' };
                           if (isExited()) {
                             return isFailedExit() ? { "box-shadow": '0 0 6px rgba(239,68,68,0.4)' } : {};
                           }
@@ -139,6 +142,9 @@ const StatusView: Component = () => {
                             />
                             <span class="font-display text-lg text-text-primary tracking-[0.06em] uppercase">{svc.name}</span>
                             <Badge variant="default">{svc.kind}</Badge>
+                            <Show when={svc.addon_type}>
+                              <Badge variant="default">{svc.addon_type}</Badge>
+                            </Show>
                             <Show when={isExited()}>
                               <Badge variant={isFailedExit() ? 'error' : 'default'}>
                                 {isFailedExit() ? `exited (${svc.exit_code ?? '?'})` : 'exited (0)'}
@@ -148,10 +154,11 @@ const StatusView: Component = () => {
                               {(() => {
                                 const proto = svc.protocol || 'http';
                                 const isLinkable = proto === 'http' || proto === 'https';
+                                const href = svc.url || `${proto}://localhost:${svc.port}`;
                                 return isLinkable ? (
                                   <a
                                     data-testid="service-port-link"
-                                    href={`${proto}://localhost:${svc.port}`}
+                                    href={href}
                                     target="_blank"
                                     rel="noopener"
                                     class="inline-flex items-center gap-1 text-xs font-mono text-text-muted hover:text-accent transition-colors"
@@ -170,14 +177,16 @@ const StatusView: Component = () => {
                                 <span class="text-[10px] text-text-muted">(auto)</span>
                               </Show>
                             </Show>
-                            <div class="ml-auto flex gap-2.5">
-                              <a href="#/traces" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
-                                Traces
-                              </a>
-                              <a href="#/logs" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
-                                Logs
-                              </a>
-                            </div>
+                            <Show when={!isInfoKind()}>
+                              <div class="ml-auto flex gap-2.5">
+                                <a href="#/traces" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
+                                  Traces
+                                </a>
+                                <a href="#/logs" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
+                                  Logs
+                                </a>
+                              </div>
+                            </Show>
                           </div>
                         );
                       }}
