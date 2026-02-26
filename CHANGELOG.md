@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.1](https://github.com/steveyackey/devrig/compare/v0.23.0...v0.23.1) (2026-02-26)
+
+
+### Bug Fixes
+
+* expand tilde (~) in service path and command fields ([#41](https://github.com/steveyackey/devrig/issues/41)) ([8c9e455](https://github.com/steveyackey/devrig/commit/8c9e455a2e3ee94acbf65bc8427149fc1bd69338))
+
 ## [0.23.0](https://github.com/steveyackey/devrig/compare/v0.22.0...v0.23.0) (2026-02-26)
 
 
