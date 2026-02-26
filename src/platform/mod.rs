@@ -51,6 +51,28 @@ pub fn home_dir() -> Option<PathBuf> {
     dirs::home_dir()
 }
 
+/// Expand leading `~` or `$HOME` in a path string to the actual home directory.
+///
+/// Returns the original string unchanged when no home directory is available
+/// or the string doesn't start with `~` or `$HOME`.
+pub fn expand_home(path: &str) -> String {
+    if let Some(home) = std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+    {
+        let home = home.to_string_lossy();
+        if path == "~" || path == "$HOME" {
+            return home.to_string();
+        }
+        if path.starts_with("~/") {
+            return format!("{}{}", home, &path[1..]);
+        }
+        if path.starts_with("$HOME/") || path.starts_with("$HOME\\") {
+            return format!("{}{}", home, &path[5..]);
+        }
+    }
+    path.to_string()
+}
+
 /// Identify which process owns a given TCP port.
 pub fn identify_port_owner(port: u16) -> Option<String> {
     imp::identify_port_owner(port)
@@ -59,6 +81,49 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
 /// Shell name for log messages.
 pub fn shell_name() -> &'static str {
     imp::SHELL_NAME
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expand_home_tilde_slash() {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap();
+        assert_eq!(expand_home("~/bin/cmd"), format!("{}/bin/cmd", home));
+    }
+
+    #[test]
+    fn expand_home_bare_tilde() {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap();
+        assert_eq!(expand_home("~"), home);
+    }
+
+    #[test]
+    fn expand_home_dollar_home() {
+        let home = std::env::var("HOME")
+            .or_else(|_| std::env::var("USERPROFILE"))
+            .unwrap();
+        assert_eq!(expand_home("$HOME"), home);
+        assert_eq!(expand_home("$HOME/projects"), format!("{}/projects", home));
+    }
+
+    #[test]
+    fn expand_home_no_expansion_needed() {
+        assert_eq!(expand_home("/usr/bin/cmd"), "/usr/bin/cmd");
+        assert_eq!(expand_home("relative/path"), "relative/path");
+        assert_eq!(expand_home(""), "");
+    }
+
+    #[test]
+    fn expand_home_tilde_not_at_start() {
+        // Tilde in the middle should NOT be expanded
+        assert_eq!(expand_home("/some/~path"), "/some/~path");
+    }
 }
 
 #[cfg(test)]
