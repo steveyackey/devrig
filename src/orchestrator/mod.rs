@@ -222,6 +222,11 @@ impl Orchestrator {
         std::fs::create_dir_all(&self.state_dir)
             .with_context(|| format!("creating state dir {}", self.state_dir.display()))?;
 
+        // Write PID file so `devrig stop` can signal this process
+        let pid_path = self.state_dir.join("pid");
+        std::fs::write(&pid_path, std::process::id().to_string())
+            .with_context(|| format!("writing PID file {}", pid_path.display()))?;
+
         // Print startup banner
         {
             let banner_services: Vec<String> = launch_order
@@ -1260,15 +1265,31 @@ impl Orchestrator {
         print_startup_summary(&self.identity, &summary_services);
 
         // ================================================================
-        // Wait for shutdown signal or all tasks to exit
+        // Wait for shutdown signal (SIGINT/SIGTERM) or all tasks to exit
         // ================================================================
+        let wait_for_signal = async {
+            #[cfg(unix)]
+            {
+                let mut sigterm =
+                    tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                        .expect("failed to register SIGTERM handler");
+                tokio::select! {
+                    _ = tokio::signal::ctrl_c() => {}
+                    _ = sigterm.recv() => {}
+                }
+            }
+            #[cfg(not(unix))]
+            {
+                tokio::signal::ctrl_c().await.ok();
+            }
+        };
+
         if service_names.is_empty() {
-            // No services to supervise (docker/compose only) — wait for Ctrl+C
-            tokio::signal::ctrl_c().await.ok();
+            wait_for_signal.await;
             eprintln!("\nShutting down...");
         } else {
             tokio::select! {
-                _ = tokio::signal::ctrl_c() => {
+                _ = wait_for_signal => {
                     eprintln!("\nShutting down...");
                 }
                 _ = async {
@@ -1310,33 +1331,69 @@ impl Orchestrator {
             () = shutdown_fut => {}
             _ = tokio::signal::ctrl_c() => {
                 eprintln!("\nForce shutdown");
+                let _ = std::fs::remove_file(self.state_dir.join("pid"));
                 std::process::exit(130);
             }
         }
 
+        // Clean up PID file
+        let _ = std::fs::remove_file(self.state_dir.join("pid"));
+
         Ok(())
     }
 
-    /// Stop a running project: cancel supervisors, stop docker containers.
-    /// Preserves state and registry so `devrig ps` still sees it.
+    /// Stop a running project: signal the running devrig process via PID file,
+    /// or stop docker containers directly.
     pub async fn stop(&self) -> Result<()> {
-        let state = ProjectState::load(&self.state_dir).ok_or_else(|| {
+        let _state = ProjectState::load(&self.state_dir).ok_or_else(|| {
             anyhow::anyhow!("no running project state found -- is the project running?")
         })?;
 
-        // Cancel service supervisors
-        self.cancel.cancel();
-        self.tracker.close();
-        match tokio::time::timeout(std::time::Duration::from_secs(10), self.tracker.wait()).await {
-            Ok(()) => debug!("All services stopped cleanly"),
-            Err(_) => warn!("Shutdown timed out -- some processes may have been force-killed"),
+        // Signal the running devrig process via PID file
+        let pid_path = self.state_dir.join("pid");
+        if let Ok(pid_str) = std::fs::read_to_string(&pid_path) {
+            if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                #[cfg(unix)]
+                {
+                    use nix::sys::signal::{kill, Signal};
+                    use nix::unistd::Pid;
+                    match kill(Pid::from_raw(pid as i32), Signal::SIGTERM) {
+                        Ok(()) => {
+                            eprintln!("Sent stop signal to devrig (pid {pid})");
+                            // Wait for the process to exit
+                            for _ in 0..100 {
+                                if kill(Pid::from_raw(pid as i32), None).is_err() {
+                                    break; // Process exited
+                                }
+                                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                            }
+                            return Ok(());
+                        }
+                        Err(nix::errno::Errno::ESRCH) => {
+                            // Process doesn't exist — stale PID file
+                            let _ = std::fs::remove_file(&pid_path);
+                            eprintln!("Removed stale PID file (process {pid} not found)");
+                        }
+                        Err(e) => {
+                            warn!(pid, error = %e, "failed to signal devrig process");
+                        }
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    eprintln!("Sent stop signal to devrig (pid {pid})");
+                    // On non-Unix, fall through to docker cleanup
+                }
+            }
+        } else {
+            eprintln!("No PID file found — the project may have been started in a previous version.");
         }
 
-        // Stop docker containers (preserve volumes/data)
-        if !state.docker.is_empty() {
-            match DockerManager::new(state.slug.clone()).await {
+        // Fallback: stop docker containers directly (preserve volumes/data)
+        if !_state.docker.is_empty() {
+            match DockerManager::new(_state.slug.clone()).await {
                 Ok(mgr) => {
-                    for (name, docker_state) in &state.docker {
+                    for (name, docker_state) in &_state.docker {
                         if let Err(e) = mgr.stop_service(docker_state).await {
                             warn!(docker = %name, error = %e, "failed to stop docker container");
                         }
