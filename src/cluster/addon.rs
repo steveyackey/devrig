@@ -8,7 +8,7 @@ use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
-use tracing::{debug, error, warn};
+use tracing::{debug, error, info, warn};
 
 use std::collections::HashMap;
 
@@ -207,6 +207,16 @@ async fn install_helm_addon(
     Ok(())
 }
 
+/// Returns true if the error looks like a missing-CRD / resource-mapping failure,
+/// which is transient when a prior addon is still registering its CRDs.
+fn is_crd_not_ready(err: &anyhow::Error) -> bool {
+    let msg = err.to_string();
+    msg.contains("resource mapping not found") || msg.contains("no matches for kind")
+}
+
+/// Max time to wait for CRDs to appear before giving up.
+const CRD_RETRY_TIMEOUT: Duration = Duration::from_secs(300);
+
 async fn install_manifest_addon(
     name: &str,
     path: &str,
@@ -230,12 +240,33 @@ async fn install_manifest_addon(
         args.push(&ns_str);
     }
 
-    run_kubectl(&args, kubeconfig, cancel)
-        .await
-        .with_context(|| format!("applying manifest addon '{}'", name))?;
+    let deadline = Instant::now() + CRD_RETRY_TIMEOUT;
+    let mut backoff = Duration::from_secs(2);
 
-    debug!(addon = %name, path = %path, "manifest addon installed");
-    Ok(())
+    loop {
+        match run_kubectl(&args, kubeconfig, cancel).await {
+            Ok(_) => {
+                debug!(addon = %name, path = %path, "manifest addon installed");
+                return Ok(());
+            }
+            Err(e) if is_crd_not_ready(&e) && Instant::now() < deadline => {
+                info!(
+                    addon = %name,
+                    "CRDs not yet available, retrying in {:?}",
+                    backoff
+                );
+                tokio::select! {
+                    _ = tokio::time::sleep(backoff) => {}
+                    _ = cancel.cancelled() => bail!("cancelled"),
+                }
+                backoff = (backoff * 2).min(Duration::from_secs(30));
+            }
+            Err(e) => {
+                return Err(e)
+                    .with_context(|| format!("applying manifest addon '{}'", name));
+            }
+        }
+    }
 }
 
 async fn install_kustomize_addon(
@@ -261,12 +292,33 @@ async fn install_kustomize_addon(
         args.push(&ns_str);
     }
 
-    run_kubectl(&args, kubeconfig, cancel)
-        .await
-        .with_context(|| format!("applying kustomize addon '{}'", name))?;
+    let deadline = Instant::now() + CRD_RETRY_TIMEOUT;
+    let mut backoff = Duration::from_secs(2);
 
-    debug!(addon = %name, path = %path, "kustomize addon installed");
-    Ok(())
+    loop {
+        match run_kubectl(&args, kubeconfig, cancel).await {
+            Ok(_) => {
+                debug!(addon = %name, path = %path, "kustomize addon installed");
+                return Ok(());
+            }
+            Err(e) if is_crd_not_ready(&e) && Instant::now() < deadline => {
+                info!(
+                    addon = %name,
+                    "CRDs not yet available, retrying in {:?}",
+                    backoff
+                );
+                tokio::select! {
+                    _ = tokio::time::sleep(backoff) => {}
+                    _ = cancel.cancelled() => bail!("cancelled"),
+                }
+                backoff = (backoff * 2).min(Duration::from_secs(30));
+            }
+            Err(e) => {
+                return Err(e)
+                    .with_context(|| format!("applying kustomize addon '{}'", name));
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
