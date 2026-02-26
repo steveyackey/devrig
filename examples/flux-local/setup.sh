@@ -30,8 +30,8 @@ echo "Creating bare clone..."
 rm -rf "$BARE_DIR"
 git clone --bare "$REPO_DIR" "$BARE_DIR"
 
-# Update server info so dumb HTTP transport works
-git -C "$BARE_DIR" update-server-info
+# Enable the git daemon export flag
+touch "$BARE_DIR/git-daemon-export-ok"
 
 # --- 3. Set bare repo as origin + install post-commit hook ---
 
@@ -44,13 +44,16 @@ cat > "$REPO_DIR/.git/hooks/post-commit" << 'HOOK'
 set -euo pipefail
 echo "Pushing to bare repo..."
 git push origin main
-BARE="$(git remote get-url origin)"
-git -C "$BARE" update-server-info
 echo "Bare repo updated — Flux will pick up changes within 30s."
 HOOK
 chmod +x "$REPO_DIR/.git/hooks/post-commit"
 
-# --- 4. Serve bare repo over HTTP ---
+# --- 4. Serve bare repo via git daemon ---
 
-echo "Serving git repo on http://0.0.0.0:9080 ..."
-exec python3 -m http.server 9080 --directory "$BARE_DIR"
+echo "Serving git repo on git://0.0.0.0:9080 ..."
+exec git daemon --verbose --reuseaddr \
+    --base-path="$BARE_DIR" \
+    --export-all \
+    --listen=0.0.0.0 \
+    --port=9080 \
+    "$BARE_DIR"

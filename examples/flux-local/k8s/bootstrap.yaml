@@ -5,7 +5,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 30s
-  url: http://host.k3d.internal:9080
+  url: git://host.k3d.internal:9080/
   ref:
     branch: main
 ---

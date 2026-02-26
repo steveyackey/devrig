@@ -298,6 +298,80 @@ pub fn logline_to_stored(line: &crate::ui::logs::LogLine) -> StoredLog {
     }
 }
 
+/// Format an OTLP `AnyValue` as a human-readable string.
+///
+/// For `KvlistValue` (structured logs from Fluent Bit), extract the "msg" or
+/// "message" key as the primary body. Falls back to rendering all key=value
+/// pairs if no message key is found.
+fn format_any_value(v: &opentelemetry_proto::tonic::common::v1::any_value::Value) -> String {
+    use opentelemetry_proto::tonic::common::v1::any_value::Value;
+    match v {
+        Value::StringValue(s) => s.clone(),
+        Value::IntValue(i) => i.to_string(),
+        Value::DoubleValue(d) => d.to_string(),
+        Value::BoolValue(b) => b.to_string(),
+        Value::BytesValue(b) => format!("<{} bytes>", b.len()),
+        Value::ArrayValue(arr) => {
+            let items: Vec<String> = arr
+                .values
+                .iter()
+                .filter_map(|av| av.value.as_ref().map(format_any_value))
+                .collect();
+            format!("[{}]", items.join(", "))
+        }
+        Value::KvlistValue(kvlist) => {
+            // Look for a "msg" or "message" key first — this is the standard
+            // structured-logging convention used by Flux controllers, etc.
+            for key in &["msg", "message", "log"] {
+                if let Some(kv) = kvlist.values.iter().find(|kv| kv.key == *key) {
+                    if let Some(val) = kv.value.as_ref().and_then(|v| v.value.as_ref()) {
+                        return format_any_value(val);
+                    }
+                }
+            }
+            // No message key found — render all pairs.
+            let pairs: Vec<String> = kvlist
+                .values
+                .iter()
+                .filter_map(|kv| {
+                    kv.value
+                        .as_ref()
+                        .and_then(|v| v.value.as_ref())
+                        .map(|val| format!("{}={}", kv.key, format_any_value(val)))
+                })
+                .collect();
+            pairs.join(" ")
+        }
+    }
+}
+
+/// Try to extract a service name from a KvlistValue log body.
+///
+/// Fluent Bit sends Kubernetes metadata in the body as a nested KvlistValue.
+/// Look for `kubernetes.container_name` to use as the service name.
+fn extract_service_from_kvlist(
+    kvlist: &opentelemetry_proto::tonic::common::v1::KeyValueList,
+) -> Option<String> {
+    use opentelemetry_proto::tonic::common::v1::any_value::Value;
+
+    // Look for the nested "kubernetes" key
+    let k8s_kv = kvlist.values.iter().find(|kv| kv.key == "kubernetes")?;
+    let k8s_list = match k8s_kv.value.as_ref()?.value.as_ref()? {
+        Value::KvlistValue(kv) => kv,
+        _ => return None,
+    };
+
+    // Extract container_name as the service identifier
+    let container = k8s_list
+        .values
+        .iter()
+        .find(|kv| kv.key == "container_name")?;
+    match container.value.as_ref()?.value.as_ref()? {
+        Value::StringValue(s) if !s.is_empty() => Some(s.clone()),
+        _ => None,
+    }
+}
+
 /// Convert a proto log record to a StoredLog.
 pub fn proto_log_to_stored(
     log: &opentelemetry_proto::tonic::logs::v1::LogRecord,
@@ -313,15 +387,27 @@ pub fn proto_log_to_stored(
 
     let severity = LogSeverity::from_severity_number(log.severity_number);
 
-    let body = log
-        .body
-        .as_ref()
-        .and_then(|v| v.value.as_ref())
-        .map(|v| match v {
-            opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s) => s.clone(),
-            _ => format!("{:?}", v),
-        })
+    let body_value = log.body.as_ref().and_then(|v| v.value.as_ref());
+
+    let body = body_value
+        .map(|v| format_any_value(v))
         .unwrap_or_default();
+
+    // If the resource-level service name is "unknown", try to extract a
+    // meaningful name from the Kubernetes metadata in a KvlistValue body.
+    let resolved_service = if service_name == "unknown" {
+        if let Some(opentelemetry_proto::tonic::common::v1::any_value::Value::KvlistValue(
+            kvlist,
+        )) = body_value
+        {
+            extract_service_from_kvlist(kvlist)
+                .unwrap_or_else(|| service_name.to_string())
+        } else {
+            service_name.to_string()
+        }
+    } else {
+        service_name.to_string()
+    };
 
     let trace_id = if log.trace_id.is_empty() {
         None
@@ -338,7 +424,7 @@ pub fn proto_log_to_stored(
     StoredLog {
         record_id: 0,
         timestamp,
-        service_name: service_name.to_string(),
+        service_name: resolved_service,
         severity,
         body,
         trace_id,
