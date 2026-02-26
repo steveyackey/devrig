@@ -78,10 +78,10 @@ const StatusView: Component = () => {
             <div class="space-y-7 animate-fade-in">
               {/* Stat Cards */}
               <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard label="Traces" value={formatNumber(data().trace_count)} unit="distributed" />
-                <StatCard label="Spans" value={formatNumber(data().span_count)} unit="total" />
-                <StatCard label="Logs" value={formatNumber(data().log_count)} unit="records" />
-                <StatCard label="Metrics" value={formatNumber(data().metric_count)} unit="points" />
+                <StatCard label="Traces" value={formatNumber(data().trace_count)} unit="distributed" href="#/traces" />
+                <StatCard label="Spans" value={formatNumber(data().span_count)} unit="total" href="#/traces" />
+                <StatCard label="Logs" value={formatNumber(data().log_count)} unit="records" href="#/logs" />
+                <StatCard label="Metrics" value={formatNumber(data().metric_count)} unit="points" href="#/metrics" />
               </div>
 
               {/* Services */}
@@ -245,9 +245,14 @@ const StatCard: Component<{
   label: string;
   value: string;
   unit: string;
+  href?: string;
 }> = (props) => {
   return (
-    <div data-testid="stat-card" class="bg-surface-1 p-6 border-2 border-border relative hover:border-border-hover transition-colors">
+    <a
+      data-testid="stat-card"
+      href={props.href}
+      class="bg-surface-1 p-6 border-2 border-border relative hover:border-accent/40 transition-colors block no-underline cursor-pointer"
+    >
       <div class="absolute top-2.5 right-3 flex items-center gap-1 font-label text-[9px] text-success tracking-[0.06em]">
         <span class="text-[8px]" aria-hidden="true">&#9650;</span> OK
       </div>
@@ -264,7 +269,7 @@ const StatCard: Component<{
       <div class="font-label text-[9px] text-text-secondary mt-1">
         {props.unit}
       </div>
-    </div>
+    </a>
   );
 };
 

@@ -182,14 +182,35 @@ fn decode_request<T: Message + Default + serde::de::DeserializeOwned>(
         .and_then(|v| v.to_str().ok())
         .unwrap_or("application/x-protobuf");
 
+    // Decompress gzip if Content-Encoding indicates it, or detect gzip magic bytes
+    let is_gzip = headers
+        .get(header::CONTENT_ENCODING)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.contains("gzip"))
+        .unwrap_or(false)
+        || (body.len() >= 2 && body[0] == 0x1f && body[1] == 0x8b);
+
+    let decompressed;
+    let data = if is_gzip {
+        use std::io::Read;
+        let mut decoder = flate2::read::GzDecoder::new(body);
+        let mut buf = Vec::new();
+        decoder
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("gzip decompress error: {e}"))?;
+        decompressed = buf;
+        &decompressed[..]
+    } else {
+        body
+    };
+
     if content_type.contains("protobuf") || content_type.contains("proto") {
-        T::decode(body).map_err(|e| format!("protobuf decode error: {}", e))
+        T::decode(data).map_err(|e| format!("protobuf decode error: {e}"))
     } else if content_type.contains("json") {
-        // For JSON, try to use serde if available via the with-serde feature
-        serde_json::from_slice(body).map_err(|e| format!("JSON decode error: {}", e))
+        serde_json::from_slice(data).map_err(|e| format!("JSON decode error: {e}"))
     } else {
         // Default to protobuf
-        T::decode(body).map_err(|e| format!("decode error: {}", e))
+        T::decode(data).map_err(|e| format!("decode error: {e}"))
     }
 }
 

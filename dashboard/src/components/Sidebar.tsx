@@ -72,7 +72,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
       >
         {/* Header — stamped logo */}
         <div class="px-5 py-6 border-b-2 border-border flex justify-center">
-          <div class="flex flex-col items-center">
+          <a href="#/" class="flex flex-col items-center no-underline cursor-pointer">
             <span
               data-testid="sidebar-logo"
               class="font-display text-[38px] leading-none tracking-[0.18em] text-accent border-solid border-3 border-accent px-4 pt-2 pb-1.5 inline-block opacity-90"
@@ -97,7 +97,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
             <span class="font-label text-[9px] text-text-muted uppercase tracking-[0.25em] mt-2 text-center whitespace-nowrap">
               Observability Platform
             </span>
-          </div>
+          </a>
         </div>
 
         {/* Navigation */}
@@ -153,7 +153,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
       {/* Mobile top bar (≤960px) */}
       <div class="hidden max-[960px]:flex w-full bg-surface-0 border-b-2 border-border items-center shrink-0 overflow-hidden">
         {/* Compact logo */}
-        <div class="px-4 py-2 border-r-2 border-border shrink-0">
+        <a href="#/" class="px-4 py-2 border-r-2 border-border shrink-0 no-underline">
           <span
             class="font-display text-lg leading-none tracking-[0.18em] text-accent border-solid border-2 border-accent px-2.5 pt-1 pb-0.5 inline-block"
             style={{ transform: 'rotate(-2.5deg)' }}
@@ -161,7 +161,7 @@ const Sidebar: Component<SidebarProps> = (props) => {
           >
             DEV RIG
           </span>
-        </div>
+        </a>
 
         {/* Horizontal nav — hidden at ≤480px */}
         <nav class="flex-1 flex items-center px-3 gap-0 overflow-x-auto max-[480px]:hidden">

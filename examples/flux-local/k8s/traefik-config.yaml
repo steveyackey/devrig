@@ -15,7 +15,6 @@ spec:
         enabled: true
         http:
           endpoint: http://host.k3d.internal:{{ dashboard.otel.http_port }}
-      sampleRate: 1
     metrics:
       otlp:
         enabled: true

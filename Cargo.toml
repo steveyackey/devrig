@@ -56,6 +56,7 @@ tonic = "0.12"
 prost = "0.13"
 prost-types = "0.13"
 opentelemetry-proto = { version = "0.27", features = ["gen-tonic", "trace", "metrics", "logs", "with-serde"] }
+flate2 = "1"
 rust-embed = { version = "8", features = ["compression", "include-exclude"] }
 mime_guess = "2"
 humantime = "2"

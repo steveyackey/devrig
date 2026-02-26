@@ -9,8 +9,9 @@ use crate::orchestrator::state::ClusterDeployState;
 const TEMPLATE_SUGGESTION_THRESHOLD: f64 = 0.8;
 
 /// Compiled pattern matching `{{ path.to.value }}` template expressions.
+/// Allows word chars, dots, and hyphens in keys (e.g. `services.my-app.port`).
 static TEMPLATE_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{\{\s*([\w.]+)\s*\}\}").expect("template regex must compile"));
+    LazyLock::new(|| Regex::new(r"\{\{\s*([\w.\-]+)\s*\}\}").expect("template regex must compile"));
 
 #[derive(Debug, thiserror::Error)]
 pub enum TemplateError {
