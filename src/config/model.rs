@@ -462,6 +462,8 @@ pub enum AddonConfig {
         #[serde(default = "default_helm_timeout")]
         timeout: String,
         #[serde(default)]
+        skip_crds: bool,
+        #[serde(default)]
         depends_on: Vec<String>,
     },
     #[serde(rename = "manifest")]
@@ -1773,6 +1775,7 @@ mod tests {
             port_forward: BTreeMap::from([("8080".to_string(), "svc/test:80".to_string())]),
             wait: true,
             timeout: "5m".to_string(),
+            skip_crds: false,
             depends_on: vec![],
         };
         assert_eq!(helm.addon_type(), "helm");

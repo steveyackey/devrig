@@ -26,7 +26,7 @@ use crate::discovery::env::build_service_env;
 use crate::identity::ProjectIdentity;
 use crate::docker::DockerManager;
 use crate::ui::logs::{LogLine, LogWriter};
-use crate::ui::summary::{print_startup_summary, RunningService};
+use crate::ui::summary::{print_startup_banner, print_startup_summary, RunningService, StartupBannerInfo};
 
 use graph::{DependencyResolver, ResourceKind};
 use ports::{check_all_ports_unified, check_port_available, find_free_port_excluding, format_port_conflicts, resolve_port};
@@ -221,6 +221,38 @@ impl Orchestrator {
         // Create state directory
         std::fs::create_dir_all(&self.state_dir)
             .with_context(|| format!("creating state dir {}", self.state_dir.display()))?;
+
+        // Print startup banner
+        {
+            let banner_services: Vec<String> = launch_order
+                .iter()
+                .filter(|(_, k)| matches!(k, ResourceKind::Service))
+                .map(|(n, _)| n.clone())
+                .collect();
+            let banner_docker: Vec<String> = launch_order
+                .iter()
+                .filter(|(_, k)| matches!(k, ResourceKind::Docker))
+                .map(|(n, _)| n.clone())
+                .collect();
+            let banner_compose = self.config.compose.as_ref().map(|c| {
+                c.file.clone()
+            });
+            let banner_addons: Vec<String> = self
+                .config
+                .cluster
+                .as_ref()
+                .map(|c| c.addons.keys().cloned().collect())
+                .unwrap_or_default();
+
+            let info = StartupBannerInfo {
+                services: banner_services,
+                docker: banner_docker,
+                compose: banner_compose,
+                cluster_addons: banner_addons,
+                dashboard_enabled,
+            };
+            print_startup_banner(&self.identity, &info);
+        }
 
         let has_docker = launch_order.iter().any(|(_, k)| {
             matches!(

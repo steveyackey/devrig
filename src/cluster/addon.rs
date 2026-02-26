@@ -105,6 +105,7 @@ async fn install_helm_addon(
     values_files: &[String],
     wait: bool,
     timeout: &str,
+    skip_crds: bool,
     kubeconfig: &Path,
     config_dir: &Path,
     cancel: &CancellationToken,
@@ -160,6 +161,10 @@ async fn install_helm_addon(
         namespace.to_string(),
         "--create-namespace".to_string(),
     ];
+
+    if skip_crds {
+        args.push("--skip-crds".to_string());
+    }
 
     if wait {
         args.push("--wait".to_string());
@@ -387,6 +392,7 @@ pub async fn install_addons(
                 values_files,
                 wait,
                 timeout,
+                skip_crds,
                 ..
             } => {
                 let resolved_values =
@@ -401,6 +407,7 @@ pub async fn install_addons(
                     values_files,
                     *wait,
                     timeout,
+                    *skip_crds,
                     kubeconfig,
                     config_dir,
                     cancel,

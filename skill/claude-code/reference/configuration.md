@@ -186,7 +186,7 @@ password = "$REGISTRY_TOKEN"
 
 Types: `helm`, `manifest`, `kustomize`. All support `namespace`, `port_forward`, and `depends_on`.
 
-- **Helm**: `chart` (required), `repo` (optional — omit for local charts), `version`, `values` (supports `{{ }}` templates), `values_files`, `wait` (default: `true`), `timeout` (default: `"5m"`)
+- **Helm**: `chart` (required), `repo` (optional — omit for local charts), `version`, `values` (supports `{{ }}` templates), `values_files`, `wait` (default: `true`), `timeout` (default: `"5m"`), `skip_crds` (default: `false` — pass `--skip-crds` to helm)
 - **Manifest**: `path` (required)
 - **Kustomize**: `path` (required)
 

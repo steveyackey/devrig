@@ -7,6 +7,53 @@ use owo_colors::OwoColorize;
 use crate::identity::ProjectIdentity;
 use std::collections::BTreeMap;
 
+pub struct StartupBannerInfo {
+    pub services: Vec<String>,
+    pub docker: Vec<String>,
+    pub compose: Option<String>,
+    pub cluster_addons: Vec<String>,
+    pub dashboard_enabled: bool,
+}
+
+pub fn print_startup_banner(identity: &ProjectIdentity, info: &StartupBannerInfo) {
+    let use_color = std::io::stdout().is_terminal();
+
+    println!();
+    if use_color {
+        println!(
+            "  {} {} {}",
+            "Starting".bold(),
+            "devrig".bold(),
+            identity.name.cyan(),
+        );
+    } else {
+        println!("  Starting devrig {}...", identity.name);
+    }
+    println!();
+
+    if !info.services.is_empty() {
+        println!("  Services:    {}", info.services.join(", "));
+    }
+    if !info.docker.is_empty() {
+        println!("  Docker:      {}", info.docker.join(", "));
+    }
+    if let Some(compose) = &info.compose {
+        println!("  Compose:     {}", compose);
+    }
+    if !info.cluster_addons.is_empty() {
+        println!(
+            "  Cluster:     k3s ({} addon{}: {})",
+            info.cluster_addons.len(),
+            if info.cluster_addons.len() == 1 { "" } else { "s" },
+            info.cluster_addons.join(", "),
+        );
+    }
+    if info.dashboard_enabled {
+        println!("  Dashboard:   enabled");
+    }
+    println!();
+}
+
 pub struct RunningService {
     pub port: Option<u16>,
     pub port_auto: bool,

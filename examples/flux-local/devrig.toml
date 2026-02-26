@@ -22,6 +22,7 @@ chart = "traefik/traefik"
 repo = "https://traefik.github.io/charts"
 namespace = "traefik"
 wait = true
+depends_on = ["flux"]
 port_forward = { 8080 = "svc/traefik:80" }
 
 [cluster.addons.traefik.values]

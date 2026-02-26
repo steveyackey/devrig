@@ -143,6 +143,7 @@ command = "{service_command}"
 # depends_on = ["cert-manager"]  # installs after cert-manager
 # wait = false                    # don't block on readiness (default: true)
 # timeout = "10m"                 # helm timeout (default: "5m")
+# skip_crds = true                # skip CRD installation (default: false)
 # values_files = ["charts/myapp/values-dev.yaml"]
 # [cluster.addons.myapp.values]
 # "image.repository" = "{{{{ cluster.registry }}}}/myapp"

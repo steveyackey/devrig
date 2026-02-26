@@ -577,6 +577,7 @@ namespace = "platform"
 | `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).                    |
 | `wait`         | bool           | No       | `true`    | Whether helm waits for readiness (`--wait`).        |
 | `timeout`      | string         | No       | `"5m"`    | Helm timeout duration (only used when `wait = true`). |
+| `skip_crds`    | bool           | No       | `false`   | Pass `--skip-crds` to helm (useful when CRDs are managed separately). |
 | `depends_on`   | list           | No       | `[]`      | Other addon names to install before this one.       |
 
 **Manifest addons** (`type = "manifest"`):
