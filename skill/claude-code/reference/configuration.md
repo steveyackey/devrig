@@ -187,7 +187,7 @@ password = "$REGISTRY_TOKEN"
 Types: `helm`, `manifest`, `kustomize`. All support `namespace`, `port_forward`, and `depends_on`.
 
 - **Helm**: `chart` (required — supports `repo/chart`, local path, or `oci://` URL), `repo` (optional — omit for local and OCI charts), `version`, `values` (supports `{{ }}` templates), `values_files`, `wait` (default: `true`), `timeout` (default: `"5m"`), `skip_crds` (default: `false` — pass `--skip-crds` to helm)
-- **Manifest**: `path` (required)
+- **Manifest**: `path` (required) — supports `{{ }}` templates in the YAML file (e.g. `{{ services.myapp.port }}`)
 - **Kustomize**: `path` (required)
 
 Addons install in dependency order (topological sort, alphabetical tie-break).

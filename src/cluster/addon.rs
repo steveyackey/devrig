@@ -217,10 +217,37 @@ fn is_crd_not_ready(err: &anyhow::Error) -> bool {
 /// Max time to wait for CRDs to appear before giving up.
 const CRD_RETRY_TIMEOUT: Duration = Duration::from_secs(300);
 
+/// If the file contains `{{ }}` templates, resolve them and write to a temp
+/// file; otherwise return the original path unchanged.
+fn resolve_manifest_templates(
+    manifest_path: &Path,
+    template_vars: &HashMap<String, String>,
+    addon_name: &str,
+) -> Result<Option<std::path::PathBuf>> {
+    let content = std::fs::read_to_string(manifest_path)
+        .with_context(|| format!("reading manifest '{}'", manifest_path.display()))?;
+
+    if !content.contains("{{") {
+        return Ok(None);
+    }
+
+    let field_ctx = format!("cluster.addons.{addon_name}.path");
+    let resolved = resolve_template(&content, template_vars, &field_ctx).map_err(|errs| {
+        let msgs: Vec<String> = errs.iter().map(|e| e.to_string()).collect();
+        anyhow::anyhow!("{}", msgs.join("; "))
+    })?;
+
+    let tmp_path = std::env::temp_dir().join(format!("devrig-addon-{addon_name}.yaml"));
+    std::fs::write(&tmp_path, resolved.as_bytes())
+        .with_context(|| format!("writing resolved manifest to '{}'", tmp_path.display()))?;
+    Ok(Some(tmp_path))
+}
+
 async fn install_manifest_addon(
     name: &str,
     path: &str,
     namespace: Option<&str>,
+    template_vars: &HashMap<String, String>,
     kubeconfig: &Path,
     config_dir: &Path,
     cancel: &CancellationToken,
@@ -230,9 +257,15 @@ async fn install_manifest_addon(
     } else {
         config_dir.join(path)
     };
-    let manifest_str = manifest_path.to_string_lossy().to_string();
 
-    let mut args = vec!["apply", "-f", &manifest_str];
+    // Resolve {{ }} templates if present.
+    let resolved = resolve_manifest_templates(&manifest_path, template_vars, name)?;
+    let apply_path = resolved
+        .as_ref()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|| manifest_path.to_string_lossy().to_string());
+
+    let mut args = vec!["apply", "-f", &apply_path];
     let ns_str;
     if let Some(ns) = namespace {
         ns_str = ns.to_string();
@@ -273,6 +306,7 @@ async fn install_kustomize_addon(
     name: &str,
     path: &str,
     namespace: Option<&str>,
+    _template_vars: &HashMap<String, String>,
     kubeconfig: &Path,
     config_dir: &Path,
     cancel: &CancellationToken,
@@ -485,6 +519,7 @@ pub async fn install_addons(
                     name,
                     path,
                     namespace.as_deref(),
+                    template_vars,
                     kubeconfig,
                     config_dir,
                     cancel,
@@ -506,6 +541,7 @@ pub async fn install_addons(
                     name,
                     path,
                     namespace.as_deref(),
+                    template_vars,
                     kubeconfig,
                     config_dir,
                     cancel,

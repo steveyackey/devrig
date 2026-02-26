@@ -617,7 +617,10 @@ impl Orchestrator {
                     "installing cluster addons"
                 );
 
-                // Build template vars from cluster image build results + registry
+                // Build template vars available at addon-install time:
+                // cluster images, registry, project name, and any ports
+                // already resolved (dashboard, docker, compose, fixed
+                // service ports).
                 let mut addon_template_vars =
                     crate::config::interpolate::build_cluster_image_vars(&deployed);
                 if cluster_config.registry {
@@ -625,6 +628,56 @@ impl Orchestrator {
                         "cluster.registry".to_string(),
                         format!("k3d-devrig-{}-reg:5000", self.identity.slug),
                     );
+                }
+
+                addon_template_vars.insert(
+                    "project.name".to_string(),
+                    self.config.project.name.clone(),
+                );
+
+                // Fixed service ports (available before service launch)
+                for (name, svc) in &self.config.services {
+                    if let Some(crate::config::model::Port::Fixed(port)) = &svc.port {
+                        addon_template_vars
+                            .insert(format!("services.{name}.port"), port.to_string());
+                    }
+                }
+
+                // Dashboard / OTel ports
+                if let Some(ref ds) = dashboard_state {
+                    addon_template_vars
+                        .insert("dashboard.port".to_string(), ds.dashboard_port.to_string());
+                    addon_template_vars.insert(
+                        "dashboard.otel.grpc_port".to_string(),
+                        ds.grpc_port.to_string(),
+                    );
+                    addon_template_vars.insert(
+                        "dashboard.otel.http_port".to_string(),
+                        ds.http_port.to_string(),
+                    );
+                }
+
+                // Docker ports
+                for (name, state) in &docker_states {
+                    if let Some(port) = state.port {
+                        addon_template_vars
+                            .insert(format!("docker.{name}.port"), port.to_string());
+                    }
+                    for (pname, &port) in &state.named_ports {
+                        let val = port.to_string();
+                        addon_template_vars
+                            .insert(format!("docker.{name}.ports.{pname}"), val.clone());
+                        addon_template_vars
+                            .insert(format!("docker.{name}.port_{pname}"), val);
+                    }
+                }
+
+                // Compose ports
+                for (name, state) in &compose_states {
+                    if let Some(port) = state.port {
+                        addon_template_vars
+                            .insert(format!("compose.{name}.port"), port.to_string());
+                    }
                 }
 
                 crate::cluster::addon::install_addons(

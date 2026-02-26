@@ -599,7 +599,7 @@ namespace = "platform"
 | Field          | Type           | Required | Default   | Description                              |
 |----------------|----------------|----------|-----------|------------------------------------------|
 | `type`         | string         | Yes      | --        | Must be `"manifest"`.                    |
-| `path`         | string         | Yes      | --        | Path to YAML manifest, relative to config.|
+| `path`         | string         | Yes      | --        | Path to YAML manifest, relative to config. Supports `{{ }}` template expressions.|
 | `namespace`    | string         | No       | `default` | Namespace for `kubectl apply`.           |
 | `port_forward` | map            | No       | `{}`      | Local port-forwards (see below).         |
 | `depends_on`   | list           | No       | `[]`      | Other addon names to install before this one. |

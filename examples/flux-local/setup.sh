@@ -53,7 +53,8 @@ chmod +x "$REPO_DIR/.git/hooks/post-commit"
 
 GIT_HTTP_BACKEND="$(git --exec-path)/git-http-backend"
 
-echo "Serving git repo on http://0.0.0.0:9080 ..."
+GIT_PORT="${PORT:-9080}"
+echo "Serving git repo on http://0.0.0.0:$GIT_PORT ..."
 exec python3 -c "
 import os, subprocess, sys
 from http.server import HTTPServer, BaseHTTPRequestHandler
@@ -114,5 +115,5 @@ class GitHTTPHandler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         sys.stderr.write('%s\n' % (fmt % args))
 
-HTTPServer(('0.0.0.0', 9080), GitHTTPHandler).serve_forever()
+HTTPServer(('0.0.0.0', $GIT_PORT), GitHTTPHandler).serve_forever()
 "
