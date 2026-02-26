@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.21.0](https://github.com/steveyackey/devrig/compare/v0.20.1...v0.21.0) (2026-02-26)
+
+
+### Features
+
+* add k3s_args cluster config and disable built-in Traefik ([e32143d](https://github.com/steveyackey/devrig/commit/e32143d7f482ea52ce5a2d23748a883e432ff337))
+* add startup banner and skip_crds helm option ([a231f2a](https://github.com/steveyackey/devrig/commit/a231f2a99c9f7008de32a837e95f1f5f06858d43))
+* add Traefik reverse proxy with OTLP to flux-local example ([4d1dad1](https://github.com/steveyackey/devrig/commit/4d1dad1f62783a50ffc0c3c69a45f71af1b06f26))
+* collect cluster pod logs in flux-local example ([a064ffe](https://github.com/steveyackey/devrig/commit/a064ffe22e36bf2353eb27c90dbdf22c82b29d2b))
+
+
+### Bug Fixes
+
+* pin flux chart to 2.16.4 for k3s 1.31 compatibility ([7ba8224](https://github.com/steveyackey/devrig/commit/7ba8224cccb5d4588437dd9800386e7462aea80b))
+
 ## [0.20.1](https://github.com/steveyackey/devrig/compare/v0.20.0...v0.20.1) (2026-02-26)
 
 
