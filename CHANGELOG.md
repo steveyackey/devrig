@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.23.0](https://github.com/steveyackey/devrig/compare/v0.22.0...v0.23.0) (2026-02-26)
+
+
+### Features
+
+* support {{ }} template expressions in manifest addon YAML ([d264a55](https://github.com/steveyackey/devrig/commit/d264a559285c13253aaac369ea573915c7ddc06b))
+
+
+### Bug Fixes
+
+* capture kubectl port-forward stderr instead of leaking to terminal ([247d3ac](https://github.com/steveyackey/devrig/commit/247d3ac9dcb4e8a0eaf1565c009a5fd74d50fe88))
+* clippy warnings (too_many_arguments, redundant_closure) ([f865907](https://github.com/steveyackey/devrig/commit/f865907a88d8cf24b276cf48cec2813acb37f3c0))
+* devrig stop now works for backgrounded processes ([e67a5b3](https://github.com/steveyackey/devrig/commit/e67a5b35a65c3a91267a98fc38c4b5feb1ceb315))
+* gzip OTLP decompression, clickable stat cards, template regex ([9addf0b](https://github.com/steveyackey/devrig/commit/9addf0b484443acbc85e8584ae9d94b0c748ffcd))
+* race condition in state.json phase updates, demo config ([3809916](https://github.com/steveyackey/devrig/commit/380991637d4cff0ec490fceeeb307985931cf203))
+* resolve cluster log display issues and flux-local example ([6e8b92e](https://github.com/steveyackey/devrig/commit/6e8b92e63eea80bfde0af460892b35c14c7bcf6f))
+* retry manifest/kustomize addon install when CRDs aren't ready ([e27bc93](https://github.com/steveyackey/devrig/commit/e27bc931619884eb876321e2596a8611b3b7a6fa))
+* services show yellow until actually ready, not green on first telemetry ([4b0d59a](https://github.com/steveyackey/devrig/commit/4b0d59a594d7c757e8509f1d0545ee7ef4759ac3))
+* status page indicators, headlamp token, and traefik OTLP endpoints ([5cc4907](https://github.com/steveyackey/devrig/commit/5cc4907b0b2eed8d321f96b1e6cc15331703e172))
+* use git-http-backend for smart HTTP git serving ([a5f29cd](https://github.com/steveyackey/devrig/commit/a5f29cd78ff155e2550d3ae43a150f06188e1309))
+
 ## [0.22.0](https://github.com/steveyackey/devrig/compare/v0.21.0...v0.22.0) (2026-02-26)
 
 
