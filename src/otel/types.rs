@@ -390,7 +390,7 @@ pub fn proto_log_to_stored(
     let body_value = log.body.as_ref().and_then(|v| v.value.as_ref());
 
     let body = body_value
-        .map(|v| format_any_value(v))
+        .map(format_any_value)
         .unwrap_or_default();
 
     // If the resource-level service name is "unknown", try to extract a

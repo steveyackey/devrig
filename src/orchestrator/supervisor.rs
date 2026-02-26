@@ -167,6 +167,7 @@ pub struct ServiceSupervisor {
 }
 
 impl ServiceSupervisor {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         name: String,
         command: String,
