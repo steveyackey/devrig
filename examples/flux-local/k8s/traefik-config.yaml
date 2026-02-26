@@ -1,0 +1,21 @@
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    service:
+      type: ClusterIP
+    tracing:
+      otlp:
+        enabled: true
+        http:
+          endpoint: http://host.k3d.internal:4318/v1/traces
+      sampleRate: 1
+    metrics:
+      otlp:
+        enabled: true
+        http:
+          endpoint: http://host.k3d.internal:4318/v1/metrics
+        pushInterval: 10s

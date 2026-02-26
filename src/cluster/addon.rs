@@ -110,8 +110,11 @@ async fn install_helm_addon(
     config_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<()> {
-    // Resolve chart reference: remote repo or local path
-    let resolved_chart = if let Some(repo_url) = repo {
+    // Resolve chart reference: OCI registry, remote repo, or local path
+    let resolved_chart = if chart.starts_with("oci://") {
+        // OCI chart — use directly, no repo add/update needed
+        chart.to_string()
+    } else if let Some(repo_url) = repo {
         // Derive the repo name from the chart reference (e.g. "fluxcd-community/flux2"
         // → "fluxcd-community"). Fall back to the addon name if there's no slash.
         let repo_name = chart

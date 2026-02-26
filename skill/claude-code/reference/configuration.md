@@ -186,7 +186,7 @@ password = "$REGISTRY_TOKEN"
 
 Types: `helm`, `manifest`, `kustomize`. All support `namespace`, `port_forward`, and `depends_on`.
 
-- **Helm**: `chart` (required), `repo` (optional — omit for local charts), `version`, `values` (supports `{{ }}` templates), `values_files`, `wait` (default: `true`), `timeout` (default: `"5m"`), `skip_crds` (default: `false` — pass `--skip-crds` to helm)
+- **Helm**: `chart` (required — supports `repo/chart`, local path, or `oci://` URL), `repo` (optional — omit for local and OCI charts), `version`, `values` (supports `{{ }}` templates), `values_files`, `wait` (default: `true`), `timeout` (default: `"5m"`), `skip_crds` (default: `false` — pass `--skip-crds` to helm)
 - **Manifest**: `path` (required)
 - **Kustomize**: `path` (required)
 
@@ -210,6 +210,13 @@ wait = false
 timeout = "10m"
 [cluster.addons.myapp.values]
 "image.tag" = "{{ cluster.image.myapp.tag }}"
+
+# OCI chart — no repo field needed
+[cluster.addons.my-chart]
+type = "helm"
+chart = "oci://ghcr.io/org/charts/my-chart"
+namespace = "my-chart"
+version = "1.2.0"
 ```
 
 ---

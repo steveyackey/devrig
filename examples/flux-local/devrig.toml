@@ -5,46 +5,44 @@ name = "flux-local"
 
 [links]
 headlamp = "http://localhost:8080"
+flux-ui = "http://localhost:9090"
 
 [services.git-server]
 command = "bash setup.sh"
 port = 9080
 
 [cluster]
-k3s_args = ["--disable=traefik"]
 
 [cluster.logs]
 namespaces = "all"
 
-[cluster.addons.traefik]
-type = "helm"
-chart = "traefik/traefik"
-repo = "https://traefik.github.io/charts"
-namespace = "traefik"
-wait = true
-depends_on = ["flux"]
+# Customize k3s built-in Traefik with OTLP tracing and metrics
+[cluster.addons.traefik-config]
+type = "manifest"
+path = "k8s/traefik-config.yaml"
+namespace = "kube-system"
 port_forward = { 8080 = "svc/traefik:80" }
 
-[cluster.addons.traefik.values]
-"service.type" = "ClusterIP"
-"tracing.otlp.enabled" = true
-"tracing.otlp.http.endpoint" = "http://host.k3d.internal:4318/v1/traces"
-"tracing.sampleRate" = 1
-"metrics.otlp.enabled" = true
-"metrics.otlp.http.endpoint" = "http://host.k3d.internal:4318/v1/metrics"
-"metrics.otlp.pushInterval" = "10s"
-
-[cluster.addons.flux]
+# Flux Operator (with web UI on :9080)
+[cluster.addons.flux-operator]
 type = "helm"
-chart = "fluxcd-community/flux2"
-version = "2.16.4"
-repo = "https://fluxcd-community.github.io/helm-charts"
+chart = "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-operator"
+namespace = "flux-system"
+wait = true
+port_forward = { 9090 = "svc/flux-operator:9080" }
+
+# Flux Instance (installs Flux controllers via the operator)
+[cluster.addons.flux-instance]
+type = "helm"
+chart = "oci://ghcr.io/controlplaneio-fluxcd/charts/flux-instance"
 namespace = "flux-system"
 wait = true
 timeout = "10m"
+depends_on = ["flux-operator"]
 
+# Bootstrap: GitRepository + Kustomizations pointing to local git server
 [cluster.addons.flux-bootstrap]
 type = "manifest"
 path = "k8s/bootstrap.yaml"
 namespace = "flux-system"
-depends_on = ["flux"]
+depends_on = ["flux-instance"]

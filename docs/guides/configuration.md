@@ -543,6 +543,20 @@ timeout = "10m"    # helm timeout (default: "5m", only used when wait = true)
 "image.tag" = "{{ cluster.image.myapp.tag }}"
 ```
 
+### Helm addon (OCI chart)
+
+When `chart` starts with `oci://`, devrig passes it directly to
+`helm upgrade --install` without running `helm repo add` / `helm repo update`.
+No `repo` field is needed for OCI charts.
+
+```toml
+[cluster.addons.my-chart]
+type = "helm"
+chart = "oci://ghcr.io/org/charts/my-chart"
+namespace = "my-chart"
+version = "1.2.0"
+```
+
 ### Manifest addon
 
 ```toml
@@ -568,8 +582,8 @@ namespace = "platform"
 | Field          | Type           | Required | Default   | Description                                         |
 |----------------|----------------|----------|-----------|-----------------------------------------------------|
 | `type`         | string         | Yes      | --        | Must be `"helm"`.                                   |
-| `chart`        | string         | Yes      | --        | Chart reference (`repo/chart`) or local path.       |
-| `repo`         | string         | No       | (none)    | Helm repository URL. Omit for local charts.         |
+| `chart`        | string         | Yes      | --        | Chart reference (`repo/chart`), local path, or `oci://` URL. |
+| `repo`         | string         | No       | (none)    | Helm repository URL. Omit for local and OCI charts. |
 | `namespace`    | string         | Yes      | --        | Kubernetes namespace for the release.               |
 | `version`      | string         | No       | (latest)  | Chart version constraint.                           |
 | `values`       | map            | No       | `{}`      | Values passed via `helm --set`. Supports `{{ }}` templates. |

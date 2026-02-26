@@ -94,6 +94,19 @@ devrig query status                                  # OTel collector summary
 devrig query metrics --limit 50                      # Recent metrics
 ```
 
+### Cluster Addons
+
+Helm addons support remote charts (with `repo`), local charts (path), and OCI charts (`oci://` URL):
+
+```toml
+# OCI chart — no repo field needed
+[cluster.addons.my-chart]
+type = "helm"
+chart = "oci://ghcr.io/org/charts/my-chart"
+namespace = "my-chart"
+version = "1.2.0"
+```
+
 ## Tips
 
 - Use `devrig env <service>` to see exactly what env vars a service receives

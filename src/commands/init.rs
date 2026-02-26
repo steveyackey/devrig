@@ -149,6 +149,13 @@ command = "{service_command}"
 # "image.repository" = "{{{{ cluster.registry }}}}/myapp"
 # "image.tag" = "{{{{ cluster.image.myapp.tag }}}}"
 #
+# -- OCI chart — no repo field needed --
+# [cluster.addons.my-chart]
+# type = "helm"
+# chart = "oci://ghcr.io/org/charts/my-chart"
+# namespace = "my-chart"
+# version = "1.2.0"
+#
 # -- Private registry auth for cluster image pulls --
 # [[cluster.registries]]
 # url = "ghcr.io"
