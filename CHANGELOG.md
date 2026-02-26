@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.22.0](https://github.com/steveyackey/devrig/compare/v0.21.0...v0.22.0) (2026-02-26)
+
+
+### Features
+
+* add OCI helm chart support and update flux-local example ([9c425df](https://github.com/steveyackey/devrig/commit/9c425df4417e08866bb5e628dbd99903d880f37e))
+
 ## [0.21.0](https://github.com/steveyackey/devrig/compare/v0.20.1...v0.21.0) (2026-02-26)
 
 
