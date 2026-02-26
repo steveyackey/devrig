@@ -107,13 +107,15 @@ const StatusView: Component = () => {
                   <div>
                     <For each={serviceList()}>
                       {(svc) => {
-                        const isInfoKind = () => svc.kind === 'link' || svc.kind === 'addon' || svc.kind === 'cluster-port';
+                        const isAddon = () => svc.kind === 'addon' || svc.kind === 'cluster-port';
+                        const isLink = () => svc.kind === 'link';
                         const isReporting = () => data().services.includes(svc.name);
                         const isExited = () => svc.phase === 'stopped' || svc.phase === 'failed';
                         const isFailedExit = () => svc.phase === 'failed' || (isExited() && svc.exit_code != null && svc.exit_code !== 0);
 
                         const indicatorClass = () => {
-                          if (isInfoKind()) return 'bg-info';
+                          if (isAddon()) return 'bg-success';
+                          if (isLink()) return '';
                           if (isExited()) {
                             return isFailedExit() ? 'bg-error' : 'bg-surface-3';
                           }
@@ -121,7 +123,10 @@ const StatusView: Component = () => {
                         };
 
                         const indicatorShadow = () => {
-                          if (isInfoKind()) return { "box-shadow": '0 0 6px rgba(96,165,250,0.3)' };
+                          // Addons: green (installed infrastructure)
+                          if (isAddon()) return { "box-shadow": '0 0 6px rgba(74,222,128,0.3)' };
+                          // Links: blue
+                          if (isLink()) return { "background-color": '#60a5fa', "box-shadow": '0 0 6px rgba(96,165,250,0.3)' };
                           if (isExited()) {
                             return isFailedExit() ? { "box-shadow": '0 0 6px rgba(239,68,68,0.4)' } : {};
                           }
@@ -177,7 +182,7 @@ const StatusView: Component = () => {
                                 <span class="text-[10px] text-text-muted">(auto)</span>
                               </Show>
                             </Show>
-                            <Show when={!isInfoKind()}>
+                            <Show when={!isAddon() && !isLink()}>
                               <div class="ml-auto flex gap-2.5">
                                 <a href="#/traces" class="font-label text-[9px] text-text-muted hover:text-accent uppercase tracking-[0.08em] transition-colors">
                                   Traces

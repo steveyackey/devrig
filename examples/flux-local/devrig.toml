@@ -46,3 +46,10 @@ type = "manifest"
 path = "k8s/bootstrap.yaml"
 namespace = "flux-system"
 depends_on = ["flux-instance"]
+
+# Headlamp admin service account (creates a token for dashboard login)
+[cluster.addons.headlamp-admin]
+type = "manifest"
+path = "k8s/headlamp-admin.yaml"
+namespace = "headlamp"
+depends_on = ["flux-bootstrap"]

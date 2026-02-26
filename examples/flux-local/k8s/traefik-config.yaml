@@ -14,11 +14,16 @@ spec:
       otlp:
         enabled: true
         http:
-          endpoint: http://host.k3d.internal:4318/v1/traces
+          endpoint: http://host.k3d.internal:{{ dashboard.otel.http_port }}
       sampleRate: 1
     metrics:
       otlp:
         enabled: true
         http:
-          endpoint: http://host.k3d.internal:4318/v1/metrics
+          endpoint: http://host.k3d.internal:{{ dashboard.otel.http_port }}
         pushInterval: 10s
+    additionalArguments:
+      - "--tracing.otlp.http=true"
+      - "--tracing.otlp.http.endpoint=http://host.k3d.internal:{{ dashboard.otel.http_port }}"
+      - "--metrics.otlp.http=true"
+      - "--metrics.otlp.http.endpoint=http://host.k3d.internal:{{ dashboard.otel.http_port }}"
