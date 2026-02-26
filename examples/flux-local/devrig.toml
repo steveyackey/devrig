@@ -13,6 +13,9 @@ port = 9080
 [cluster]
 ports = ["8080:30080"]
 
+[cluster.logs]
+namespaces = "all"
+
 [cluster.addons.flux]
 type = "helm"
 chart = "fluxcd-community/flux2"
