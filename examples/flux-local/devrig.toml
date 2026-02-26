@@ -36,6 +36,7 @@ port_forward = { 8080 = "svc/traefik:80" }
 [cluster.addons.flux]
 type = "helm"
 chart = "fluxcd-community/flux2"
+version = "2.16.4"
 repo = "https://fluxcd-community.github.io/helm-charts"
 namespace = "flux-system"
 wait = true
