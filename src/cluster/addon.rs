@@ -1,9 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
@@ -618,6 +619,8 @@ impl PortForwardManager {
                                 &format!("{}:{}", local_port, remote_port),
                             ])
                             .env("KUBECONFIG", &kubeconfig)
+                            .stdout(std::process::Stdio::null())
+                            .stderr(std::process::Stdio::piped())
                             .kill_on_drop(true)
                             .spawn()
                         {
@@ -628,14 +631,38 @@ impl PortForwardManager {
                             }
                         };
 
+                        let stderr_handle = child.stderr.take();
+                        let started = Instant::now();
+
                         tokio::select! {
                             status = child.wait() => {
+                                // Read captured stderr for a concise reason.
+                                let reason = if let Some(mut stderr) = stderr_handle {
+                                    let mut buf = String::new();
+                                    let _ = stderr.read_to_string(&mut buf).await;
+                                    if !buf.is_empty() {
+                                        debug!(
+                                            addon = %addon_name,
+                                            stderr = %buf.trim(),
+                                            "kubectl port-forward stderr"
+                                        );
+                                    }
+                                    // Extract the last "error: ..." line as a concise reason.
+                                    buf.lines()
+                                        .rev()
+                                        .find(|l| l.starts_with("error:"))
+                                        .map(|l| l.trim_start_matches("error:").trim().to_string())
+                                } else {
+                                    None
+                                };
+
                                 match status {
                                     Ok(s) => {
                                         warn!(
                                             addon = %addon_name,
                                             local_port = local_port,
                                             exit = %s,
+                                            reason = reason.as_deref().unwrap_or("unknown"),
                                             "port-forward exited, reconnecting in {:?}",
                                             backoff
                                         );
@@ -644,6 +671,7 @@ impl PortForwardManager {
                                         warn!(
                                             addon = %addon_name,
                                             error = %e,
+                                            reason = reason.as_deref().unwrap_or("unknown"),
                                             "port-forward error, reconnecting in {:?}",
                                             backoff
                                         );
@@ -651,7 +679,13 @@ impl PortForwardManager {
                                 }
 
                                 tokio::time::sleep(backoff).await;
-                                backoff = (backoff * 2).min(max_backoff);
+
+                                // Reset backoff if the connection was stable (>60s).
+                                if started.elapsed() > Duration::from_secs(60) {
+                                    backoff = Duration::from_secs(1);
+                                } else {
+                                    backoff = (backoff * 2).min(max_backoff);
+                                }
                             }
                             _ = cancel.cancelled() => {
                                 let _ = child.kill().await;
