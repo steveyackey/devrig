@@ -65,6 +65,14 @@ glob) so that both the new files **and** the deletions of old files are staged.
 - Biome for frontend linting (not ESLint)
 - Dashboard state served from `.devrig/state.json`
 - OTLP HTTP default port: 4318, gRPC: 4317, dashboard: 4000
+- Service logs go only to JSONL file + OTel bridge (not terminal)
+
+## Cluster Registry
+
+- k3d registry container: `k3d-devrig-{slug}-reg` (internal port 5000, random host port)
+- `cluster.registry` template var = internal address (`k3d-devrig-{slug}-reg:5000`) for K8s pod image refs
+- `cluster.registry_host` template var = host address (`localhost:{port}`) for host-side operations
+- `run_image_build` and `rebuild_image` push both timestamp-tagged and `:latest` images to the registry
 
 ## Keeping Docs in Sync
 

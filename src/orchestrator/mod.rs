@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
 use chrono::Utc;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::TaskTracker;
 use tracing::{debug, error, warn};
@@ -26,7 +26,7 @@ use crate::discovery::env::build_service_env;
 use crate::platform;
 use crate::identity::ProjectIdentity;
 use crate::docker::DockerManager;
-use crate::ui::logs::{LogLine, LogWriter};
+use crate::ui::logs::LogLine;
 use crate::ui::summary::{print_startup_banner, print_startup_summary, RunningService, StartupBannerInfo};
 
 use graph::{DependencyResolver, ResourceKind};
@@ -815,6 +815,18 @@ impl Orchestrator {
                 "cluster.kubeconfig".to_string(),
                 cs.kubeconfig_path.clone(),
             );
+            if let Some(ref name) = cs.registry_name {
+                template_vars.insert(
+                    "cluster.registry".to_string(),
+                    format!("{}:5000", name),
+                );
+            }
+            if let Some(port) = cs.registry_port {
+                template_vars.insert(
+                    "cluster.registry_host".to_string(),
+                    format!("localhost:{}", port),
+                );
+            }
         }
 
         if let Err(errors) = resolve_config_templates(&mut self.config, &template_vars) {
@@ -961,17 +973,11 @@ impl Orchestrator {
         // Phase 5: Spawn service supervisors
         // ================================================================
         if !service_names.is_empty() {
-            let max_name_len = launch_order.iter().map(|(n, _)| n.len()).max().unwrap_or(0);
-
             // Supervisors send to log_tx (broadcast). A fan-out task distributes
-            // to the terminal writer and the JSONL file writer.
+            // to the JSONL file writer and the OTel log bridge. Logs are NOT
+            // printed to the terminal — use the dashboard or `devrig query logs`
+            // to view them.
             let (log_tx, _) = broadcast::channel::<LogLine>(4096);
-            let (display_tx, display_rx) = mpsc::channel::<LogLine>(1024);
-
-            let log_writer = LogWriter::new(display_rx, max_name_len);
-            self.tracker.spawn(async move {
-                log_writer.run().await;
-            });
 
             // JSONL log file writer
             let logs_dir = self.state_dir.join("logs");
@@ -979,14 +985,13 @@ impl Orchestrator {
             let jsonl_path = logs_dir.join("current.jsonl");
             let jsonl_file = std::fs::File::create(&jsonl_path).ok();
 
-            // Fan-out task: subscribes to broadcast, forwards to display + JSONL
+            // Fan-out task: subscribes to broadcast, forwards to JSONL
             let mut fan_rx = log_tx.subscribe();
             self.tracker.spawn(async move {
                 let mut jsonl_writer = jsonl_file.map(std::io::BufWriter::new);
                 loop {
                     match fan_rx.recv().await {
                         Ok(line) => {
-                            // Write to JSONL file
                             if let Some(ref mut w) = jsonl_writer {
                                 use std::io::Write;
                                 if let Ok(json) = serde_json::to_string(&line) {
@@ -994,8 +999,6 @@ impl Orchestrator {
                                     let _ = w.flush();
                                 }
                             }
-                            // Send to terminal display
-                            let _ = display_tx.send(line).await;
                         }
                         Err(broadcast::error::RecvError::Closed) => break,
                         Err(broadcast::error::RecvError::Lagged(_)) => continue,
@@ -1135,7 +1138,7 @@ impl Orchestrator {
                 });
             }
 
-            // Drop our copy so LogWriter can detect when all supervisors are done
+            // Drop our copy so fan-out tasks detect when all supervisors are done
             drop(log_tx);
         }
 

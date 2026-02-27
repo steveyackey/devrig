@@ -275,9 +275,14 @@ pub async fn run_image_build(
     }
 
     // Docker push (only when registry is available)
-    if registry_port.is_some() {
+    if let Some(port) = registry_port {
         debug!(name, tag, "pushing image");
         run_cmd("docker", &["push", &tag], None, None, cancel).await?;
+
+        // Also tag and push as :latest for stable references
+        let latest_tag = format!("localhost:{port}/{name}:latest");
+        run_cmd("docker", &["tag", &tag, &latest_tag], None, None, cancel).await?;
+        run_cmd("docker", &["push", &latest_tag], None, None, cancel).await?;
     }
 
     Ok(ClusterDeployState {
@@ -320,9 +325,14 @@ pub async fn rebuild_image(
     }
 
     // Docker push (only when registry is available)
-    if registry_port.is_some() {
+    if let Some(port) = registry_port {
         debug!(name, tag, "pushing image");
         run_cmd("docker", &["push", &tag], None, None, cancel).await?;
+
+        // Also tag and push as :latest for stable references
+        let latest_tag = format!("localhost:{port}/{name}:latest");
+        run_cmd("docker", &["tag", &tag, &latest_tag], None, None, cancel).await?;
+        run_cmd("docker", &["push", &latest_tag], None, None, cancel).await?;
     }
 
     Ok(())
