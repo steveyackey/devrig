@@ -96,7 +96,7 @@ describe('Metrics View', () => {
   });
 
   test('service filter dropdown populates from API', async () => {
-    const serviceSelect = page.locator('select').first();
+    const serviceSelect = page.locator('select').filter({ hasText: 'All Services' });
     const options = serviceSelect.locator('option');
 
     // Wait for at least the "All Services" default option to appear
@@ -106,7 +106,7 @@ describe('Metrics View', () => {
   });
 
   test('filtering by service sends correct API request', async () => {
-    const serviceSelect = page.locator('select').first();
+    const serviceSelect = page.locator('select').filter({ hasText: 'All Services' });
     const options = serviceSelect.locator('option');
     const optionCount = await options.count();
 
