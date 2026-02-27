@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.4](https://github.com/steveyackey/devrig/compare/v0.23.3...v0.23.4) (2026-02-27)
+
+
+### Bug Fixes
+
+* multiline log grouping, stale PID in devrig ps, Fluent Bit multiline ([69e7df1](https://github.com/steveyackey/devrig/commit/69e7df1ce30ccaa7436aeac1090a8000a06f9359))
+
 ## [0.23.3](https://github.com/steveyackey/devrig/compare/v0.23.2...v0.23.3) (2026-02-27)
 
 
