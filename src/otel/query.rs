@@ -15,6 +15,7 @@ pub struct TraceQuery {
     pub service: Option<String>,
     pub status: Option<String>,
     pub min_duration_ms: Option<u64>,
+    pub search: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub limit: Option<usize>,
 }
@@ -34,6 +35,7 @@ pub struct LogQuery {
 #[derive(Debug, Default, Deserialize)]
 pub struct MetricQuery {
     pub name: Option<String>,
+    pub metric_type: Option<String>,
     pub service: Option<String>,
     pub since: Option<DateTime<Utc>>,
     pub limit: Option<usize>,
@@ -181,6 +183,16 @@ impl TelemetryStore {
                     }
                 }
 
+                if let Some(ref search) = query.search {
+                    if !summary
+                        .root_operation
+                        .to_lowercase()
+                        .contains(&search.to_lowercase())
+                    {
+                        return None;
+                    }
+                }
+
                 if let Some(since) = query.since {
                     if summary.start_time < since {
                         return None;
@@ -281,7 +293,13 @@ impl TelemetryStore {
             .rev()
             .filter(|m| {
                 if let Some(ref name) = query.name {
-                    if &m.metric_name != name {
+                    if !m.metric_name.to_lowercase().contains(&name.to_lowercase()) {
+                        return false;
+                    }
+                }
+                if let Some(ref mt) = query.metric_type {
+                    let type_str = format!("{:?}", m.metric_type);
+                    if !type_str.eq_ignore_ascii_case(mt) {
                         return false;
                     }
                 }
@@ -605,17 +623,66 @@ mod tests {
     }
 
     #[test]
-    fn query_metrics_by_name() {
+    fn query_metrics_by_name_substring() {
         let mut store = TelemetryStore::new(100, 100, 100, Duration::from_secs(3600));
         store.insert_metric(make_metric("api", "http.duration", 42.0));
         store.insert_metric(make_metric("api", "http.count", 10.0));
+        store.insert_metric(make_metric("api", "db.query_time", 5.0));
 
+        // Substring match: "http" matches both http.duration and http.count
+        let results = store.query_metrics(&MetricQuery {
+            name: Some("http".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(results.len(), 2);
+        assert!(results.iter().all(|m| m.metric_name.contains("http")));
+
+        // Exact name still works as a substring match
         let results = store.query_metrics(&MetricQuery {
             name: Some("http.duration".to_string()),
             ..Default::default()
         });
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].metric_name, "http.duration");
+    }
+
+    #[test]
+    fn query_metrics_by_type() {
+        let mut store = TelemetryStore::new(100, 100, 100, Duration::from_secs(3600));
+        store.insert_metric(make_metric("api", "http.duration", 42.0)); // Gauge by default
+        let mut counter = make_metric("api", "http.count", 10.0);
+        counter.metric_type = MetricType::Counter;
+        store.insert_metric(counter);
+
+        let results = store.query_metrics(&MetricQuery {
+            metric_type: Some("Counter".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].metric_name, "http.count");
+    }
+
+    #[test]
+    fn query_traces_by_search() {
+        let mut store = TelemetryStore::new(100, 100, 100, Duration::from_secs(3600));
+        store.insert_span(make_span("t1", "api", "GET /users", SpanStatus::Ok));
+        store.insert_span(make_span("t2", "api", "POST /orders", SpanStatus::Ok));
+        store.insert_span(make_span("t3", "web", "render home", SpanStatus::Ok));
+
+        let results = store.query_traces(&TraceQuery {
+            search: Some("users".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].root_operation, "GET /users");
+
+        // Case-insensitive
+        let results = store.query_traces(&TraceQuery {
+            search: Some("POST".to_string()),
+            ..Default::default()
+        });
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].root_operation, "POST /orders");
     }
 
     #[test]

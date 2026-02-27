@@ -13,10 +13,14 @@ const TracesView: Component<TracesViewProps> = (props) => {
   const [error, setError] = createSignal<string | null>(null);
   const [services, setServices] = createSignal<string[]>([]);
 
+  // Streaming
+  const [streaming, setStreaming] = createSignal(true);
+
   // Filters
   const [filterService, setFilterService] = createSignal('');
   const [filterStatus, setFilterStatus] = createSignal('');
   const [filterMinDuration, setFilterMinDuration] = createSignal('');
+  const [filterSearch, setFilterSearch] = createSignal('');
 
   const loadTraces = async () => {
     try {
@@ -26,6 +30,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
         service: filterService() || undefined,
         status: filterStatus() || undefined,
         min_duration_ms: isNaN(minDur) ? undefined : minDur,
+        search: filterSearch() || undefined,
         limit: 100,
       });
       setTraces(data);
@@ -48,13 +53,14 @@ const TracesView: Component<TracesViewProps> = (props) => {
   createEffect(() => {
     loadTraces();
     loadServices();
+    if (!streaming()) return;
     const interval = setInterval(loadTraces, 10000);
     onCleanup(() => clearInterval(interval));
   });
 
   createEffect(() => {
     const event = props.onEvent;
-    if (event && event.type === 'TraceUpdate') {
+    if (event && event.type === 'TraceUpdate' && streaming()) {
       loadTraces();
     }
   });
@@ -123,6 +129,17 @@ const TracesView: Component<TracesViewProps> = (props) => {
           />
         </div>
 
+        <div class="flex items-center gap-2">
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Operation</label>
+          <Input
+            type="text"
+            placeholder="Search operations..."
+            value={filterSearch()}
+            onInput={(e) => setFilterSearch(e.currentTarget.value)}
+            class="w-48"
+          />
+        </div>
+
         <Button type="submit">Search</Button>
 
         <button
@@ -131,6 +148,7 @@ const TracesView: Component<TracesViewProps> = (props) => {
             setFilterService('');
             setFilterStatus('');
             setFilterMinDuration('');
+            setFilterSearch('');
             setLoading(true);
             loadTraces();
           }}
@@ -139,7 +157,16 @@ const TracesView: Component<TracesViewProps> = (props) => {
           Clear
         </button>
 
-        <div data-testid="traces-count" class="ml-auto text-xs text-text-secondary">
+        <button
+          type="button"
+          onClick={() => setStreaming(!streaming())}
+          class="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-border hover:border-border-hover transition-colors"
+        >
+          <span class={`inline-block w-2 h-2 rounded-full ${streaming() ? 'bg-success animate-pulse-live' : 'bg-surface-3'}`} />
+          {streaming() ? 'Live' : 'Paused'}
+        </button>
+
+        <div data-testid="traces-count" class="text-xs text-text-secondary">
           {traces().length} trace{traces().length !== 1 ? 's' : ''}
         </div>
       </form>

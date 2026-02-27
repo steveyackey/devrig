@@ -33,14 +33,19 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
   const [chartSeries, setChartSeries] = createSignal<MetricSeries[]>([]);
   const [chartLoading, setChartLoading] = createSignal(false);
 
+  // Streaming
+  const [streaming, setStreaming] = createSignal(true);
+
   const [filterName, setFilterName] = createSignal('');
   const [filterService, setFilterService] = createSignal('');
+  const [filterType, setFilterType] = createSignal('');
 
   const loadMetrics = async () => {
     try {
       setError(null);
       const data = await fetchMetrics({
         name: filterName() || undefined,
+        metric_type: filterType() || undefined,
         service: filterService() || undefined,
         limit: 200,
       });
@@ -68,7 +73,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
 
   createEffect(() => {
     const event = props.onEvent;
-    if (event && event.type === 'MetricUpdate') {
+    if (event && event.type === 'MetricUpdate' && streaming()) {
       loadMetrics();
     }
   });
@@ -209,6 +214,20 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
         </div>
 
         <div class="flex items-center gap-2">
+          <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Type</label>
+          <Select
+            value={filterType()}
+            onChange={(e) => setFilterType(e.currentTarget.value)}
+            class="min-w-[120px]"
+          >
+            <option value="">All</option>
+            <option value="Gauge">Gauge</option>
+            <option value="Counter">Counter</option>
+            <option value="Histogram">Histogram</option>
+          </Select>
+        </div>
+
+        <div class="flex items-center gap-2">
           <label class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em]">Service</label>
           <Select
             value={filterService()}
@@ -228,6 +247,7 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
           type="button"
           onClick={() => {
             setFilterName('');
+            setFilterType('');
             setFilterService('');
             setLoading(true);
             loadMetrics();
@@ -237,7 +257,16 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
           Clear
         </button>
 
-        <div data-testid="metrics-count" class="ml-auto text-xs text-text-secondary">
+        <button
+          type="button"
+          onClick={() => setStreaming(!streaming())}
+          class="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-border hover:border-border-hover transition-colors"
+        >
+          <span class={`inline-block w-2 h-2 rounded-full ${streaming() ? 'bg-success animate-pulse-live' : 'bg-surface-3'}`} />
+          {streaming() ? 'Live' : 'Paused'}
+        </button>
+
+        <div data-testid="metrics-count" class="text-xs text-text-secondary">
           {metrics().length} metric{metrics().length !== 1 ? 's' : ''}
         </div>
       </form>
@@ -405,7 +434,13 @@ const MetricsView: Component<MetricsViewProps> = (props) => {
                           {metric.service_name}
                         </TableCell>
                         <TableCell>
-                          <span data-testid="metric-name" class="text-sm text-text-secondary font-mono">{metric.metric_name}</span>
+                          <button
+                            data-testid="metric-name"
+                            onClick={() => handleCardClick(metric.metric_name)}
+                            class="text-sm font-mono text-accent hover:text-accent-hover cursor-pointer"
+                          >
+                            {metric.metric_name}
+                          </button>
                         </TableCell>
                         <TableCell>
                           <Badge data-testid="metric-type-badge" variant={metricTypeVariant(metric.metric_type)}>

@@ -13,6 +13,9 @@ const LogsView: Component<LogsViewProps> = (props) => {
   const [error, setError] = createSignal<string | null>(null);
   const [services, setServices] = createSignal<string[]>([]);
 
+  // Streaming
+  const [streaming, setStreaming] = createSignal(true);
+
   const [filterService, setFilterService] = createSignal('');
   const [filterSeverity, setFilterSeverity] = createSignal('');
   const [filterSearch, setFilterSearch] = createSignal('');
@@ -52,7 +55,7 @@ const LogsView: Component<LogsViewProps> = (props) => {
 
   createEffect(() => {
     const event = props.onEvent;
-    if (event && event.type === 'LogRecord') {
+    if (event && event.type === 'LogRecord' && streaming()) {
       loadLogs();
     }
   });
@@ -163,7 +166,16 @@ const LogsView: Component<LogsViewProps> = (props) => {
           Clear
         </button>
 
-        <div data-testid="logs-count" class="ml-auto text-xs text-text-secondary">
+        <button
+          type="button"
+          onClick={() => setStreaming(!streaming())}
+          class="ml-auto flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-border hover:border-border-hover transition-colors"
+        >
+          <span class={`inline-block w-2 h-2 rounded-full ${streaming() ? 'bg-success animate-pulse-live' : 'bg-surface-3'}`} />
+          {streaming() ? 'Live' : 'Paused'}
+        </button>
+
+        <div data-testid="logs-count" class="text-xs text-text-secondary">
           {logs().length} log{logs().length !== 1 ? 's' : ''}
         </div>
       </form>

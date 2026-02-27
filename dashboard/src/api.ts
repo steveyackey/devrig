@@ -105,6 +105,7 @@ export interface TracesParams {
   service?: string;
   status?: string;
   min_duration_ms?: number;
+  search?: string;
   limit?: number;
 }
 
@@ -115,6 +116,7 @@ export function fetchTraces(params: TracesParams = {}): Promise<TraceSummary[]> 
   if (params.min_duration_ms !== undefined && params.min_duration_ms > 0) {
     query.set('min_duration_ms', String(params.min_duration_ms));
   }
+  if (params.search) query.set('search', params.search);
   if (params.limit !== undefined) query.set('limit', String(params.limit));
   const qs = query.toString();
   return fetchJson<TraceSummary[]>(`${BASE_URL}/api/traces${qs ? '?' + qs : ''}`);
@@ -152,6 +154,7 @@ export function fetchLogs(params: LogsParams = {}): Promise<StoredLog[]> {
 
 export interface MetricsParams {
   name?: string;
+  metric_type?: string;
   service?: string;
   limit?: number;
 }
@@ -159,6 +162,7 @@ export interface MetricsParams {
 export function fetchMetrics(params: MetricsParams = {}): Promise<StoredMetric[]> {
   const query = new URLSearchParams();
   if (params.name) query.set('name', params.name);
+  if (params.metric_type) query.set('metric_type', params.metric_type);
   if (params.service) query.set('service', params.service);
   if (params.limit !== undefined) query.set('limit', String(params.limit));
   const qs = query.toString();
