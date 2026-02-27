@@ -80,27 +80,29 @@ impl ConfigWatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::NamedTempFile;
 
     #[tokio::test]
-    #[cfg_attr(windows, ignore = "filesystem watcher timing unreliable on Windows CI")]
     async fn watcher_detects_file_change() {
-        let mut tmp = NamedTempFile::new().unwrap();
-        writeln!(tmp, "[project]\nname = \"test\"").unwrap();
+        let tmp = NamedTempFile::new().unwrap();
+        let path = tmp.path().to_path_buf();
+        // Write initial content and close the handle so the file is stable
+        // before the watcher starts.
+        std::fs::write(&path, "[project]\nname = \"test\"\n").unwrap();
 
-        let watcher = ConfigWatcher::new(tmp.path());
+        let watcher = ConfigWatcher::new(&path);
         let mut rx = watcher.watch().unwrap();
 
-        // Give the watcher time to start
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        // Give the watcher time to register with the OS (kqueue on macOS
+        // can take longer under load)
+        tokio::time::sleep(Duration::from_secs(1)).await;
 
-        // Modify the file
-        writeln!(tmp, "\n[services.api]\ncommand = \"echo hi\"").unwrap();
-        tmp.flush().unwrap();
+        // Modify the file via a fresh write (new open/write/close cycle
+        // reliably triggers kqueue/inotify events)
+        std::fs::write(&path, "[project]\nname = \"test\"\n\n[services.api]\ncommand = \"echo hi\"\n").unwrap();
 
-        // Wait for the debounced event (500ms debounce + margin)
-        let event = tokio::time::timeout(Duration::from_secs(3), rx.recv()).await;
+        // Wait for the debounced event (500ms debounce + generous margin)
+        let event = tokio::time::timeout(Duration::from_secs(5), rx.recv()).await;
         assert!(
             event.is_ok(),
             "should receive a change event within timeout"
