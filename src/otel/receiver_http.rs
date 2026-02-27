@@ -234,7 +234,7 @@ pub fn otlp_http_router(
         .route("/v1/traces", post(post_traces))
         .route("/v1/metrics", post(post_metrics))
         .route("/v1/logs", post(post_logs))
-        .layer(CorsLayer::permissive())
+        .layer(CorsLayer::very_permissive())
         .with_state(state)
 }
 
