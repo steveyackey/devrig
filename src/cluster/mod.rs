@@ -7,7 +7,7 @@ pub mod watcher;
 use anyhow::{bail, Context, Result};
 use std::path::{Path, PathBuf};
 use tokio::process::Command;
-use tracing::{debug, warn};
+use tracing::debug;
 
 use crate::config::model::{ClusterConfig, ClusterRegistryAuth};
 
@@ -168,7 +168,7 @@ impl K3dManager {
             return Ok(());
         }
 
-        warn!("kubeconfig contains unresolved port 0, discovering actual API server port");
+        debug!("kubeconfig contains unresolved port 0, discovering actual API server port");
 
         // The k3d serverlb container proxies to the API server on port 6443.
         // Its name is k3d-{cluster_name}-serverlb.
