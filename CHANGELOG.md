@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.24.0](https://github.com/steveyackey/devrig/compare/v0.23.5...v0.24.0) (2026-02-27)
+
+
+### Features
+
+* streaming toggle, operation search, metric type filter, clickable metric names ([31daa9d](https://github.com/steveyackey/devrig/commit/31daa9dfa73c626727bf2b1cfd4aa4202f701f1f))
+
+
+### Bug Fixes
+
+* target service filter select by text instead of position ([ca35560](https://github.com/steveyackey/devrig/commit/ca35560400703120050860efc16c684c70b1e924))
+* use very_permissive CORS for OTel HTTP receiver ([65b75c0](https://github.com/steveyackey/devrig/commit/65b75c01464a8a7a249d179e0ec3123364e2f15d))
+
 ## [0.23.5](https://github.com/steveyackey/devrig/compare/v0.23.4...v0.23.5) (2026-02-27)
 
 
