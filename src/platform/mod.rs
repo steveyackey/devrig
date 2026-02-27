@@ -14,7 +14,7 @@ use windows as imp;
 pub use imp::ProcessGroupHandle;
 
 /// Create a platform-appropriate shell command.
-/// Unix: `sh -c <command>`, Windows: `cmd.exe /C <command>`
+/// Unix: `$SHELL -l -c <command>`, Windows: `cmd.exe /C <command>`
 pub fn shell_command(command: &str) -> Command {
     imp::shell_command(command)
 }
@@ -79,8 +79,8 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
 }
 
 /// Shell name for log messages.
-pub fn shell_name() -> &'static str {
-    imp::SHELL_NAME
+pub fn shell_name() -> String {
+    imp::shell_name()
 }
 
 #[cfg(test)]

@@ -5,14 +5,26 @@ use tracing::{debug, warn};
 use nix::sys::signal::{killpg, Signal};
 use nix::unistd::Pid;
 
-pub const SHELL_NAME: &str = "sh -c";
-
 /// No-op handle on Unix — process group cleanup uses killpg with the child PID.
 pub struct ProcessGroupHandle;
 
+/// Return the user's default shell from `$SHELL`, falling back to `sh`.
+fn user_shell() -> String {
+    std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string())
+}
+
+/// Human-readable description of the shell for log messages.
+pub fn shell_name() -> String {
+    let shell = user_shell();
+    format!("{} -lc", shell)
+}
+
 pub fn shell_command(command: &str) -> Command {
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(command);
+    let shell = user_shell();
+    let mut cmd = Command::new(&shell);
+    // Login shell (-l) sources the user's profile/rc files so that
+    // PATH and other environment customisations are available.
+    cmd.arg("-l").arg("-c").arg(command);
     cmd
 }
 

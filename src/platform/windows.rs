@@ -13,7 +13,9 @@ use windows_sys::Win32::System::Threading::{
     PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
 };
 
-pub const SHELL_NAME: &str = "cmd.exe /C";
+pub fn shell_name() -> String {
+    "cmd.exe /C".to_string()
+}
 
 const STILL_ACTIVE: u32 = 259;
 
