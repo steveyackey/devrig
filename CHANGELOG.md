@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.5](https://github.com/steveyackey/devrig/compare/v0.23.4...v0.23.5) (2026-02-27)
+
+
+### Bug Fixes
+
+* downgrade kubeconfig port-fix log from warn to debug ([d3c8913](https://github.com/steveyackey/devrig/commit/d3c89135ebdc514749bff6686f37264469aa37cf))
+
 ## [0.23.4](https://github.com/steveyackey/devrig/compare/v0.23.3...v0.23.4) (2026-02-27)
 
 
