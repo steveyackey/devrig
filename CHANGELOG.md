@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.23.2](https://github.com/steveyackey/devrig/compare/v0.23.1...v0.23.2) (2026-02-27)
+
+
+### Bug Fixes
+
+* use user's default shell ($SHELL) instead of sh for service commands ([289bd77](https://github.com/steveyackey/devrig/commit/289bd77741b00301abec0cf5f773c3e6cc6ac902))
+
 ## [0.23.1](https://github.com/steveyackey/devrig/compare/v0.23.0...v0.23.1) (2026-02-26)
 
 
