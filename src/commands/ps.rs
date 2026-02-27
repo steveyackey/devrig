@@ -115,11 +115,28 @@ fn run_local(config_path: Option<&Path>) -> Result<()> {
                 .unwrap_or_else(|| "-".to_string());
             let auto_tag = if svc.port_auto { " (auto)" } else { "" };
             let alive = is_process_alive(svc.pid);
-            let status = if alive { "running" } else { "stopped" };
+            let phase = svc.phase.as_deref().unwrap_or("");
+            let status = if alive {
+                if phase.is_empty() { "running".to_string() } else { phase.to_string() }
+            } else if phase == "failed" {
+                match svc.exit_code {
+                    Some(code) => format!("failed (exit {})", code),
+                    None => "failed".to_string(),
+                }
+            } else if phase == "running" || phase == "starting" {
+                "stopped (stale)".to_string()
+            } else {
+                "stopped".to_string()
+            };
+            let pid_display = if svc.pid == 0 {
+                "-".to_string()
+            } else {
+                svc.pid.to_string()
+            };
             println!(
                 "  {:<20} {:<8} {:<24} {}",
                 name,
-                svc.pid,
+                pid_display,
                 format!("{}{}", url, auto_tag),
                 status
             );

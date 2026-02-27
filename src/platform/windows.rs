@@ -112,6 +112,9 @@ pub async fn terminate_child(
 }
 
 pub fn is_process_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
     unsafe {
         let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
         if handle.is_null() {

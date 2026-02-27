@@ -62,12 +62,13 @@ data:
         Flush        1
         Log_Level    warn
         Parsers_File parsers.conf
+        Parsers_Multiline_File parsers.conf
 
     [INPUT]
         Name             tail
         Tag              kube.*
         Path             /var/log/containers/*.log
-        Parser           cri
+        multiline.parser cri
         Refresh_Interval 5
         Mem_Buf_Limit    5MB
         Skip_Long_Lines  On
@@ -79,6 +80,12 @@ data:
         Merge_Log     On
         Keep_Log      Off
         K8S-Logging.Parser On
+
+    [FILTER]
+        Name                  multiline
+        Match                 kube.*
+        multiline.key_content log
+        multiline.parser      multiline-dotnet
 {namespace_filters}{pod_filters}
     [OUTPUT]
         Name                 opentelemetry
@@ -99,6 +106,13 @@ data:
         Regex       ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<log>.*)$
         Time_Key    time
         Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+
+    [MULTILINE_PARSER]
+        Name          multiline-dotnet
+        type          regex
+        flush_timeout 1000
+        rule          "start_state" "/^[^\s]/" "cont"
+        rule          "cont"        "/^\s/"    "cont"
 ---
 apiVersion: apps/v1
 kind: DaemonSet

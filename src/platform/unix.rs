@@ -76,6 +76,9 @@ pub async fn terminate_child(
 }
 
 pub fn is_process_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
     use nix::sys::signal::kill;
     kill(Pid::from_raw(pid as i32), None).is_ok()
 }
@@ -200,6 +203,17 @@ mod tests {
             "spawned shell should be {} (from $SHELL), got: {}",
             expected_basename, stdout
         );
+    }
+
+    #[test]
+    fn pid_zero_is_not_alive() {
+        assert!(!is_process_alive(0));
+    }
+
+    #[test]
+    fn current_process_is_alive() {
+        let pid = std::process::id();
+        assert!(is_process_alive(pid));
     }
 
     #[tokio::test]

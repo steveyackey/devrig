@@ -149,6 +149,17 @@ impl ProjectState {
         }
     }
 
+    /// Atomically update a single service's PID in state.json.
+    pub fn update_service_pid(state_dir: &Path, service: &str, pid: u32) {
+        let _lock = Self::lock_state(state_dir);
+        if let Some(mut state) = Self::load(state_dir) {
+            if let Some(svc) = state.services.get_mut(service) {
+                svc.pid = pid;
+            }
+            let _ = state.save(state_dir);
+        }
+    }
+
     /// Atomically update a service's phase and exit_code in state.json.
     pub fn update_service_exit(
         state_dir: &Path,
@@ -174,5 +185,58 @@ impl ProjectState {
         } else {
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use tempfile::tempdir;
+
+    fn test_state() -> ProjectState {
+        let mut services = BTreeMap::new();
+        services.insert(
+            "api".to_string(),
+            ServiceState {
+                pid: 0,
+                port: Some(3000),
+                port_auto: false,
+                protocol: None,
+                phase: None,
+                exit_code: None,
+            },
+        );
+        ProjectState {
+            slug: "test".to_string(),
+            config_path: "devrig.toml".to_string(),
+            services,
+            started_at: Utc::now(),
+            docker: BTreeMap::new(),
+            compose_services: BTreeMap::new(),
+            network_name: None,
+            cluster: None,
+            dashboard: None,
+        }
+    }
+
+    #[test]
+    fn update_service_pid_persists() {
+        let dir = tempdir().unwrap();
+        let state_dir = dir.path();
+
+        let state = test_state();
+        state.save(state_dir).unwrap();
+
+        // PID starts at 0
+        let loaded = ProjectState::load(state_dir).unwrap();
+        assert_eq!(loaded.services["api"].pid, 0);
+
+        // Update PID
+        ProjectState::update_service_pid(state_dir, "api", 12345);
+
+        // Reload and verify
+        let loaded = ProjectState::load(state_dir).unwrap();
+        assert_eq!(loaded.services["api"].pid, 12345);
     }
 }

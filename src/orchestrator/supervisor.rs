@@ -102,7 +102,40 @@ impl RestartPolicy {
 // ServiceSupervisor
 // ---------------------------------------------------------------------------
 
-/// Spawn a task that reads lines from a stream and sends them to the log channel.
+/// How long to wait for the next line before flushing a multiline buffer.
+const MULTILINE_FLUSH_TIMEOUT: Duration = Duration::from_millis(250);
+
+/// Returns `true` if this line starts a new log entry (i.e. it does NOT
+/// begin with whitespace).  Continuation lines (stack traces, indented
+/// JSON, etc.) start with a space or tab.
+fn is_log_entry_start(line: &str) -> bool {
+    !line.starts_with(' ') && !line.starts_with('\t')
+}
+
+/// Flush the multiline buffer as a single `LogLine`.
+fn flush_multiline_buffer(
+    buffer: &mut Vec<String>,
+    tx: &broadcast::Sender<LogLine>,
+    service_name: &str,
+    is_stderr: bool,
+) {
+    if buffer.is_empty() {
+        return;
+    }
+    let text = buffer.join("\n");
+    let level = crate::ui::logs::detect_log_level(&text);
+    let _ = tx.send(LogLine {
+        timestamp: chrono::Utc::now(),
+        service: service_name.to_string(),
+        text,
+        is_stderr,
+        level,
+    });
+    buffer.clear();
+}
+
+/// Spawn a task that reads lines from a stream, groups multiline entries
+/// (e.g. .NET stack traces), and sends them to the log channel.
 fn spawn_stream_reader(
     stream: Option<impl AsyncRead + Unpin + Send + 'static>,
     tx: broadcast::Sender<LogLine>,
@@ -113,29 +146,37 @@ fn spawn_stream_reader(
         let Some(stream) = stream else { return };
         let mut reader = BufReader::new(stream);
         let mut line = String::new();
+        let mut buffer: Vec<String> = Vec::new();
+
         loop {
             line.clear();
-            match reader.read_line(&mut line).await {
-                Ok(0) => break,
-                Ok(_) => {
-                    let text = line.trim_end_matches(['\r', '\n']).to_string();
-                    let level = crate::ui::logs::detect_log_level(&text);
-                    let _ = tx.send(LogLine {
-                        timestamp: chrono::Utc::now(),
-                        service: service_name.clone(),
-                        text,
-                        is_stderr,
-                        level,
-                    });
+            match tokio::time::timeout(MULTILINE_FLUSH_TIMEOUT, reader.read_line(&mut line)).await {
+                Ok(Ok(0)) => {
+                    // EOF — flush remaining buffer and exit.
+                    flush_multiline_buffer(&mut buffer, &tx, &service_name, is_stderr);
+                    break;
                 }
-                Err(e) => {
+                Ok(Ok(_)) => {
+                    let text = line.trim_end_matches(['\r', '\n']).to_string();
+                    if is_log_entry_start(&text) {
+                        // New entry starts — flush the previous group.
+                        flush_multiline_buffer(&mut buffer, &tx, &service_name, is_stderr);
+                    }
+                    buffer.push(text);
+                }
+                Ok(Err(e)) => {
                     warn!(
                         service = %service_name,
                         error = %e,
                         "{} read error",
                         if is_stderr { "stderr" } else { "stdout" }
                     );
+                    flush_multiline_buffer(&mut buffer, &tx, &service_name, is_stderr);
                     break;
+                }
+                Err(_) => {
+                    // Timeout — flush the buffer so the last group isn't stuck.
+                    flush_multiline_buffer(&mut buffer, &tx, &service_name, is_stderr);
                 }
             }
         }
@@ -251,6 +292,10 @@ impl ServiceSupervisor {
             let child_pid = child.id();
             let group_handle = platform::post_spawn_setup(child_pid);
             debug!(service = %self.name, pid = ?child_pid, "child spawned");
+
+            if let (Some(pid), Some(ref dir)) = (child_pid, &self.state_dir) {
+                ProjectState::update_service_pid(dir, &self.name, pid);
+            }
 
             // -----------------------------------------------------------
             // Pipe stdout / stderr into the log channel
@@ -739,6 +784,72 @@ mod tests {
     #[should_panic(expected = "invalid restart policy")]
     fn restart_mode_from_policy_str_panics_on_unknown() {
         RestartMode::from_policy_str("unknown");
+    }
+
+    #[test]
+    fn is_log_entry_start_normal_lines() {
+        // Timestamps, log levels, JSON — all start new entries
+        assert!(is_log_entry_start("2024-01-01 INFO starting up"));
+        assert!(is_log_entry_start("info: Application started"));
+        assert!(is_log_entry_start("{\"level\":\"info\"}"));
+        assert!(is_log_entry_start("ERROR: something broke"));
+    }
+
+    #[test]
+    fn is_log_entry_start_continuation_lines() {
+        // Stack traces and indented lines are continuations
+        assert!(!is_log_entry_start("   at MyApp.Program.Main()"));
+        assert!(!is_log_entry_start("\tat java.lang.Thread.run"));
+        assert!(!is_log_entry_start("  --- End of inner exception ---"));
+        assert!(!is_log_entry_start("    \"key\": \"value\""));
+    }
+
+    #[tokio::test]
+    async fn multiline_stack_trace_grouped() {
+        let (tx, mut rx) = broadcast::channel::<LogLine>(64);
+        let cancel = CancellationToken::new();
+
+        // printf a .NET-style stack trace: first line starts normal,
+        // continuation lines start with whitespace
+        #[cfg(unix)]
+        let cmd = r#"printf 'System.Exception: boom\n   at MyApp.Foo()\n   at MyApp.Main()\n'"#;
+        #[cfg(windows)]
+        let cmd = "echo System.Exception: boom&echo    at MyApp.Foo()&echo    at MyApp.Main()";
+
+        let supervisor = ServiceSupervisor::new(
+            "test-multiline".into(),
+            cmd.into(),
+            None,
+            BTreeMap::new(),
+            RestartPolicy {
+                max_restarts: 0,
+                ..RestartPolicy::default()
+            },
+            tx,
+            cancel.clone(),
+            None,
+            None,
+        );
+
+        let status = supervisor.run().await.expect("run should succeed");
+        assert!(status.success());
+
+        let mut lines = Vec::new();
+        while let Ok(line) = rx.try_recv() {
+            lines.push(line);
+        }
+
+        // The three lines should be grouped into a single LogLine
+        assert_eq!(
+            lines.len(),
+            1,
+            "expected 1 grouped LogLine, got {}: {:?}",
+            lines.len(),
+            lines
+        );
+        assert!(lines[0].text.contains("System.Exception: boom"));
+        assert!(lines[0].text.contains("at MyApp.Foo()"));
+        assert!(lines[0].text.contains("at MyApp.Main()"));
     }
 
     #[test]
