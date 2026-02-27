@@ -142,3 +142,82 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
 pub fn identify_port_owner(_port: u16) -> Option<String> {
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn user_shell_returns_shell_env() {
+        let shell = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+        assert_eq!(user_shell(), shell);
+    }
+
+    #[test]
+    fn shell_name_contains_login_flag() {
+        let name = shell_name();
+        assert!(
+            name.ends_with("-lc"),
+            "shell_name should end with -lc, got: {}",
+            name
+        );
+    }
+
+    #[test]
+    fn shell_name_contains_user_shell_path() {
+        let expected = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+        let name = shell_name();
+        assert!(
+            name.starts_with(&expected),
+            "shell_name should start with {}, got: {}",
+            expected,
+            name
+        );
+    }
+
+    #[tokio::test]
+    async fn shell_command_executes_with_user_shell() {
+        // Verify the spawned process runs under $SHELL, not plain sh.
+        // In -c mode, $0 is the shell name or path (e.g. "bash", "/bin/bash").
+        let expected = std::env::var("SHELL").unwrap_or_else(|_| "sh".to_string());
+        let expected_basename = std::path::Path::new(&expected)
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .to_string();
+
+        let mut cmd = shell_command("echo $0");
+        let output = cmd.output().await.expect("failed to spawn");
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let actual_basename = std::path::Path::new(&stdout)
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!(
+            actual_basename, expected_basename,
+            "spawned shell should be {} (from $SHELL), got: {}",
+            expected_basename, stdout
+        );
+    }
+
+    #[tokio::test]
+    async fn shell_command_login_shell_has_path() {
+        // Login shell (-l) should source profile, giving a populated PATH.
+        let mut cmd = shell_command("echo $PATH");
+        let output = cmd.output().await.expect("failed to spawn");
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+        assert!(
+            !stdout.is_empty(),
+            "login shell PATH should not be empty"
+        );
+        // PATH from a login shell should contain at least /usr/bin or /bin
+        assert!(
+            stdout.contains("/bin"),
+            "login shell PATH should contain /bin, got: {}",
+            stdout
+        );
+    }
+}
