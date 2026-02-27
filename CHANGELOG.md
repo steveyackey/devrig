@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.23.3](https://github.com/steveyackey/devrig/compare/v0.23.2...v0.23.3) (2026-02-27)
+
+
+### Bug Fixes
+
+* route service logs only to JSONL/OTel, push :latest image tags, add cluster.registry template var ([e5913f0](https://github.com/steveyackey/devrig/commit/e5913f02d68599963d63140d23ccb9be9d3d0eed))
+* stabilize config watcher test on macOS ([b80d9a3](https://github.com/steveyackey/devrig/commit/b80d9a3babd0bf873e89eca05f86bc61990114cb))
+
 ## [0.23.2](https://github.com/steveyackey/devrig/compare/v0.23.1...v0.23.2) (2026-02-27)
 
 
