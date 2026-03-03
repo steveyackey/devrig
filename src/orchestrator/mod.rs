@@ -433,6 +433,7 @@ impl Orchestrator {
             .unwrap_or_else(|| std::path::Path::new("."))
             .to_path_buf();
         let mut docker_states: BTreeMap<String, DockerState> = BTreeMap::new();
+        let mut cluster_state: Option<ClusterState> = None;
 
         // Pre-populate allocated ports from compose services
         for cs in compose_states.values() {
@@ -475,10 +476,26 @@ impl Orchestrator {
             }
         }
 
+        // Persist partial state: docker + compose resources are now running.
+        // If a later phase (cluster, services) fails, `delete` and `stop`
+        // can still find these containers via the saved state.
+        ProjectState {
+            slug: self.identity.slug.clone(),
+            config_path: self.config_path.to_string_lossy().to_string(),
+            services: BTreeMap::new(),
+            started_at: Utc::now(),
+            docker: docker_states.clone(),
+            compose_services: compose_states.clone(),
+            network_name: network_name.clone(),
+            cluster: cluster_state.clone(),
+            dashboard: dashboard_state.clone(),
+        }
+        .save(&self.state_dir)
+        .context("saving partial project state")?;
+
         // ================================================================
         // Phase 3.5: k3d Cluster
         // ================================================================
-        let mut cluster_state: Option<ClusterState> = None;
 
         if let Some(cluster_config) = &self.config.cluster {
             let network = network_name
@@ -736,6 +753,22 @@ impl Orchestrator {
                 deployed_services: deployed,
                 installed_addons,
             });
+
+            // Update persisted state with cluster info so that a failure
+            // in later phases still records the cluster for cleanup.
+            ProjectState {
+                slug: self.identity.slug.clone(),
+                config_path: self.config_path.to_string_lossy().to_string(),
+                services: BTreeMap::new(),
+                started_at: Utc::now(),
+                docker: docker_states.clone(),
+                compose_services: compose_states.clone(),
+                network_name: network_name.clone(),
+                cluster: cluster_state.clone(),
+                dashboard: dashboard_state.clone(),
+            }
+            .save(&self.state_dir)
+            .context("saving partial project state")?;
         }
 
         // ================================================================
@@ -1454,80 +1487,82 @@ impl Orchestrator {
         // Stop first (ignore errors if nothing is running)
         let _ = self.stop().await;
 
-        // Delete k3d cluster if it exists
+        // Delete k3d cluster if it exists.
+        // Attempt cleanup even without state.json — the cluster name is
+        // deterministic (`devrig-{slug}`), so we can always try to delete it.
+        // This handles the case where `start` failed mid-way (e.g. an image
+        // build error) before state was persisted, leaving orphaned resources.
         let state = ProjectState::load(&self.state_dir);
-        if let Some(cs) = state.as_ref().and_then(|s| s.cluster.as_ref()) {
-            if let Some(cluster_config) = &self.config.cluster {
-                let network = state
-                    .as_ref()
-                    .and_then(|s| s.network_name.as_deref())
-                    .unwrap_or("devrig-net");
-                let delete_config_dir = self
+        if let Some(cluster_config) = &self.config.cluster {
+            let network = state
+                .as_ref()
+                .and_then(|s| s.network_name.as_deref())
+                .unwrap_or("devrig-net");
+            let delete_config_dir = self
+                .config_path
+                .parent()
+                .unwrap_or_else(|| std::path::Path::new("."));
+            let k3d_mgr = K3dManager::new(
+                &self.identity.slug,
+                cluster_config,
+                &self.state_dir,
+                network,
+                delete_config_dir,
+            );
+
+            // Uninstall addons (including synthetic log collector) before deleting the cluster
+            let mut uninstall_addons = cluster_config.addons.clone();
+            let log_collector_manifest = self.state_dir.join(
+                crate::cluster::log_collector::MANIFEST_FILENAME,
+            );
+            if log_collector_manifest.exists() {
+                uninstall_addons.insert(
+                    crate::cluster::log_collector::ADDON_KEY.to_string(),
+                    crate::config::model::AddonConfig::Manifest {
+                        path: log_collector_manifest.to_string_lossy().to_string(),
+                        namespace: None,
+                        port_forward: BTreeMap::new(),
+                        depends_on: vec![],
+                    },
+                );
+            }
+            if !uninstall_addons.is_empty() {
+                debug!("uninstalling cluster addons before deletion");
+                let cancel = CancellationToken::new();
+                let config_dir = self
                     .config_path
                     .parent()
-                    .unwrap_or_else(|| std::path::Path::new("."));
-                let k3d_mgr = K3dManager::new(
-                    &self.identity.slug,
-                    cluster_config,
-                    &self.state_dir,
-                    network,
-                    delete_config_dir,
-                );
+                    .unwrap_or_else(|| std::path::Path::new("."))
+                    .to_path_buf();
+                crate::cluster::addon::uninstall_addons(
+                    &uninstall_addons,
+                    k3d_mgr.kubeconfig_path(),
+                    &config_dir,
+                    &cancel,
+                )
+                .await;
+            }
 
-                // Uninstall addons (including synthetic log collector) before deleting the cluster
-                let mut uninstall_addons = cluster_config.addons.clone();
-                let log_collector_manifest = self.state_dir.join(
-                    crate::cluster::log_collector::MANIFEST_FILENAME,
-                );
-                if log_collector_manifest.exists() {
-                    uninstall_addons.insert(
-                        crate::cluster::log_collector::ADDON_KEY.to_string(),
-                        crate::config::model::AddonConfig::Manifest {
-                            path: log_collector_manifest.to_string_lossy().to_string(),
-                            namespace: None,
-                            port_forward: BTreeMap::new(),
-                            depends_on: vec![],
-                        },
-                    );
-                }
-                if !uninstall_addons.is_empty() {
-                    debug!("uninstalling cluster addons before deletion");
-                    let cancel = CancellationToken::new();
-                    let config_dir = self
-                        .config_path
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new("."))
-                        .to_path_buf();
-                    crate::cluster::addon::uninstall_addons(
-                        &uninstall_addons,
-                        k3d_mgr.kubeconfig_path(),
-                        &config_dir,
-                        &cancel,
-                    )
-                    .await;
-                }
-
-                debug!(cluster = %cs.cluster_name, "deleting k3d cluster");
-                if let Err(e) = k3d_mgr.delete_cluster().await {
-                    warn!(error = %e, "failed to delete k3d cluster");
-                }
+            // Try to delete regardless of whether we have state — cluster may
+            // have been created before the failure that prevented state save.
+            let cluster_name = format!("devrig-{}", self.identity.slug);
+            debug!(cluster = %cluster_name, "deleting k3d cluster");
+            if let Err(e) = k3d_mgr.delete_cluster().await {
+                warn!(error = %e, "failed to delete k3d cluster");
             }
         }
 
-        // Clean up Docker resources (containers, volumes, networks)
-        if state
-            .as_ref()
-            .is_some_and(|s| !s.docker.is_empty() || s.network_name.is_some())
-        {
-            match DockerManager::new(self.identity.slug.clone()).await {
-                Ok(mgr) => {
-                    if let Err(e) = mgr.cleanup_all().await {
-                        warn!(error = %e, "failed to clean up Docker resources");
-                    }
+        // Clean up Docker resources (containers, volumes, networks).
+        // Always attempt cleanup by label — this handles orphaned containers
+        // left behind when `start` failed before persisting state.json.
+        match DockerManager::new(self.identity.slug.clone()).await {
+            Ok(mgr) => {
+                if let Err(e) = mgr.cleanup_all().await {
+                    warn!(error = %e, "failed to clean up Docker resources");
                 }
-                Err(e) => {
-                    warn!(error = %e, "could not connect to Docker for cleanup");
-                }
+            }
+            Err(e) => {
+                warn!(error = %e, "could not connect to Docker for cleanup");
             }
         }
 
