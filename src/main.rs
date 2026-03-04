@@ -81,6 +81,14 @@ async fn main() {
             devrig::cli::ClusterCommands::Kubeconfig => {
                 commands::cluster::run_kubeconfig(cli.global.config_file.as_deref())
             }
+            devrig::cli::ClusterCommands::Rebuild { images, no_apply } => {
+                commands::cluster::run_rebuild_images(
+                    images,
+                    no_apply,
+                    cli.global.config_file.as_deref(),
+                )
+                .await
+            }
         },
         Commands::Kubectl { args } => {
             commands::cluster::run_kubectl(cli.global.config_file.as_deref(), args).await

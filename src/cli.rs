@@ -288,4 +288,14 @@ pub enum ClusterCommands {
     Delete,
     /// Print path to devrig's isolated kubeconfig
     Kubeconfig,
+    /// Rebuild and re-push all cluster images with --no-cache for a completely fresh build
+    Rebuild {
+        /// Names of images/deploys to rebuild (omit to rebuild all)
+        #[arg(value_name = "IMAGE")]
+        images: Vec<String>,
+
+        /// Skip re-applying Kubernetes manifests and rollout restart for deploy entries
+        #[arg(long)]
+        no_apply: bool,
+    },
 }

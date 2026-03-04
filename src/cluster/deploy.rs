@@ -55,13 +55,18 @@ async fn run_cmd(
 use crate::platform;
 
 /// Build docker build args including `--secret` and `--build-arg` flags.
+/// When `no_cache` is true, adds `--no-cache` for a completely fresh build.
 fn docker_build_args<'a>(
     tag: &'a str,
     dockerfile: &'a str,
     secret_args: &'a [String],
     build_args: &'a [String],
+    no_cache: bool,
 ) -> Vec<&'a str> {
     let mut args = vec!["build", "-t", tag, "-f", dockerfile];
+    if no_cache {
+        args.push("--no-cache");
+    }
     for secret_arg in secret_args {
         args.push("--secret");
         args.push(secret_arg);
@@ -133,7 +138,7 @@ pub async fn run_deploy(
     // Docker build
     debug!(name, tag, "building image");
     let secret_args = format_secret_args(&deploy_config.build_secrets);
-    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[]);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[], false);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -193,7 +198,7 @@ pub async fn run_rebuild(
     // Docker build
     debug!(name, tag, "rebuilding image");
     let secret_args = format_secret_args(&deploy_config.build_secrets);
-    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[]);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[], false);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -267,7 +272,7 @@ pub async fn run_image_build(
     debug!(name, tag, "building image");
     let secret_args = format_secret_args(&image_config.build_secrets);
     let build_args = format_build_args(&image_config.build_args, deployed);
-    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args, false);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -317,7 +322,7 @@ pub async fn rebuild_image(
     debug!(name, tag, "rebuilding image");
     let secret_args = format_secret_args(&image_config.build_secrets);
     let build_args = format_build_args(&image_config.build_args, deployed);
-    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args, false);
     run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
 
     if cancel.is_cancelled() {
@@ -336,6 +341,131 @@ pub async fn rebuild_image(
     }
 
     Ok(())
+}
+
+/// Build and push an image with --no-cache for a completely fresh build.
+/// Used by `devrig cluster rebuild` for `[cluster.image.*]` entries.
+pub async fn fresh_rebuild_image(
+    name: &str,
+    image_config: &ClusterImageConfig,
+    registry_port: u16,
+    config_dir: &Path,
+    deployed: &BTreeMap<String, ClusterDeployState>,
+    cancel: &CancellationToken,
+) -> Result<ClusterDeployState> {
+    let context_path = config_dir.join(&image_config.context);
+
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs();
+    let tag = format!("localhost:{registry_port}/{name}:{timestamp}");
+
+    // Docker build with --no-cache
+    println!("  Building image '{name}' (--no-cache)...");
+    debug!(name, tag, "fresh building image with --no-cache");
+    let secret_args = format_secret_args(&image_config.build_secrets);
+    let build_args = format_build_args(&image_config.build_args, deployed);
+    let args = docker_build_args(&tag, &image_config.dockerfile, &secret_args, &build_args, true);
+    run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
+
+    if cancel.is_cancelled() {
+        bail!("cancelled");
+    }
+
+    // Push timestamped tag
+    debug!(name, tag, "pushing image");
+    run_cmd("docker", &["push", &tag], None, None, cancel).await?;
+
+    // Also tag and push as :latest
+    let latest_tag = format!("localhost:{registry_port}/{name}:latest");
+    run_cmd("docker", &["tag", &tag, &latest_tag], None, None, cancel).await?;
+    run_cmd("docker", &["push", &latest_tag], None, None, cancel).await?;
+
+    println!("  Pushed '{name}' -> {tag}");
+
+    Ok(ClusterDeployState {
+        image_tag: tag,
+        last_deployed: Utc::now(),
+    })
+}
+
+/// Build, push (with --no-cache), and optionally apply manifests + rollout restart
+/// for a `[cluster.deploy.*]` entry. Used by `devrig cluster rebuild`.
+pub async fn fresh_rebuild_deploy(
+    name: &str,
+    deploy_config: &ClusterDeployConfig,
+    registry_port: u16,
+    kubeconfig_path: &Path,
+    config_dir: &Path,
+    apply_manifests: bool,
+    cancel: &CancellationToken,
+) -> Result<ClusterDeployState> {
+    let context_path = config_dir.join(&deploy_config.context);
+    let manifests_path = config_dir.join(&deploy_config.manifests);
+
+    let timestamp = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)?
+        .as_secs();
+    let tag = format!("localhost:{registry_port}/{name}:{timestamp}");
+
+    // Docker build with --no-cache
+    println!("  Building deploy '{name}' (--no-cache)...");
+    debug!(name, tag, "fresh building deploy image with --no-cache");
+    let secret_args = format_secret_args(&deploy_config.build_secrets);
+    let args = docker_build_args(&tag, &deploy_config.dockerfile, &secret_args, &[], true);
+    run_cmd("docker", &args, Some(&context_path), None, cancel).await?;
+
+    if cancel.is_cancelled() {
+        bail!("cancelled");
+    }
+
+    // Push timestamped tag
+    debug!(name, tag, "pushing image");
+    run_cmd("docker", &["push", &tag], None, None, cancel).await?;
+
+    // Also tag and push as :latest
+    let latest_tag = format!("localhost:{registry_port}/{name}:latest");
+    run_cmd("docker", &["tag", &tag, &latest_tag], None, None, cancel).await?;
+    run_cmd("docker", &["push", &latest_tag], None, None, cancel).await?;
+
+    println!("  Pushed '{name}' -> {tag}");
+
+    if apply_manifests {
+        // kubectl apply
+        let manifests_str = manifests_path.to_string_lossy();
+        debug!(name, manifests = %manifests_str, "applying manifests");
+        run_cmd(
+            "kubectl",
+            &["apply", "-f", &manifests_str],
+            None,
+            Some(("KUBECONFIG", kubeconfig_path)),
+            cancel,
+        )
+        .await?;
+
+        if cancel.is_cancelled() {
+            bail!("cancelled");
+        }
+
+        // Rollout restart
+        let deployment = format!("deployment/{name}");
+        debug!(name, "restarting deployment");
+        run_cmd(
+            "kubectl",
+            &["rollout", "restart", &deployment],
+            None,
+            Some(("KUBECONFIG", kubeconfig_path)),
+            cancel,
+        )
+        .await?;
+
+        println!("  Applied manifests and restarted deployment '{name}'");
+    }
+
+    Ok(ClusterDeployState {
+        image_tag: tag,
+        last_deployed: Utc::now(),
+    })
 }
 
 #[cfg(test)]
@@ -392,8 +522,15 @@ mod tests {
     #[test]
     fn docker_build_args_includes_build_args() {
         let build_args = vec!["SERVER_IMAGE=foo:latest".to_string()];
-        let args = docker_build_args("tag:1", "Dockerfile", &[], &build_args);
+        let args = docker_build_args("tag:1", "Dockerfile", &[], &build_args, false);
         assert!(args.contains(&"--build-arg"));
         assert!(args.contains(&"SERVER_IMAGE=foo:latest"));
+        assert!(!args.contains(&"--no-cache"));
+    }
+
+    #[test]
+    fn docker_build_args_includes_no_cache() {
+        let args = docker_build_args("tag:1", "Dockerfile", &[], &[], true);
+        assert!(args.contains(&"--no-cache"));
     }
 }
