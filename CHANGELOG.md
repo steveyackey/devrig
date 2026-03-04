@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.25.0](https://github.com/steveyackey/devrig/compare/v0.24.0...v0.25.0) (2026-03-04)
+
+
+### Features
+
+* **cluster:** add `devrig cluster rebuild` command ([#49](https://github.com/steveyackey/devrig/issues/49)) ([dabde3a](https://github.com/steveyackey/devrig/commit/dabde3a9a0c9a0fa4c4562ef2fe36273a0628a7e))
+
+
+### Bug Fixes
+
+* clean up orphaned containers when start fails mid-way ([e952e0a](https://github.com/steveyackey/devrig/commit/e952e0aecee77ab44b4b79c51ac4b4e9921c26a9))
+
 ## [0.24.0](https://github.com/steveyackey/devrig/compare/v0.23.5...v0.24.0) (2026-02-27)
 
 
