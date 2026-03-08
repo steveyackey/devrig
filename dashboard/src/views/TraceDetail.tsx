@@ -393,7 +393,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {/* Span detail panel */}
           <Show when={selectedSpan()}>
             {(span) => (
-              <Card class="w-96 border-l-2 border-border overflow-auto shrink-0">
+              <Card class="w-96 border-l-2 border-border overflow-auto shrink-0 max-h-screen">
                 <CardHeader class="flex flex-row items-center justify-between">
                   <h3 class="font-display text-lg text-accent tracking-[0.1em] uppercase">Span Details</h3>
                   <button

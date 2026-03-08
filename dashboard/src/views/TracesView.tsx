@@ -246,9 +246,24 @@ const TracesView: Component<TracesViewProps> = (props) => {
                       {trace.span_count}
                     </TableCell>
                     <TableCell class="text-center">
-                      <Badge data-testid="trace-status-badge" variant={trace.has_error ? 'error' : 'success'}>
-                        {trace.has_error ? 'Error' : 'Ok'}
-                      </Badge>
+                      <Show when={trace.http_status} fallback={
+                        <Badge data-testid="trace-status-badge" variant={trace.has_error ? 'error' : 'success'}>
+                          {trace.has_error ? 'Error' : 'Ok'}
+                        </Badge>
+                      }>
+                        {(() => {
+                          const code = trace.http_status!;
+                          const variant = code >= 500 ? 'error' as const
+                            : code >= 400 ? 'warning' as const
+                            : code >= 300 ? 'warning' as const
+                            : 'success' as const;
+                          return (
+                            <Badge data-testid="trace-status-badge" variant={variant}>
+                              {code}
+                            </Badge>
+                          );
+                        })()}
+                      </Show>
                     </TableCell>
                     <TableCell class="text-right text-xs text-text-secondary font-mono">
                       {formatTime(trace.start_time)}

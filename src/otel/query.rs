@@ -81,6 +81,8 @@ pub struct TraceSummary {
     pub span_count: usize,
     pub has_error: bool,
     pub start_time: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http_status: Option<u16>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -142,6 +144,14 @@ impl TelemetryStore {
                 let root_operation = root.map(|s| s.operation_name.clone()).unwrap_or_default();
                 let start_time = root.map(|s| s.start_time).unwrap_or_else(Utc::now);
 
+                // Extract HTTP status code from root span attributes
+                let http_status = root.and_then(|s| {
+                    s.attributes
+                        .iter()
+                        .find(|(k, _)| k == "http.response.status_code")
+                        .and_then(|(_, v)| v.parse::<u16>().ok())
+                });
+
                 let duration_ms = spans
                     .iter()
                     .map(|s| {
@@ -160,6 +170,7 @@ impl TelemetryStore {
                     span_count,
                     has_error,
                     start_time,
+                    http_status,
                 };
 
                 // Apply filters

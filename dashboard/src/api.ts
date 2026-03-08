@@ -8,6 +8,7 @@ export interface TraceSummary {
   span_count: number;
   has_error: boolean;
   start_time: string;
+  http_status?: number;
 }
 
 export interface StoredSpan {
