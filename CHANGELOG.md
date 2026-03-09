@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.27.0](https://github.com/steveyackey/devrig/compare/v0.26.0...v0.27.0) (2026-03-09)
+
+
+### Features
+
+* capture and display OTel span events like Honeycomb ([3c0edfe](https://github.com/steveyackey/devrig/commit/3c0edfe255b8745ea8d77172b9f9a5845d4d38a0))
+
 ## [0.26.0](https://github.com/steveyackey/devrig/compare/v0.25.0...v0.26.0) (2026-03-08)
 
 
