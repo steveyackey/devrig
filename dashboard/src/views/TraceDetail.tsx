@@ -37,12 +37,18 @@ interface SpanNode {
   depth: number;
 }
 
+/** A row in the waterfall: either a span or an event belonging to a span. */
+type WaterfallItem =
+  | { kind: 'span'; node: SpanNode }
+  | { kind: 'event'; event: StoredSpanEvent; parentSpan: StoredSpan; depth: number };
+
 const TraceDetail: Component<TraceDetailProps> = (props) => {
   const [traceData, setTraceData] = createSignal<TraceDetailResponse | null>(null);
   const [related, setRelated] = createSignal<RelatedResponse | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [selectedSpan, setSelectedSpan] = createSignal<StoredSpan | null>(null);
+  const [collapseEvents, setCollapseEvents] = createSignal(false);
 
   const loadData = async () => {
     try {
@@ -106,14 +112,71 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     return roots;
   });
 
-  const flattenedSpans = createMemo((): SpanNode[] => {
-    const result: SpanNode[] = [];
+  /** Flatten spans, interleaving events as their own rows when not collapsed. */
+  const waterfallItems = createMemo((): WaterfallItem[] => {
+    const result: WaterfallItem[] = [];
+    const collapsed = collapseEvents();
+
     const flatten = (nodes: SpanNode[]) => {
       for (const node of nodes) {
-        result.push(node);
-        flatten(node.children);
+        result.push({ kind: 'span', node });
+
+        if (!collapsed) {
+          // Collect child spans and events, sort by timestamp, interleave
+          const childItems: { time: number; item: WaterfallItem }[] = [];
+
+          for (const child of node.children) {
+            childItems.push({
+              time: new Date(child.span.start_time).getTime(),
+              item: { kind: 'span', node: child },
+            });
+          }
+
+          for (const event of node.span.events ?? []) {
+            childItems.push({
+              time: new Date(event.timestamp).getTime(),
+              item: { kind: 'event', event, parentSpan: node.span, depth: node.depth + 1 },
+            });
+          }
+
+          childItems.sort((a, b) => a.time - b.time);
+
+          for (const { item } of childItems) {
+            if (item.kind === 'event') {
+              result.push(item);
+            } else {
+              // Recurse into child span subtree
+              const childFlatten = (n: SpanNode) => {
+                result.push({ kind: 'span', node: n });
+                if (!collapsed) {
+                  const subItems: { time: number; item: WaterfallItem }[] = [];
+                  for (const c of n.children) {
+                    subItems.push({ time: new Date(c.span.start_time).getTime(), item: { kind: 'span', node: c } });
+                  }
+                  for (const e of n.span.events ?? []) {
+                    subItems.push({ time: new Date(e.timestamp).getTime(), item: { kind: 'event', event: e, parentSpan: n.span, depth: n.depth + 1 } });
+                  }
+                  subItems.sort((a, b) => a.time - b.time);
+                  for (const si of subItems) {
+                    if (si.item.kind === 'event') {
+                      result.push(si.item);
+                    } else {
+                      childFlatten(si.item.node);
+                    }
+                  }
+                } else {
+                  flatten(n.children);
+                }
+              };
+              childFlatten(item.node);
+            }
+          }
+        } else {
+          flatten(node.children);
+        }
       }
     };
+
     flatten(spanTree());
     return result;
   });
@@ -136,10 +199,9 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     return { min, max };
   });
 
-  const truncateId = (id: string): string => {
-    if (id.length <= 12) return id;
-    return id.slice(0, 8) + '...';
-  };
+  const totalEvents = createMemo(() =>
+    traceData()?.spans.reduce((sum, s) => sum + (s.events?.length ?? 0), 0) ?? 0
+  );
 
   const statusColor = (status: string): string => {
     switch (status) {
@@ -185,10 +247,9 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {(data) => (
             <div class="ml-auto flex items-center gap-4 text-sm text-text-secondary">
               <span>{data().spans.length} span{data().spans.length !== 1 ? 's' : ''}</span>
-              {(() => {
-                const count = data().spans.reduce((sum, s) => sum + (s.events?.length ?? 0), 0);
-                return count > 0 ? <span>{count} event{count !== 1 ? 's' : ''}</span> : null;
-              })()}
+              <Show when={totalEvents() > 0}>
+                <span>{totalEvents()} event{totalEvents() !== 1 ? 's' : ''}</span>
+              </Show>
               <span>
                 {formatDuration(
                   Math.max(...data().spans.map(s => s.duration_ms), 0)
@@ -229,29 +290,83 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {/* Span waterfall */}
           <div class="flex-1 overflow-auto p-7">
             <Tabs defaultValue="spans">
-              <TabsList>
-                <TabsTrigger value="spans">
-                  Spans ({traceData()!.spans.length})
-                </TabsTrigger>
-                <TabsTrigger value="logs">
-                  Logs ({related()?.logs.length ?? 0})
-                </TabsTrigger>
-                <TabsTrigger value="metrics">
-                  Metrics ({related()?.metrics.length ?? 0})
-                </TabsTrigger>
-              </TabsList>
+              <div class="flex items-center justify-between">
+                <TabsList>
+                  <TabsTrigger value="spans">
+                    Spans ({traceData()!.spans.length})
+                  </TabsTrigger>
+                  <TabsTrigger value="logs">
+                    Logs ({related()?.logs.length ?? 0})
+                  </TabsTrigger>
+                  <TabsTrigger value="metrics">
+                    Metrics ({related()?.metrics.length ?? 0})
+                  </TabsTrigger>
+                </TabsList>
+
+                {/* Collapse events toggle */}
+                <Show when={totalEvents() > 0}>
+                  <label class="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={collapseEvents()}
+                      onChange={(e) => setCollapseEvents(e.currentTarget.checked)}
+                      class="accent-warning w-3.5 h-3.5"
+                    />
+                    Collapse events
+                  </label>
+                </Show>
+              </div>
 
               {/* Spans tab - Waterfall view */}
               <TabsContent value="spans">
                 <div class="py-4">
-                  <For each={flattenedSpans()} fallback={
+                  <For each={waterfallItems()} fallback={
                     <div class="px-7 py-8 text-center text-text-secondary text-sm">No spans found.</div>
                   }>
-                    {(node) => {
+                    {(item) => {
                       const bounds = timelineBounds();
+                      const totalDuration = bounds.max - bounds.min;
+
+                      if (item.kind === 'event') {
+                        // Event row: diamond marker at timestamp position
+                        const eventTime = new Date(item.event.timestamp).getTime();
+                        const eventPct = ((eventTime - bounds.min) / totalDuration) * 100;
+
+                        return (
+                          <div
+                            data-testid="waterfall-event-row"
+                            class="flex items-center hover:bg-warning/5 rounded px-2 py-0.5 transition-colors animate-fade-in"
+                            onClick={() => setSelectedSpan(item.parentSpan)}
+                          >
+                            {/* Label area */}
+                            <div
+                              class="shrink-0 flex items-center gap-1 pr-3 overflow-hidden"
+                              style={{ width: '280px', "padding-left": `${item.depth * 20}px` }}
+                            >
+                              <span class="text-warning/40 text-xs select-none">{'\u2514'}</span>
+                              <span class="w-2 h-2 bg-warning rotate-45 shrink-0" />
+                              <span class="text-xs text-warning/80 truncate" title={item.event.name}>
+                                {item.event.name}
+                              </span>
+                            </div>
+
+                            {/* Timeline: diamond at position */}
+                            <div class="flex-1 relative h-4 bg-transparent rounded">
+                              <div
+                                class="absolute top-0 bottom-0 flex items-center"
+                                style={{ left: `${eventPct}%` }}
+                              >
+                                <div class="w-2 h-2 bg-warning rotate-45 border border-warning/60" />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Span row (existing behavior)
+                      const node = item.node;
                       const spanStart = new Date(node.span.start_time).getTime();
                       const spanEnd = new Date(node.span.end_time).getTime();
-                      const totalDuration = bounds.max - bounds.min;
                       const leftPct = ((spanStart - bounds.min) / totalDuration) * 100;
                       const widthPct = Math.max(((spanEnd - spanStart) / totalDuration) * 100, 0.5);
                       const isSelected = selectedSpan()?.span_id === node.span.span_id;
@@ -291,22 +406,24 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                                 "min-width": '2px',
                               }}
                             />
-                            {/* Span event markers (diamonds) */}
-                            <For each={node.span.events ?? []}>
-                              {(event) => {
-                                const eventTime = new Date(event.timestamp).getTime();
-                                const eventPct = ((eventTime - bounds.min) / totalDuration) * 100;
-                                return (
-                                  <div
-                                    class="absolute top-0 bottom-0 flex items-center"
-                                    style={{ left: `${eventPct}%` }}
-                                    title={`${event.name} @ ${new Date(event.timestamp).toLocaleTimeString()}`}
-                                  >
-                                    <div class="w-2 h-2 bg-warning rotate-45 border border-warning/60" />
-                                  </div>
-                                );
-                              }}
-                            </For>
+                            {/* Span event markers (diamonds) — only in collapsed mode */}
+                            <Show when={collapseEvents()}>
+                              <For each={node.span.events ?? []}>
+                                {(event) => {
+                                  const eventTime = new Date(event.timestamp).getTime();
+                                  const eventPct = ((eventTime - bounds.min) / totalDuration) * 100;
+                                  return (
+                                    <div
+                                      class="absolute top-0 bottom-0 flex items-center"
+                                      style={{ left: `${eventPct}%` }}
+                                      title={`${event.name} @ ${new Date(event.timestamp).toLocaleTimeString()}`}
+                                    >
+                                      <div class="w-2 h-2 bg-warning rotate-45 border border-warning/60" />
+                                    </div>
+                                  );
+                                }}
+                              </For>
+                            </Show>
                             <span
                               class="absolute top-0.5 text-[10px] text-text-muted font-mono whitespace-nowrap"
                               style={{ left: `${Math.min(leftPct + widthPct + 1, 85)}%` }}
