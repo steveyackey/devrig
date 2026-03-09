@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.28.0](https://github.com/steveyackey/devrig/compare/v0.27.0...v0.28.0) (2026-03-09)
+
+
+### Features
+
+* per-span event expand/collapse with expand-all toggle ([fbfb027](https://github.com/steveyackey/devrig/commit/fbfb027c8ced5f985b9d6d18bfaf8be1347635fb))
+* show span events as waterfall rows with collapse toggle ([97bfdae](https://github.com/steveyackey/devrig/commit/97bfdae2ce6fdcefccf2816bc02a2be2c765ae8f))
+
 ## [0.27.0](https://github.com/steveyackey/devrig/compare/v0.26.0...v0.27.0) (2026-03-09)
 
 
