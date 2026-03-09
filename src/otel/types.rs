@@ -22,6 +22,13 @@ pub enum SpanKind {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StoredSpanEvent {
+    pub name: String,
+    pub timestamp: DateTime<Utc>,
+    pub attributes: Vec<(String, String)>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StoredSpan {
     pub record_id: u64,
     pub trace_id: String,
@@ -36,6 +43,7 @@ pub struct StoredSpan {
     pub status_message: Option<String>,
     pub attributes: Vec<(String, String)>,
     pub kind: SpanKind,
+    pub events: Vec<StoredSpanEvent>,
 }
 
 // -----------------------------------------------------------------------
@@ -262,6 +270,16 @@ pub fn proto_span_to_stored(
         _ => SpanKind::Internal,
     };
 
+    let events = span
+        .events
+        .iter()
+        .map(|e| StoredSpanEvent {
+            name: e.name.clone(),
+            timestamp: nanos_to_datetime(e.time_unix_nano),
+            attributes: convert_attributes(&e.attributes, 20),
+        })
+        .collect();
+
     StoredSpan {
         record_id: 0, // assigned by store
         trace_id,
@@ -276,6 +294,7 @@ pub fn proto_span_to_stored(
         status_message,
         attributes: convert_attributes(&span.attributes, 20),
         kind,
+        events,
     }
 }
 

@@ -11,6 +11,12 @@ export interface TraceSummary {
   http_status?: number;
 }
 
+export interface StoredSpanEvent {
+  name: string;
+  timestamp: string;
+  attributes: [string, string][];
+}
+
 export interface StoredSpan {
   record_id: number;
   trace_id: string;
@@ -25,6 +31,7 @@ export interface StoredSpan {
   status_message: string | null;
   attributes: [string, string][];
   kind: "Internal" | "Server" | "Client" | "Producer" | "Consumer";
+  events: StoredSpanEvent[];
 }
 
 export interface TraceDetailResponse {

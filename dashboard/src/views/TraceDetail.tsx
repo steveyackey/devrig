@@ -4,6 +4,7 @@ import {
   fetchRelated,
   type TraceDetailResponse,
   type StoredSpan,
+  type StoredSpanEvent,
   type StoredLog,
   type StoredMetric,
   type RelatedResponse,
@@ -184,6 +185,10 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           {(data) => (
             <div class="ml-auto flex items-center gap-4 text-sm text-text-secondary">
               <span>{data().spans.length} span{data().spans.length !== 1 ? 's' : ''}</span>
+              {(() => {
+                const count = data().spans.reduce((sum, s) => sum + (s.events?.length ?? 0), 0);
+                return count > 0 ? <span>{count} event{count !== 1 ? 's' : ''}</span> : null;
+              })()}
               <span>
                 {formatDuration(
                   Math.max(...data().spans.map(s => s.duration_ms), 0)
@@ -286,6 +291,22 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                                 "min-width": '2px',
                               }}
                             />
+                            {/* Span event markers (diamonds) */}
+                            <For each={node.span.events ?? []}>
+                              {(event) => {
+                                const eventTime = new Date(event.timestamp).getTime();
+                                const eventPct = ((eventTime - bounds.min) / totalDuration) * 100;
+                                return (
+                                  <div
+                                    class="absolute top-0 bottom-0 flex items-center"
+                                    style={{ left: `${eventPct}%` }}
+                                    title={`${event.name} @ ${new Date(event.timestamp).toLocaleTimeString()}`}
+                                  >
+                                    <div class="w-2 h-2 bg-warning rotate-45 border border-warning/60" />
+                                  </div>
+                                );
+                              }}
+                            </For>
                             <span
                               class="absolute top-0.5 text-[10px] text-text-muted font-mono whitespace-nowrap"
                               style={{ left: `${Math.min(leftPct + widthPct + 1, 85)}%` }}
@@ -446,6 +467,44 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                               <span class="text-xs text-text-secondary font-mono break-all ml-auto text-right">
                                 {value}
                               </span>
+                            </div>
+                          )}
+                        </For>
+                      </div>
+                    </div>
+                  </Show>
+
+                  {/* Span Events */}
+                  <Show when={(span().events?.length ?? 0) > 0}>
+                    <div>
+                      <h4 class="font-label text-[10px] text-text-muted uppercase tracking-[0.15em] mb-2">
+                        Events ({span().events.length})
+                      </h4>
+                      <div class="bg-surface-2/50 border border-border divide-y divide-border">
+                        <For each={span().events}>
+                          {(event) => (
+                            <div class="px-3 py-2">
+                              <div class="flex justify-between items-center">
+                                <span class="text-xs font-medium text-warning flex items-center gap-1.5">
+                                  <span class="w-2 h-2 bg-warning rotate-45 inline-block" />
+                                  {event.name}
+                                </span>
+                                <span class="text-[10px] font-mono text-text-muted">
+                                  {new Date(event.timestamp).toLocaleTimeString()}
+                                </span>
+                              </div>
+                              <Show when={event.attributes.length > 0}>
+                                <div class="mt-1 space-y-0.5">
+                                  <For each={event.attributes}>
+                                    {([key, value]) => (
+                                      <div class="flex gap-2 text-[10px]">
+                                        <span class="text-text-muted font-mono">{key}</span>
+                                        <span class="text-text-secondary font-mono break-all ml-auto text-right">{value}</span>
+                                      </div>
+                                    )}
+                                  </For>
+                                </div>
+                              </Show>
                             </div>
                           )}
                         </For>

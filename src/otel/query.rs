@@ -499,6 +499,7 @@ mod tests {
             status_message: None,
             attributes: vec![],
             kind: SpanKind::Server,
+            events: vec![],
         }
     }
 

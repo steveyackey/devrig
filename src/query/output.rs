@@ -149,6 +149,7 @@ fn print_spans_table(spans: &[StoredSpan]) {
         Cell::new("Duration").set_alignment(CellAlignment::Right),
         Cell::new("Kind").set_alignment(CellAlignment::Center),
         Cell::new("Status").set_alignment(CellAlignment::Center),
+        Cell::new("Events").set_alignment(CellAlignment::Center),
     ]);
 
     for s in spans {
@@ -172,6 +173,12 @@ fn print_spans_table(spans: &[StoredSpan]) {
             format!("{:?}", s.status)
         };
 
+        let events_text = if s.events.is_empty() {
+            "-".to_string()
+        } else {
+            format!("{}", s.events.len())
+        };
+
         table.add_row(vec![
             Cell::new(short_id),
             Cell::new(&s.service_name),
@@ -179,7 +186,27 @@ fn print_spans_table(spans: &[StoredSpan]) {
             Cell::new(&duration),
             Cell::new(&kind_str),
             Cell::new(&status_text),
+            Cell::new(&events_text),
         ]);
+
+        // Print event details below span row
+        for event in &s.events {
+            let time_str = event.timestamp.format("%H:%M:%S%.3f").to_string();
+            let event_label = if use_color {
+                format!("  \u{25c6} {}", event.name.yellow())
+            } else {
+                format!("  \u{25c6} {}", event.name)
+            };
+            table.add_row(vec![
+                Cell::new(""),
+                Cell::new(""),
+                Cell::new(&event_label),
+                Cell::new(&time_str),
+                Cell::new(""),
+                Cell::new(""),
+                Cell::new(""),
+            ]);
+        }
     }
 
     for line in table.to_string().lines() {
