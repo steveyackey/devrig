@@ -42,13 +42,26 @@ type WaterfallItem =
   | { kind: 'span'; node: SpanNode }
   | { kind: 'event'; event: StoredSpanEvent; parentSpan: StoredSpan; depth: number };
 
+/** Framework/internal events get visually dimmed vs. business events. */
+const isFrameworkEvent = (name: string): boolean => {
+  const lower = name.toLowerCase();
+  return (
+    lower.startsWith('executing ') ||
+    lower.startsWith('preparing ') ||
+    lower.startsWith('connecting') ||
+    lower.includes('statement ') ||
+    lower.includes(' with parameters') ||
+    lower.includes(' with types')
+  );
+};
+
 const TraceDetail: Component<TraceDetailProps> = (props) => {
   const [traceData, setTraceData] = createSignal<TraceDetailResponse | null>(null);
   const [related, setRelated] = createSignal<RelatedResponse | null>(null);
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   const [selectedSpan, setSelectedSpan] = createSignal<StoredSpan | null>(null);
-  const [collapseEvents, setCollapseEvents] = createSignal(false);
+  const [expandedSpans, setExpandedSpans] = createSignal<Set<string>>(new Set());
 
   const loadData = async () => {
     try {
@@ -112,16 +125,46 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
     return roots;
   });
 
-  /** Flatten spans, interleaving events as their own rows when not collapsed. */
+  /** All span IDs that have events, for expand-all/collapse-all. */
+  const spanIdsWithEvents = createMemo((): Set<string> => {
+    const ids = new Set<string>();
+    for (const span of traceData()?.spans ?? []) {
+      if ((span.events?.length ?? 0) > 0) ids.add(span.span_id);
+    }
+    return ids;
+  });
+
+  const toggleSpanEvents = (spanId: string) => {
+    const next = new Set(expandedSpans());
+    if (next.has(spanId)) next.delete(spanId);
+    else next.add(spanId);
+    setExpandedSpans(next);
+  };
+
+  const expandAllEvents = () => setExpandedSpans(new Set(spanIdsWithEvents()));
+  const collapseAllEvents = () => setExpandedSpans(new Set());
+
+  const allExpanded = createMemo(() => {
+    const withEvents = spanIdsWithEvents();
+    if (withEvents.size === 0) return false;
+    const expanded = expandedSpans();
+    for (const id of withEvents) {
+      if (!expanded.has(id)) return false;
+    }
+    return true;
+  });
+
+  /** Flatten spans, interleaving events as rows under individually expanded spans. */
   const waterfallItems = createMemo((): WaterfallItem[] => {
     const result: WaterfallItem[] = [];
-    const collapsed = collapseEvents();
+    const expanded = expandedSpans();
 
     const flatten = (nodes: SpanNode[]) => {
       for (const node of nodes) {
         result.push({ kind: 'span', node });
+        const spanExpanded = expanded.has(node.span.span_id) && (node.span.events?.length ?? 0) > 0;
 
-        if (!collapsed) {
+        if (spanExpanded) {
           // Collect child spans and events, sort by timestamp, interleave
           const childItems: { time: number; item: WaterfallItem }[] = [];
 
@@ -135,7 +178,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
           for (const event of node.span.events ?? []) {
             childItems.push({
               time: new Date(event.timestamp).getTime(),
-              item: { kind: 'event', event, parentSpan: node.span, depth: node.depth + 1 },
+              item: { kind: 'event', event, parentSpan: node.span, depth: node.depth + 2 },
             });
           }
 
@@ -145,30 +188,7 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
             if (item.kind === 'event') {
               result.push(item);
             } else {
-              // Recurse into child span subtree
-              const childFlatten = (n: SpanNode) => {
-                result.push({ kind: 'span', node: n });
-                if (!collapsed) {
-                  const subItems: { time: number; item: WaterfallItem }[] = [];
-                  for (const c of n.children) {
-                    subItems.push({ time: new Date(c.span.start_time).getTime(), item: { kind: 'span', node: c } });
-                  }
-                  for (const e of n.span.events ?? []) {
-                    subItems.push({ time: new Date(e.timestamp).getTime(), item: { kind: 'event', event: e, parentSpan: n.span, depth: n.depth + 1 } });
-                  }
-                  subItems.sort((a, b) => a.time - b.time);
-                  for (const si of subItems) {
-                    if (si.item.kind === 'event') {
-                      result.push(si.item);
-                    } else {
-                      childFlatten(si.item.node);
-                    }
-                  }
-                } else {
-                  flatten(n.children);
-                }
-              };
-              childFlatten(item.node);
+              flatten([item.node]);
             }
           }
         } else {
@@ -303,17 +323,15 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                   </TabsTrigger>
                 </TabsList>
 
-                {/* Collapse events toggle */}
+                {/* Expand/collapse all events toggle */}
                 <Show when={totalEvents() > 0}>
-                  <label class="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={collapseEvents()}
-                      onChange={(e) => setCollapseEvents(e.currentTarget.checked)}
-                      class="accent-warning w-3.5 h-3.5"
-                    />
-                    Collapse events
-                  </label>
+                  <button
+                    onClick={() => allExpanded() ? collapseAllEvents() : expandAllEvents()}
+                    class="text-[10px] text-text-muted hover:text-warning transition-colors uppercase tracking-[0.08em] select-none flex items-center gap-1.5"
+                  >
+                    <span class="text-warning/60">{'\u25C6'}</span>
+                    {allExpanded() ? 'Collapse all events' : 'Expand all events'}
+                  </button>
                 </Show>
               </div>
 
@@ -328,48 +346,60 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                       const totalDuration = bounds.max - bounds.min;
 
                       if (item.kind === 'event') {
-                        // Event row: diamond marker at timestamp position
+                        // Event row — subtle annotation, subordinate to spans
                         const eventTime = new Date(item.event.timestamp).getTime();
                         const eventPct = ((eventTime - bounds.min) / totalDuration) * 100;
+                        const framework = isFrameworkEvent(item.event.name);
 
                         return (
                           <div
                             data-testid="waterfall-event-row"
-                            class="flex items-center hover:bg-warning/5 rounded px-2 py-0.5 transition-colors animate-fade-in"
+                            class={`flex items-center rounded px-2 transition-colors cursor-pointer ${
+                              framework
+                                ? 'opacity-50 hover:opacity-80'
+                                : 'opacity-80 hover:opacity-100'
+                            }`}
+                            style={{ "padding-top": '1px', "padding-bottom": '1px' }}
                             onClick={() => setSelectedSpan(item.parentSpan)}
                           >
-                            {/* Label area */}
+                            {/* Label area — indented text only */}
                             <div
-                              class="shrink-0 flex items-center gap-1 pr-3 overflow-hidden"
+                              class="shrink-0 flex items-center gap-1.5 pr-3 overflow-hidden"
                               style={{ width: '280px', "padding-left": `${item.depth * 20}px` }}
                             >
-                              <span class="text-warning/40 text-xs select-none">{'\u2514'}</span>
-                              <span class="w-2 h-2 bg-warning rotate-45 shrink-0" />
-                              <span class="text-xs text-warning/80 truncate" title={item.event.name}>
+                              <span class={`truncate ${
+                                framework ? 'text-[9px] text-text-muted' : 'text-[10px] text-warning'
+                              }`} title={item.event.name}>
                                 {item.event.name}
                               </span>
                             </div>
 
-                            {/* Timeline: diamond at position */}
-                            <div class="flex-1 relative h-4 bg-transparent rounded">
+                            {/* Timeline: single diamond marker at position */}
+                            <div class="flex-1 relative h-3">
                               <div
                                 class="absolute top-0 bottom-0 flex items-center"
-                                style={{ left: `${eventPct}%` }}
+                                style={{ left: `${eventPct}%`, "margin-left": '-3px' }}
                               >
-                                <div class="w-2 h-2 bg-warning rotate-45 border border-warning/60" />
+                                <div class={`rotate-45 ${
+                                  framework
+                                    ? 'w-1.5 h-1.5 bg-text-muted/60'
+                                    : 'w-[7px] h-[7px] bg-warning border border-warning/50'
+                                }`} />
                               </div>
                             </div>
                           </div>
                         );
                       }
 
-                      // Span row (existing behavior)
+                      // Span row
                       const node = item.node;
                       const spanStart = new Date(node.span.start_time).getTime();
                       const spanEnd = new Date(node.span.end_time).getTime();
                       const leftPct = ((spanStart - bounds.min) / totalDuration) * 100;
                       const widthPct = Math.max(((spanEnd - spanStart) / totalDuration) * 100, 0.5);
                       const isSelected = selectedSpan()?.span_id === node.span.span_id;
+                      const eventCount = node.span.events?.length ?? 0;
+                      const isExpanded = expandedSpans().has(node.span.span_id);
 
                       return (
                         <div
@@ -394,6 +424,21 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                             }`}>
                               {node.span.operation_name}
                             </span>
+                            {/* Clickable event count badge — expands/collapses this span's events */}
+                            <Show when={eventCount > 0}>
+                              <button
+                                class={`text-[9px] ml-1 shrink-0 transition-colors ${
+                                  isExpanded
+                                    ? 'text-warning hover:text-warning/70'
+                                    : 'text-warning/50 hover:text-warning'
+                                }`}
+                                title={`${isExpanded ? 'Collapse' : 'Expand'} ${eventCount} event${eventCount !== 1 ? 's' : ''}`}
+                                onClick={(e) => { e.stopPropagation(); toggleSpanEvents(node.span.span_id); }}
+                              >
+                                <span class="inline-block" style={{ transform: isExpanded ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform 0.15s ease' }}>{'\u25BE'}</span>
+                                {'\u25C6'}{eventCount}
+                              </button>
+                            </Show>
                           </div>
 
                           {/* Timeline bar area */}
@@ -406,19 +451,24 @@ const TraceDetail: Component<TraceDetailProps> = (props) => {
                                 "min-width": '2px',
                               }}
                             />
-                            {/* Span event markers (diamonds) — only in collapsed mode */}
-                            <Show when={collapseEvents()}>
-                              <For each={node.span.events ?? []}>
+                            {/* Diamond markers on span bar — shown when this span's events are collapsed */}
+                            <Show when={!isExpanded && eventCount > 0}>
+                              <For each={node.span.events}>
                                 {(event) => {
                                   const eventTime = new Date(event.timestamp).getTime();
                                   const eventPct = ((eventTime - bounds.min) / totalDuration) * 100;
+                                  const framework = isFrameworkEvent(event.name);
                                   return (
                                     <div
                                       class="absolute top-0 bottom-0 flex items-center"
-                                      style={{ left: `${eventPct}%` }}
+                                      style={{ left: `${eventPct}%`, "margin-left": '-3px' }}
                                       title={`${event.name} @ ${new Date(event.timestamp).toLocaleTimeString()}`}
                                     >
-                                      <div class="w-2 h-2 bg-warning rotate-45 border border-warning/60" />
+                                      <div class={`rotate-45 ${
+                                        framework
+                                          ? 'w-1.5 h-1.5 bg-warning/40'
+                                          : 'w-[7px] h-[7px] bg-warning/80 border border-warning/50'
+                                      }`} />
                                     </div>
                                   );
                                 }}
