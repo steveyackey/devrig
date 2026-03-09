@@ -215,6 +215,33 @@ pub fn convert_attributes(
         .collect()
 }
 
+/// Extract HTTP status code from proto span attributes.
+///
+/// Checks both `http.response.status_code` (OTel semconv 1.21+) and the
+/// older `http.status_code` convention. Returns 0 if not found.
+fn extract_http_status_code(
+    attrs: &[opentelemetry_proto::tonic::common::v1::KeyValue],
+) -> u16 {
+    for kv in attrs {
+        if kv.key == "http.response.status_code" || kv.key == "http.status_code" {
+            if let Some(ref v) = kv.value {
+                if let Some(ref val) = v.value {
+                    return match val {
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::IntValue(i) => {
+                            *i as u16
+                        }
+                        opentelemetry_proto::tonic::common::v1::any_value::Value::StringValue(s) => {
+                            s.parse().unwrap_or(0)
+                        }
+                        _ => 0,
+                    };
+                }
+            }
+        }
+    }
+    0
+}
+
 /// Convert nanosecond timestamp to DateTime<Utc>.
 pub fn nanos_to_datetime(nanos: u64) -> DateTime<Utc> {
     let secs = (nanos / 1_000_000_000) as i64;
@@ -242,7 +269,7 @@ pub fn proto_span_to_stored(
         .saturating_sub(span.start_time_unix_nano)
         / 1_000_000;
 
-    let status = span
+    let explicit_status = span
         .status
         .as_ref()
         .map(|s| match s.code {
@@ -252,6 +279,21 @@ pub fn proto_span_to_stored(
             _ => SpanStatus::Unset,
         })
         .unwrap_or(SpanStatus::Unset);
+
+    // When status is Unset, infer from http.response.status_code (5xx → Error).
+    // This matches the behavior of Jaeger, Tempo, and Datadog.
+    let status = if explicit_status == SpanStatus::Unset {
+        let http_code = extract_http_status_code(&span.attributes);
+        if http_code >= 500 {
+            SpanStatus::Error
+        } else if http_code > 0 {
+            SpanStatus::Ok
+        } else {
+            SpanStatus::Unset
+        }
+    } else {
+        explicit_status
+    };
 
     let status_message = span.status.as_ref().and_then(|s| {
         if s.message.is_empty() {
