@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.26.0](https://github.com/steveyackey/devrig/compare/v0.25.0...v0.26.0) (2026-03-08)
+
+
+### Features
+
+* show HTTP status codes in dashboard traces list ([9333908](https://github.com/steveyackey/devrig/commit/9333908fe5280137cbe70f5ca567af95073da2d2))
+
 ## [0.25.0](https://github.com/steveyackey/devrig/compare/v0.24.0...v0.25.0) (2026-03-04)
 
 
