@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.29.0](https://github.com/steveyackey/devrig/compare/v0.28.0...v0.29.0) (2026-03-09)
+
+
+### Features
+
+* infer span status from HTTP status code when OTLP status is Unset ([56ce535](https://github.com/steveyackey/devrig/commit/56ce535d0bad138c74e83bc65cf035588da1b63e))
+
 ## [0.28.0](https://github.com/steveyackey/devrig/compare/v0.27.0...v0.28.0) (2026-03-09)
 
 
