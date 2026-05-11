@@ -215,7 +215,7 @@ impl TelemetryStore {
             .collect();
 
         // Sort by start_time descending (most recent first)
-        summaries.sort_by(|a, b| b.start_time.cmp(&a.start_time));
+        summaries.sort_by_key(|s| std::cmp::Reverse(s.start_time));
         summaries.truncate(limit);
         summaries
     }

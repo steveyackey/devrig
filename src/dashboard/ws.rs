@@ -46,6 +46,9 @@ async fn handle_socket(mut socket: WebSocket, mut rx: broadcast::Receiver<Teleme
                 match msg {
                     Some(Ok(Message::Close(_))) | None => break,
                     Some(Ok(Message::Ping(data))) => {
+                        // clippy's collapsible_match suggestion would move `data`
+                        // into a pattern guard — illegal because `Bytes` isn't Copy.
+                        #[allow(clippy::collapsible_match)]
                         if socket.send(Message::Pong(data)).await.is_err() {
                             break;
                         }
