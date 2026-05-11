@@ -62,6 +62,20 @@ mime_guess = "2"
 humantime = "2"
 dashmap = "6"
 libc = "0.2"
+url = "2"
+uuid = { version = "1", features = ["v7", "serde"] }
+
+# v0.30: built-in OIDC provider (replaces Keycloak/dex for local dev)
+yauth = { version = "0.12", default-features = false, features = [
+    "memory-backend",
+    "email-password",
+    "bearer",
+    "oauth2-server",
+    "oidc",
+    "asymmetric-jwt",
+] }
+yauth-entity = "0.12"
+rsa = { version = "0.9", features = ["pem"] }
 
 [dev-dependencies]
 assert_cmd = "2"

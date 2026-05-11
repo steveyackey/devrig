@@ -132,6 +132,41 @@ timeout = 120
 
 ---
 
+## `[oidc]`
+
+Built-in OpenID Connect / OAuth2 provider. Replaces the need for a local Keycloak or dex container — `oidc.issuer` / `oidc.port` template vars become available to other services.
+
+| Field      | Type            | Default            | Description |
+|------------|-----------------|--------------------|-------------|
+| `port`     | int or `"auto"` | `"auto"`           | HTTP port for the OIDC server |
+| `realm`    | string          | `"devrig"`         | Display name shown on the login page |
+| `audience` | string          | (none)             | Written as `aud` on access tokens |
+| `issuer`   | string          | `http://localhost:{port}` | Optional issuer URL override |
+| `users`    | array of tables | `[]`               | Pre-seeded users (see below) |
+| `clients`  | table of tables | `{}`               | Pre-seeded OAuth2 clients keyed by `client_id` |
+
+### `[[oidc.users]]`
+
+| Field      | Type    | Default | Description |
+|------------|---------|---------|-------------|
+| `email`    | string  | --      | Login identifier |
+| `password` | string  | --      | Plain-text (local-dev only) |
+| `name`     | string  | (none)  | Display name |
+| `role`     | string  | `"user"`| Role written into the user record |
+
+### `[oidc.clients.<client_id>]`
+
+| Field             | Type    | Default                                   | Description |
+|-------------------|---------|-------------------------------------------|-------------|
+| `public`          | bool    | `false`                                   | `true` for PKCE-only SPAs (no client_secret) |
+| `redirect_uris`   | array   | `[]`                                      | Exact-match URIs; template vars resolved at startup |
+| `client_secret`   | string  | (none)                                    | Required when `public = false` |
+| `client_name`     | string  | client_id                                 | Name shown on the consent page |
+| `grant_types`     | array   | `["authorization_code", "refresh_token"]` | Allowed OAuth2 grants |
+| `scopes`          | array   | `["openid", "profile", "email"]`          | Scopes the client may request |
+
+---
+
 ## `[compose]`
 
 | Field          | Type    | Required | Default | Description                                       |
@@ -289,6 +324,8 @@ DATABASE_URL = "postgres://user:${DB_PASS}@localhost:{{ docker.postgres.port }}/
 | `dashboard.port`                     | `4000`                        | All                        |
 | `dashboard.otel.grpc_port`           | `4317`                        | All                        |
 | `dashboard.otel.http_port`           | `4318`                        | All                        |
+| `oidc.port`                          | `4565`                        | All (when `[oidc]` defined) |
+| `oidc.issuer`                        | `http://localhost:4565`       | All (when `[oidc]` defined) |
 
 Unresolved variables produce an error with a "did you mean?" suggestion if a close match exists.
 

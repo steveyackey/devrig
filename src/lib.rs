@@ -7,6 +7,7 @@ pub mod dashboard;
 pub mod discovery;
 pub mod identity;
 pub mod docker;
+pub mod oidc;
 pub mod orchestrator;
 pub mod otel;
 pub mod platform;

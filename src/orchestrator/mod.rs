@@ -208,8 +208,9 @@ impl Orchestrator {
             .dashboard
             .as_ref()
             .is_some_and(|d| d.enabled.unwrap_or(true));
+        let oidc_enabled = self.config.oidc.is_some();
 
-        if launch_order.is_empty() && !dashboard_enabled {
+        if launch_order.is_empty() && !dashboard_enabled && !oidc_enabled {
             bail!("no resources to start");
         }
 
@@ -339,6 +340,22 @@ impl Orchestrator {
                 http_port: otel_http,
             });
             _otel_collector = Some(collector);
+        }
+
+        // ================================================================
+        // Phase 0.6: Reserve OIDC provider port (server bound later)
+        // ================================================================
+        // Allocates the OIDC port up-front so `oidc.port` / `oidc.issuer`
+        // are available to docker, service, and cluster template vars in
+        // Phase 4. The actual axum server binds in Phase 4.7 once
+        // `oidc.clients[*].redirect_uris` have had their template vars
+        // resolved (e.g. `{{ services.web.port }}`).
+        let mut oidc_runtime: Option<crate::oidc::OidcRuntime> = None;
+        if let Some(ref oidc_cfg) = self.config.oidc {
+            let oidc_port = resolve_dashboard_port(&oidc_cfg.port, "oidc", &mut allocated_ports);
+            let runtime = crate::oidc::allocate_oidc_runtime(oidc_port, oidc_cfg);
+            debug!(port = runtime.port, issuer = %runtime.issuer, "OIDC port reserved");
+            oidc_runtime = Some(runtime);
         }
 
         // ================================================================
@@ -839,6 +856,12 @@ impl Orchestrator {
             }
         }
 
+        // OIDC provider template vars (when [oidc] is configured)
+        if let Some(ref oidc) = oidc_runtime {
+            template_vars.insert("oidc.port".to_string(), oidc.port.to_string());
+            template_vars.insert("oidc.issuer".to_string(), oidc.issuer.clone());
+        }
+
         // Merge cluster vars into service template vars
         if let Some(ref cs) = cluster_state {
             let image_vars =
@@ -868,6 +891,20 @@ impl Orchestrator {
                 msg.push_str(&format!("  - {}\n", err));
             }
             bail!("{}", msg.trim_end());
+        }
+
+        // ================================================================
+        // Phase 4.5: Bind OIDC provider (now that redirect_uris are resolved)
+        // ================================================================
+        if let (Some(runtime), Some(oidc_cfg)) = (oidc_runtime.clone(), self.config.oidc.clone()) {
+            crate::oidc::launch_oidc_server(
+                runtime,
+                oidc_cfg,
+                self.cancel.clone(),
+                &self.tracker,
+            )
+            .await
+            .context("launching OIDC provider")?;
         }
 
         // ================================================================

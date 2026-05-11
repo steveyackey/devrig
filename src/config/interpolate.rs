@@ -202,6 +202,26 @@ pub fn resolve_config_templates(
         }
     }
 
+    // Resolve OIDC client redirect URIs (and the optional issuer override).
+    // Lets users write `redirect_uris = ["http://localhost:{{ services.web.port }}/cb"]`.
+    if let Some(ref mut oidc) = config.oidc {
+        if let Some(ref mut issuer) = oidc.issuer {
+            match resolve_template(issuer, vars, "oidc.issuer") {
+                Ok(resolved) => *issuer = resolved,
+                Err(mut errs) => all_errors.append(&mut errs),
+            }
+        }
+        for (client_id, client) in &mut oidc.clients {
+            for uri in &mut client.redirect_uris {
+                let field_context = format!("oidc.clients.{client_id}.redirect_uris");
+                match resolve_template(uri, vars, &field_context) {
+                    Ok(resolved) => *uri = resolved,
+                    Err(mut errs) => all_errors.append(&mut errs),
+                }
+            }
+        }
+    }
+
     if all_errors.is_empty() {
         Ok(())
     } else {
@@ -373,6 +393,7 @@ mod tests {
             compose: None,
             cluster: None,
             dashboard: None,
+            oidc: None,
             env: BTreeMap::new(),
             network: None,
             links: BTreeMap::new(),
@@ -408,6 +429,7 @@ mod tests {
             docker: BTreeMap::new(),
             compose: None,
             cluster: None,
+            oidc: None,
             dashboard: Some(DashboardConfig {
                 port: Port::Fixed(5000),
                 enabled: None,
@@ -456,6 +478,7 @@ mod tests {
                 k3s_args: vec![],
             }),
             dashboard: None,
+            oidc: None,
             env: BTreeMap::new(),
             network: None,
             links: BTreeMap::new(),
@@ -483,6 +506,7 @@ mod tests {
             compose: None,
             cluster: None,
             dashboard: None,
+            oidc: None,
             env: BTreeMap::from([
                 (
                     "DATABASE_URL".to_string(),

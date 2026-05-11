@@ -795,6 +795,75 @@ With this configuration, `devrig start` will:
 5. Telemetry from the API service will appear in the dashboard and be
    queryable via `devrig query` commands.
 
+## `[oidc]` section
+
+Devrig ships with a built-in OpenID Connect provider so projects don't
+need a local Keycloak / dex container. The provider is in-memory only —
+users and clients are seeded from the config on every `devrig start`,
+nothing persists across restarts. Issued access tokens are signed with
+RS256 and the public key is published at `/.well-known/jwks.json`.
+
+```toml
+[oidc]
+port = "auto"            # "auto" or a fixed integer
+realm = "myapp"          # cosmetic name shown on the login page
+audience = "myapp-api"   # `aud` written into access tokens
+# issuer = "http://localhost:4565"   # optional override (defaults to http://localhost:{port})
+
+[[oidc.users]]
+email = "admin@example.com"
+password = "admin"
+name = "Admin"
+role = "admin"
+
+[oidc.clients.myapp-web]
+public = true            # PKCE, no client_secret
+redirect_uris = [
+    "http://localhost:{{ services.web.port }}/auth/callback",
+    "http://localhost:{{ services.web.port }}/",
+]
+```
+
+| Top-level field | Type             | Default          | Description |
+|-----------------|------------------|------------------|-------------|
+| `port`          | integer / `"auto"` | `"auto"`       | Port the OIDC HTTP server binds to. |
+| `realm`         | string           | `"devrig"`       | Display name on the built-in login page. |
+| `audience`      | string           | *(none)*         | `aud` claim on issued access tokens. Set this to your API's audience so resource servers can validate it. |
+| `issuer`        | string           | *(derived)*      | Override the issuer URL. By default devrig uses `http://localhost:{port}`. |
+| `users`         | array            | `[]`             | Pre-seeded users. Each has `email`, `password`, optional `name`, optional `role`. |
+| `clients`       | table            | `{}`             | Pre-seeded OAuth2 clients keyed by `client_id`. |
+
+| Client field      | Type     | Default                                 | Description |
+|-------------------|----------|------------------------------------------|-------------|
+| `public`          | boolean  | `false`                                  | `true` for PKCE-only SPAs (no client_secret); `false` for confidential clients. |
+| `redirect_uris`   | array    | `[]`                                     | Allowed `redirect_uri` values. Template vars are resolved at startup. yauth requires **exact** matches — no wildcards. |
+| `client_secret`   | string   | *(none)*                                 | Required when `public = false`. |
+| `client_name`     | string   | client_id                                | Human-readable name shown on the consent page. |
+| `grant_types`     | array    | `["authorization_code", "refresh_token"]`| OAuth2 grants the client may use. |
+| `scopes`          | array    | `["openid", "profile", "email"]`         | Scopes the client may request. |
+
+### Template variables
+
+When `[oidc]` is configured, the orchestrator publishes:
+
+| Template var    | Example value          | Description |
+|-----------------|------------------------|-------------|
+| `oidc.port`     | `4565`                 | Port the OIDC HTTP server is bound to. |
+| `oidc.issuer`   | `http://localhost:4565`| Full issuer URL. Use this as the OIDC `Authority` in dependent services. |
+
+### Endpoints
+
+The provider exposes the OIDC discovery, token, userinfo, JWKS, login, and
+register endpoints at the issuer root:
+
+- `GET  {issuer}/.well-known/openid-configuration`
+- `GET  {issuer}/.well-known/jwks.json`
+- `GET  {issuer}/oauth/authorize` → 302 to the built-in HTML login page
+- `POST {issuer}/oauth/authorize` (consent submission)
+- `POST {issuer}/oauth/token`
+- `GET  {issuer}/userinfo`
+- `POST {issuer}/login`, `POST {issuer}/register` — email-password endpoints
+
 ## Environment variable expansion
 
 Any string value in `env`, `docker.*.env`, `docker.*.image`,
@@ -1011,6 +1080,8 @@ Helm addon `values` also support templates for cluster image tags (see
 | `dashboard.port`                     | `4000`        | All                        |
 | `dashboard.otel.grpc_port`           | `4317`        | All                        |
 | `dashboard.otel.http_port`           | `4318`        | All                        |
+| `oidc.port`                          | `4565`        | All (when `[oidc]` defined) |
+| `oidc.issuer`                        | `http://localhost:4565` | All (when `[oidc]` defined) |
 
 The `cluster.name` variable is available when a `[cluster]` section is
 defined. It resolves to the cluster name and is useful in Kubernetes

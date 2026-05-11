@@ -15,6 +15,8 @@ pub struct DevrigConfig {
     #[serde(default)]
     pub dashboard: Option<DashboardConfig>,
     #[serde(default)]
+    pub oidc: Option<OidcConfig>,
+    #[serde(default)]
     pub env: BTreeMap<String, String>,
     #[serde(default)]
     pub network: Option<NetworkConfig>,
@@ -309,6 +311,82 @@ impl Default for DashboardConfig {
             otel: None,
         }
     }
+}
+
+fn default_oidc_port() -> Port {
+    Port::Auto
+}
+
+fn default_oidc_realm() -> String {
+    "devrig".to_string()
+}
+
+/// Built-in OpenID Connect provider. Replaces the need for a local Keycloak
+/// or dex container during development — devrig hosts the OIDC endpoints
+/// in-process and pre-seeds the configured users and clients.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct OidcConfig {
+    /// Port the OIDC HTTP server binds to. Defaults to "auto".
+    #[serde(default = "default_oidc_port")]
+    pub port: Port,
+    /// Optional issuer URL override. When unset, devrig uses
+    /// `http://localhost:{port}`. Set this when fronting the provider with
+    /// a reverse proxy so issued tokens advertise the public URL.
+    #[serde(default)]
+    pub issuer: Option<String>,
+    /// Display name shown on the built-in login page. Cosmetic only.
+    #[serde(default = "default_oidc_realm")]
+    pub realm: String,
+    /// `aud` claim written into access tokens for the `authorization_code`
+    /// grant. Set this to the resource server identifier (e.g. `myapp-api`)
+    /// so APIs can validate token audience.
+    #[serde(default)]
+    pub audience: Option<String>,
+    /// Pre-seeded users. Each user can log in with `email` + `password`.
+    /// Passwords are plain-text in config (local-dev only).
+    #[serde(default)]
+    pub users: Vec<OidcUserConfig>,
+    /// Pre-seeded OAuth2 / OIDC clients, keyed by `client_id`.
+    #[serde(default)]
+    pub clients: BTreeMap<String, OidcClientConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct OidcUserConfig {
+    pub email: String,
+    pub password: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    /// Role written into the user record (typically `admin` or `user`).
+    /// Defaults to `user`.
+    #[serde(default)]
+    pub role: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct OidcClientConfig {
+    /// Public clients (SPAs, mobile apps) use PKCE and have no client secret.
+    /// Confidential clients require a `client_secret` set below.
+    #[serde(default)]
+    pub public: bool,
+    /// Allowed redirect URIs. Template variables (e.g.
+    /// `{{ services.web.port }}`) are resolved at startup.
+    #[serde(default)]
+    pub redirect_uris: Vec<String>,
+    /// Client secret for confidential clients. Ignored when `public = true`.
+    #[serde(default)]
+    pub client_secret: Option<String>,
+    /// Human-readable name shown on the consent page.
+    #[serde(default)]
+    pub client_name: Option<String>,
+    /// Grant types this client is allowed to use. Defaults to
+    /// `["authorization_code", "refresh_token"]`.
+    #[serde(default)]
+    pub grant_types: Option<Vec<String>>,
+    /// Scopes this client may request. Empty means any scope advertised by
+    /// the provider.
+    #[serde(default)]
+    pub scopes: Option<Vec<String>>,
 }
 
 impl Default for OtelConfig {

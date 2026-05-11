@@ -53,10 +53,30 @@ glob) so that both the new files **and** the deletions of old files are staged.
 
 ## Project Structure
 
-- `src/` — Rust: orchestrator, dashboard server, OTel collector
+- `src/` — Rust: orchestrator, dashboard server, OTel collector, OIDC provider
 - `dashboard/` — SolidJS + Tailwind v4 + Vite frontend
 - `e2e/` — Bun + Playwright E2E tests
 - `docs/images/` — Dashboard screenshots (auto-generated)
+
+## Built-in OIDC Provider
+
+`src/oidc/` runs a [yauth](https://github.com/yackey-labs/yauth)-backed in-memory
+OAuth2 + OIDC provider on its own port (`[oidc]` block in devrig.toml). It
+exposes:
+
+- `GET /.well-known/openid-configuration` — discovery (issuer = `http://localhost:{port}`)
+- `GET /.well-known/jwks.json` — RS256 public keys (regenerated each startup)
+- `GET /oauth/authorize` → 302 to built-in `/login` page (with all PKCE params forwarded)
+- `POST /oauth/authorize` — consent submission, returns code via redirect
+- `POST /oauth/token` — authorization_code + PKCE token exchange
+- `GET /userinfo` — OIDC userinfo
+- `POST /login`, `POST /register` — yauth email-password endpoints
+
+The provider seeds `oidc.users[*]` and `oidc.clients.*` from the config on
+every start. Other services consume `{{ oidc.issuer }}` and `{{ oidc.port }}`
+template vars.
+
+This replaces the need for a local Keycloak / dex container during development.
 
 ## Conventions
 

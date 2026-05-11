@@ -231,6 +231,7 @@ mod tests {
             compose: None,
             cluster: None,
             dashboard: None,
+            oidc: None,
             env: BTreeMap::new(),
             network: None,
             links: BTreeMap::new(),

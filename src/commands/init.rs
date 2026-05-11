@@ -37,6 +37,25 @@ name = "{project_name}"
 # port = 4000                    # default; auto-resolves if in use
 # OTel defaults: grpc_port=4317, http_port=4318, retention="1h" — customize with [dashboard.otel]
 
+# -- OIDC provider (built-in, replaces Keycloak/dex for local dev) --
+# Spins up an in-process OAuth2 / OIDC provider with pre-seeded users + clients.
+# Services receive `oidc.issuer` and `oidc.port` template vars.
+#
+# [oidc]
+# port = "auto"
+# realm = "{project_name}"
+# audience = "{project_name}-api"   # written as `aud` on access tokens
+#
+# [[oidc.users]]
+# email = "admin@example.com"
+# password = "admin"
+# name = "Admin"
+# role = "admin"
+#
+# [oidc.clients.web]
+# public = true                                                      # PKCE, no client_secret
+# redirect_uris = ["http://localhost:{{{{ services.{service_name}.port }}}}/auth/callback"]
+
 # -- Links --
 # Named URLs for services devrig doesn't manage (shown in dashboard).
 # [links]
