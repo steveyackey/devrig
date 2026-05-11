@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.0](https://github.com/steveyackey/devrig/compare/v0.29.0...v0.30.0) (2026-05-11)
+
+
+### Features
+
+* built-in OIDC provider via yauth ([1865bfe](https://github.com/steveyackey/devrig/commit/1865bfe4d789c3bb11f344e8e95a5ac53dea1a95))
+
 ## [0.29.0](https://github.com/steveyackey/devrig/compare/v0.28.0...v0.29.0) (2026-03-09)
 
 
