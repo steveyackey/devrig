@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.1](https://github.com/steveyackey/devrig/compare/v0.30.0...v0.30.1) (2026-05-11)
+
+
+### Bug Fixes
+
+* **oidc:** bump yauth to 0.12.3 for the iss claim ([653cf87](https://github.com/steveyackey/devrig/commit/653cf8725acddf6c808293d4877e5a8d49699a17))
+
 ## [0.30.0](https://github.com/steveyackey/devrig/compare/v0.29.0...v0.30.0) (2026-05-11)
 
 
