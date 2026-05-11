@@ -4668,9 +4668,9 @@ checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
 name = "yauth"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1126f217454d4e04b1e8bee6fb51cb406a5b01014dcdd7e7f56a3429e3b45e60"
+checksum = "966059d133a7dbe8b9f8a993872dd9fa623b196bdf852ba832c018ec3b7fdea6"
 dependencies = [
  "argon2",
  "axum 0.8.9",
@@ -4700,9 +4700,9 @@ dependencies = [
 
 [[package]]
 name = "yauth-entity"
-version = "0.12.2"
+version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d49deef7be81a874a60a8fb22374f568a9f932e75d75df54b79361f9f90c99f8"
+checksum = "19ca30bb23cfeae7659fc3c63bae1ce7f7d5ef3c09ae6b69c62e4eec171af5b8"
 dependencies = [
  "chrono",
  "serde",
