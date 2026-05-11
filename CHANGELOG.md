@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.2](https://github.com/steveyackey/devrig/compare/v0.30.1...v0.30.2) (2026-05-11)
+
+
+### Bug Fixes
+
+* **oidc:** submit consent via HTML form so the 303 redirect lands ([d6fd2d1](https://github.com/steveyackey/devrig/commit/d6fd2d13daed861871b6a5173ae12f4a13672c88))
+
 ## [0.30.1](https://github.com/steveyackey/devrig/compare/v0.30.0...v0.30.1) (2026-05-11)
 
 
