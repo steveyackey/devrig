@@ -1,9 +1,15 @@
 //! HTML for the built-in login + consent page.
 //!
-//! Rendered by `GET /login`. The user enters email + password, the page
-//! `POST`s to yauth's `/login` to establish a session, then `POST`s to
-//! `/oauth/authorize` with the user's consent decision — yauth issues the
-//! authorization code and 302s back to the OIDC client.
+//! Rendered by `GET /login`. The visible form takes email + password and
+//! POSTs to yauth's `/login` via fetch to establish a session cookie. Once
+//! the session is set, the page programmatically submits a *hidden* HTML
+//! form to `/oauth/authorize` — letting the browser natively follow yauth's
+//! 303 redirect back to the OIDC client's `redirect_uri?code=…&state=…`.
+//!
+//! We can't use `fetch` for the consent step: with `redirect: "manual"` the
+//! response is opaque and `Response.url` reflects the request URL, not the
+//! `Location` target, which sent the browser back to `/oauth/authorize`
+//! with no query string. Form submission sidesteps that.
 
 /// Build the HTML body for the login + consent page. Caller passes the OAuth2
 /// parameters extracted from the incoming `/oauth/authorize` redirect; the
@@ -23,6 +29,27 @@ pub fn render_login_page(
     let realm_esc = html_escape(realm);
     let client_esc = html_escape(client_id);
     let issuer_esc = html_escape(issuer);
+    // Escape the values that appear as `value="…"` attributes on the hidden
+    // consent form. These are user-controllable (they come in via query
+    // params), so escaping is required to keep the form's value boundary.
+    let issuer_attr = html_escape(issuer);
+    let client_id_attr = html_escape(client_id);
+    let redirect_uri_attr = html_escape(redirect_uri);
+    let response_type_attr = html_escape(response_type);
+    let code_challenge_attr = html_escape(code_challenge);
+    let code_challenge_method_attr = html_escape(code_challenge_method);
+    let scope_attr = scope.map(html_escape).unwrap_or_default();
+    let state_attr = state.map(html_escape).unwrap_or_default();
+    let scope_input = if scope.is_some() {
+        format!(r#"<input type="hidden" name="scope" value="{scope_attr}">"#)
+    } else {
+        String::new()
+    };
+    let state_input = if state.is_some() {
+        format!(r#"<input type="hidden" name="state" value="{state_attr}">"#)
+    } else {
+        String::new()
+    };
 
     format!(
         r#"<!doctype html>
@@ -81,6 +108,8 @@ pub fn render_login_page(
   }}
   .meta {{ margin-top: 18px; font-size: 11px; color: #6a7290; }}
   code {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #aab4d4; }}
+  /* The consent form is submitted programmatically; never shown. */
+  #consent-form {{ display: none; }}
 </style>
 </head>
 <body>
@@ -102,23 +131,34 @@ pub fn render_login_page(
     </div>
   </form>
 
+  <!--
+    Hidden consent form. We programmatically submit this after /login succeeds,
+    so the browser natively follows yauth's 303 redirect to the OIDC client's
+    redirect_uri (?code=…&state=…). Using a real form is what makes the
+    cross-origin redirect work — fetch with `redirect: "manual"` returns an
+    opaque response whose `url` is the request URL, not the Location header,
+    which previously sent the browser back to /oauth/authorize with no query.
+  -->
+  <form id="consent-form" method="POST" action="{issuer_attr}/oauth/authorize">
+    <input type="hidden" name="client_id" value="{client_id_attr}">
+    <input type="hidden" name="redirect_uri" value="{redirect_uri_attr}">
+    <input type="hidden" name="response_type" value="{response_type_attr}">
+    <input type="hidden" name="code_challenge" value="{code_challenge_attr}">
+    <input type="hidden" name="code_challenge_method" value="{code_challenge_method_attr}">
+    {scope_input}
+    {state_input}
+    <input type="hidden" name="approved" value="true">
+  </form>
+
 <script>
 (() => {{
   const issuer = {issuer_js};
-  const params = {{
-    client_id: {client_id_js},
-    redirect_uri: {redirect_uri_js},
-    response_type: {response_type_js},
-    code_challenge: {code_challenge_js},
-    code_challenge_method: {code_challenge_method_js},
-    scope: {scope_js},
-    state: {state_js}
-  }};
-  const form = document.getElementById("login-form");
+  const loginForm = document.getElementById("login-form");
+  const consentForm = document.getElementById("consent-form");
   const errBox = document.getElementById("error");
   const submitBtn = document.getElementById("submit");
 
-  form.addEventListener("submit", async (ev) => {{
+  loginForm.addEventListener("submit", async (ev) => {{
     ev.preventDefault();
     errBox.style.display = "none";
     submitBtn.disabled = true;
@@ -140,40 +180,10 @@ pub fn render_login_page(
         throw new Error(detail);
       }}
 
-      const consentBody = {{
-        client_id: params.client_id,
-        redirect_uri: params.redirect_uri,
-        response_type: params.response_type,
-        code_challenge: params.code_challenge,
-        code_challenge_method: params.code_challenge_method,
-        approved: true
-      }};
-      if (params.scope) consentBody.scope = params.scope;
-      if (params.state) consentBody.state = params.state;
-
-      const consentRes = await fetch(issuer + "/oauth/authorize", {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        credentials: "include",
-        redirect: "manual",
-        body: JSON.stringify(consentBody)
-      }});
-
-      if (consentRes.type === "opaqueredirect" || consentRes.status === 0) {{
-        const url = new URL(params.redirect_uri);
-        const qs = new URLSearchParams({{}});
-        if (params.state) qs.set("state", params.state);
-        window.location.href = consentRes.url || params.redirect_uri;
-        return;
-      }}
-
-      if (consentRes.ok || (consentRes.status >= 300 && consentRes.status < 400)) {{
-        const loc = consentRes.headers.get("Location");
-        if (loc) {{ window.location.href = loc; return; }}
-      }}
-
-      const text = await consentRes.text();
-      throw new Error("Authorization failed: " + text.slice(0, 200));
+      // Session cookie is now set; trigger the hidden consent form to POST
+      // and let the browser follow yauth's 303 back to the OIDC client.
+      submitBtn.textContent = "Redirecting…";
+      consentForm.submit();
     }} catch (e) {{
       errBox.textContent = e.message || String(e);
       errBox.style.display = "block";
@@ -189,20 +199,15 @@ pub fn render_login_page(
         realm_esc = realm_esc,
         client_esc = client_esc,
         issuer_esc = issuer_esc,
+        issuer_attr = issuer_attr,
+        client_id_attr = client_id_attr,
+        redirect_uri_attr = redirect_uri_attr,
+        response_type_attr = response_type_attr,
+        code_challenge_attr = code_challenge_attr,
+        code_challenge_method_attr = code_challenge_method_attr,
+        scope_input = scope_input,
+        state_input = state_input,
         issuer_js = json_str(issuer),
-        client_id_js = json_str(client_id),
-        redirect_uri_js = json_str(redirect_uri),
-        response_type_js = json_str(response_type),
-        code_challenge_js = json_str(code_challenge),
-        code_challenge_method_js = json_str(code_challenge_method),
-        scope_js = match scope {
-            Some(s) => json_str(s),
-            None => "null".to_string(),
-        },
-        state_js = match state {
-            Some(s) => json_str(s),
-            None => "null".to_string(),
-        },
     )
 }
 
