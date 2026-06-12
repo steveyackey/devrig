@@ -175,10 +175,16 @@ pub fn build_cluster_image_vars(
 /// Walk every service env value and project-level `[env]` value in `config`
 /// and resolve template expressions.
 ///
+/// When `service_filter` is `Some`, only the listed services' env templates
+/// are resolved — services outside the filter aren't being launched (filtered
+/// `devrig start`), so unresolvable variables in their env must not fail the
+/// start. `None` resolves all services.
+///
 /// All errors across all fields are collected and returned together.
 pub fn resolve_config_templates(
     config: &mut DevrigConfig,
     vars: &HashMap<String, String>,
+    service_filter: Option<&std::collections::HashSet<String>>,
 ) -> Result<(), Vec<TemplateError>> {
     let mut all_errors: Vec<TemplateError> = Vec::new();
 
@@ -193,6 +199,9 @@ pub fn resolve_config_templates(
 
     // Resolve per-service env templates
     for (svc_name, svc) in &mut config.services {
+        if service_filter.is_some_and(|f| !f.contains(svc_name)) {
+            continue;
+        }
         for (env_key, env_val) in &mut svc.env {
             let field_context = format!("services.{svc_name}.env.{env_key}");
             match resolve_template(env_val, vars, &field_context) {
@@ -521,12 +530,68 @@ mod tests {
         let mut vars = HashMap::new();
         vars.insert("docker.postgres.port".to_string(), "5432".to_string());
 
-        resolve_config_templates(&mut config, &vars).unwrap();
+        resolve_config_templates(&mut config, &vars, None).unwrap();
 
         assert_eq!(
             config.env.get("DATABASE_URL").unwrap(),
             "postgres://localhost:5432/mydb"
         );
         assert_eq!(config.env.get("PLAIN").unwrap(), "no-templates-here");
+    }
+
+    #[test]
+    fn resolve_config_templates_skips_filtered_out_services() {
+        let api = ServiceConfig {
+            path: None,
+            command: "run api".to_string(),
+            port: Some(Port::Fixed(3000)),
+            protocol: None,
+            env: BTreeMap::from([(
+                "SELF_PORT".to_string(),
+                "{{ services.api.port }}".to_string(),
+            )]),
+            env_file: None,
+            depends_on: vec![],
+            restart: None,
+        };
+        let web = ServiceConfig {
+            env: BTreeMap::from([(
+                "BROKEN".to_string(),
+                "{{ services.missing.port }}".to_string(),
+            )]),
+            ..api.clone()
+        };
+
+        let mut config = DevrigConfig {
+            project: ProjectConfig {
+                name: "myapp".to_string(),
+                env_file: None,
+            },
+            services: BTreeMap::from([("api".to_string(), api), ("web".to_string(), web)]),
+            docker: BTreeMap::new(),
+            compose: None,
+            cluster: None,
+            dashboard: None,
+            oidc: None,
+            env: BTreeMap::new(),
+            network: None,
+            links: BTreeMap::new(),
+        };
+
+        let mut vars = HashMap::new();
+        vars.insert("services.api.port".to_string(), "3000".to_string());
+
+        // Without a filter, web's unresolvable env fails the whole resolution
+        assert!(resolve_config_templates(&mut config, &vars, None).is_err());
+
+        // With a filter on api only, web's env is skipped and api resolves
+        let filter: std::collections::HashSet<String> =
+            std::iter::once("api".to_string()).collect();
+        resolve_config_templates(&mut config, &vars, Some(&filter)).unwrap();
+        assert_eq!(config.services["api"].env["SELF_PORT"], "3000");
+        assert_eq!(
+            config.services["web"].env["BROKEN"],
+            "{{ services.missing.port }}"
+        );
     }
 }

@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::config;
 use crate::config::interpolate::{build_template_vars, resolve_config_templates};
+use crate::config::model::Port;
 use crate::discovery::env::build_service_env;
 use crate::orchestrator::state::ProjectState;
 
@@ -50,8 +51,28 @@ pub fn run(config_path: Option<&Path>, service_name: &str) -> Result<()> {
         }
     }
 
+    // Fall back to fixed ports from config for anything not in state
+    // (e.g. after a filtered start that didn't launch every service)
+    for (name, svc) in &config.services {
+        if let Some(Port::Fixed(port)) = &svc.port {
+            resolved_ports.entry(format!("service:{}", name)).or_insert(*port);
+        }
+    }
+    for (name, docker_cfg) in &config.docker {
+        if let Some(Port::Fixed(port)) = &docker_cfg.port {
+            resolved_ports.entry(format!("docker:{}", name)).or_insert(*port);
+        }
+        for (pname, port_config) in &docker_cfg.ports {
+            if let Port::Fixed(port) = port_config {
+                resolved_ports
+                    .entry(format!("docker:{}:{}", name, pname))
+                    .or_insert(*port);
+            }
+        }
+    }
+
     let template_vars = build_template_vars(&config, &resolved_ports);
-    let _ = resolve_config_templates(&mut config, &template_vars);
+    let _ = resolve_config_templates(&mut config, &template_vars, None);
 
     let mut env = build_service_env(service_name, &config, &resolved_ports);
 

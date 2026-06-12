@@ -113,3 +113,4 @@ version = "1.2.0"
 - Use `jq` for filtering: `devrig query traces --format jsonl | jq 'select(.has_error)'`
 - Output formats: `--format table` (human), `--format json` (pretty), `--format jsonl` (pipe to jq)
 - `devrig logs -F` for live tailing, `devrig query logs` for OTel-collected logs
+- `devrig stop` always stops the whole project (one supervisor process — no per-service stop). To restart one service: `devrig stop`, then `devrig start <service>` (other services' template vars still resolve from config/state)

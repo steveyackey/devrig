@@ -214,8 +214,14 @@ impl Orchestrator {
             bail!("no resources to start");
         }
 
-        // Check port conflicts for all fixed ports (services + docker)
-        let conflicts = check_all_ports_unified(&self.config);
+        // Check port conflicts for fixed ports (services + docker), limited
+        // to the resources actually being launched when a filter is given
+        let launched_names: Option<HashSet<String>> = if service_filter.is_empty() {
+            None
+        } else {
+            Some(launch_order.iter().map(|(n, _)| n.clone()).collect())
+        };
+        let conflicts = check_all_ports_unified(&self.config, launched_names.as_ref());
         if !conflicts.is_empty() {
             bail!("{}", format_port_conflicts(&conflicts));
         }
@@ -556,8 +562,20 @@ impl Orchestrator {
             };
 
             // Build and push cluster images in dependency order
-
-            let mut deployed: BTreeMap<String, ClusterDeployState> = BTreeMap::new();
+            //
+            // Seed with previously deployed entries (filtered starts skip
+            // images/deploys outside the filter; their tags stay referenceable
+            // and aren't dropped from the saved state). Fresh builds below
+            // overwrite their entries.
+            let mut deployed: BTreeMap<String, ClusterDeployState> = prev_state
+                .as_ref()
+                .and_then(|s| s.cluster.as_ref())
+                .map(|c| c.deployed_services.clone())
+                .unwrap_or_default();
+            deployed.retain(|name, _| {
+                cluster_config.images.contains_key(name)
+                    || cluster_config.deploy.contains_key(name)
+            });
 
             for (name, kind) in &launch_order {
                 if *kind != ResourceKind::ClusterImage {
@@ -846,6 +864,29 @@ impl Orchestrator {
             }
         }
 
+        // Ports for services NOT being launched (filtered start): other
+        // services' env may still reference `{{ services.X.port }}`, so
+        // resolve fixed ports from config and auto ports from the previous
+        // state (sticky). Auto ports with no prior state stay unresolved —
+        // they only error if a launched service actually references them.
+        for (name, svc) in &self.config.services {
+            let key = format!("service:{}", name);
+            if resolved_ports.contains_key(&key) {
+                continue;
+            }
+            let port = match &svc.port {
+                Some(Port::Fixed(p)) => Some(*p),
+                Some(Port::Auto) => prev_state
+                    .as_ref()
+                    .and_then(|s| s.services.get(name))
+                    .and_then(|s| s.port),
+                None => None,
+            };
+            if let Some(port) = port {
+                resolved_ports.insert(key, port);
+            }
+        }
+
         // Build template variables and resolve {{ }} expressions in config
         let mut template_vars = build_template_vars(&self.config, &resolved_ports);
 
@@ -885,7 +926,17 @@ impl Orchestrator {
             }
         }
 
-        if let Err(errors) = resolve_config_templates(&mut self.config, &template_vars) {
+        // Only resolve env templates for services being launched — on a
+        // filtered start, other services' env may reference variables that
+        // can't be known yet (e.g. another never-started service's auto port).
+        let launched_services: HashSet<String> = launch_order
+            .iter()
+            .filter(|(_, k)| matches!(k, ResourceKind::Service))
+            .map(|(n, _)| n.clone())
+            .collect();
+        if let Err(errors) =
+            resolve_config_templates(&mut self.config, &template_vars, Some(&launched_services))
+        {
             let mut msg = String::from("Template resolution errors:\n");
             for err in &errors {
                 msg.push_str(&format!("  - {}\n", err));
