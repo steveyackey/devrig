@@ -92,10 +92,22 @@ pub fn identify_port_owner(port: u16) -> Option<String> {
 
 /// Check all fixed ports (services + docker) for conflicts with already-bound
 /// ports on the system.
-pub fn check_all_ports_unified(config: &DevrigConfig) -> Vec<PortConflict> {
+///
+/// When `launched` is `Some`, only services/docker resources in the set are
+/// checked — a filtered `devrig start` must not fail because an unrelated
+/// service's port is in use. Dashboard/OTel ports are always checked since
+/// they start regardless of the filter.
+pub fn check_all_ports_unified(
+    config: &DevrigConfig,
+    launched: Option<&std::collections::HashSet<String>>,
+) -> Vec<PortConflict> {
     let mut conflicts = Vec::new();
+    let is_launched = |name: &str| launched.is_none_or(|set| set.contains(name));
 
     for (name, svc) in &config.services {
+        if !is_launched(name) {
+            continue;
+        }
         if let Some(Port::Fixed(port)) = &svc.port {
             if !check_port_available(*port) {
                 conflicts.push(PortConflict {
@@ -108,6 +120,9 @@ pub fn check_all_ports_unified(config: &DevrigConfig) -> Vec<PortConflict> {
     }
 
     for (name, docker_cfg) in &config.docker {
+        if !is_launched(name) {
+            continue;
+        }
         if let Some(Port::Fixed(port)) = &docker_cfg.port {
             if !check_port_available(*port) {
                 conflicts.push(PortConflict {

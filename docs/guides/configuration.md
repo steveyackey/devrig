@@ -1161,11 +1161,17 @@ devrig env api
 ### `devrig start [services...]`
 
 Start all services, or only the named services plus their transitive
-dependencies.
+dependencies. On a filtered start, template variables that reference
+services outside the filter still resolve: fixed ports come from the
+config, auto ports from the last recorded state.
 
 ### `devrig stop`
 
 Stop all running services and docker containers. Preserves state for restart.
+
+All services run under a single supervisor process, so services cannot be
+stopped individually — `devrig stop <service>` is an error. To restart a
+subset, run `devrig stop` followed by `devrig start <service>`.
 
 ### `devrig delete`
 

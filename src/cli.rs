@@ -31,9 +31,10 @@ pub enum Commands {
         #[arg(long, hide = true)]
         dev: bool,
     },
-    /// Stop all services
+    /// Stop the whole project (all services run under one supervisor)
     Stop {
-        /// Specific services to stop (stop all if empty)
+        /// Not supported: services cannot be stopped individually
+        #[arg(hide = true)]
         services: Vec<String>,
 
         /// Stop all running devrig instances

@@ -10,7 +10,7 @@ Optional (checked by `devrig doctor`):
 - **Docker** for container-based services
 - **k3d** for local Kubernetes clusters
 - **kubectl** for cluster interaction
-- **cargo-watch** for Rust hot reload
+- **helm** for cluster addons
 
 ## Install
 
@@ -64,7 +64,7 @@ devrig doctor
   [ok] docker           Docker version 24.0.7
   [ok] k3d              k3d version v5.6.0
   [ok] kubectl          Client Version: v1.28.4
-  [ok] cargo-watch      cargo-watch 8.4.1
+  [ok] helm             v3.16.2
 
 All dependencies found.
 ```
@@ -176,6 +176,10 @@ devrig stop
 
 This sends SIGTERM to all service process groups, waits up to 10 seconds for
 graceful shutdown, then cleans up state.
+
+Stopping always affects the whole project — all services run under one
+supervisor process, so there is no per-service stop. To restart a subset,
+run `devrig stop` and then `devrig start <service>`.
 
 ## Delete state
 
