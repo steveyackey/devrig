@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.30.3](https://github.com/steveyackey/devrig/compare/v0.30.2...v0.30.3) (2026-06-12)
+
+
+### Bug Fixes
+
+* per-service stop error, filtered-start template resolution, doctor kubectl detection ([#59](https://github.com/steveyackey/devrig/issues/59)) ([e9f4aa1](https://github.com/steveyackey/devrig/commit/e9f4aa12d970a36bb78c74066df2f3c89de80246))
+
 ## [0.30.2](https://github.com/steveyackey/devrig/compare/v0.30.1...v0.30.2) (2026-05-11)
 
 
