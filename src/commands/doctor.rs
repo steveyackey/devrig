@@ -10,18 +10,16 @@ pub fn run() -> Result<()> {
         ("docker", &["--version"] as &[&str]),
         ("docker-compose", &["compose", "version"]),
         ("k3d", &["--version"]),
-        ("kubectl", &["version", "--client", "--short"]),
+        // NOTE: no `--short` — the flag was removed in kubectl 1.28
+        ("kubectl", &["version", "--client"]),
         ("helm", &["version", "--short"]),
-        ("cargo-watch", &["watch", "--version"]),
     ];
 
     let mut all_ok = true;
 
     for (name, args) in &checks {
-        // Special cases: cargo-watch uses 'cargo' binary, docker-compose uses 'docker' binary
-        let (bin, cmd_args, display_name) = if *name == "cargo-watch" {
-            ("cargo", *args, *name)
-        } else if *name == "docker-compose" {
+        // Special case: docker-compose uses the 'docker' binary
+        let (bin, cmd_args, display_name) = if *name == "docker-compose" {
             ("docker", *args, "docker compose")
         } else {
             (*name, *args, *name)
@@ -37,7 +35,9 @@ pub fn run() -> Result<()> {
                 } else {
                     version.to_string()
                 };
-                println!("  [ok] {:<20} {}", display_name, version);
+                // Multi-line output (kubectl, k3d) — show only the first line
+                let display_version = version.lines().next().unwrap_or("");
+                println!("  [ok] {:<20} {}", display_name, display_version);
 
                 // k3d version compatibility check
                 if *name == "k3d" {

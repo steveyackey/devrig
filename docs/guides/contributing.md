@@ -87,7 +87,7 @@ src/
     mod.rs                 Module declarations for subcommands.
     init.rs                Generate starter devrig.toml. Detects project type
                            (Cargo.toml, package.json, go.mod, Python).
-    doctor.rs              Checks for docker, k3d, kubectl, cargo-watch.
+    doctor.rs              Checks for docker, k3d, kubectl, helm.
     ps.rs                  Displays local project status or all instances.
 
   ui/
