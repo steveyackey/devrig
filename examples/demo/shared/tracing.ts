@@ -17,10 +17,12 @@ const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 const sdk = new NodeSDK({
   serviceName: process.env.OTEL_SERVICE_NAME,
   traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
-  metricReader: new PeriodicExportingMetricReader({
-    exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
-    exportIntervalMillis: 10000,
-  }),
+  metricReaders: [
+    new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+      exportIntervalMillis: 10000,
+    }),
+  ],
 });
 sdk.start();
 
