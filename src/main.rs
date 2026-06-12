@@ -28,7 +28,19 @@ async fn main() {
             run_start(cli.global.config_file, services, dev_mode).await
         }
         Commands::Stop { all, .. } if all => run_stop_all().await,
-        Commands::Stop { .. } => run_stop(cli.global.config_file).await,
+        Commands::Stop { services, .. } => {
+            if !services.is_empty() {
+                Err(anyhow::anyhow!(
+                    "stopping individual services is not supported — all services run \
+                     under a single supervisor process, so `devrig stop` stops the whole \
+                     project.\n\nTo restart a subset, run `devrig stop` followed by \
+                     `devrig start {}`.",
+                    services.join(" ")
+                ))
+            } else {
+                run_stop(cli.global.config_file).await
+            }
+        }
         Commands::Delete { all } if all => run_delete_all().await,
         Commands::Delete { .. } => run_delete(cli.global.config_file).await,
         Commands::Ps { all } => commands::ps::run(cli.global.config_file.as_deref(), all),
