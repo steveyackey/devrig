@@ -13,6 +13,7 @@ import (
 
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/state"
+	"github.com/steveyackey/devrig/internal/tools"
 )
 
 // Manager orchestrates the full cluster lifecycle.
@@ -21,12 +22,17 @@ type Manager struct {
 	slug     string
 	stateDir string
 	network  string
+	tools    *tools.Resolver
 }
 
 // NewManager creates a cluster manager. slug and network are the devrig
-// project slug and Docker network name.
-func NewManager(cfg *config.ClusterConfig, slug, stateDir, network string) *Manager {
-	return &Manager{cfg: cfg, slug: slug, stateDir: stateDir, network: network}
+// project slug and Docker network name. resolver locates the k3d/kubectl/helm
+// binaries; pass nil for defaults (managed, on-demand fetch disabled).
+func NewManager(cfg *config.ClusterConfig, resolver *tools.Resolver, slug, stateDir, network string) *Manager {
+	if resolver == nil {
+		resolver = tools.NewResolver(tools.Options{})
+	}
+	return &Manager{cfg: cfg, slug: slug, stateDir: stateDir, network: network, tools: resolver}
 }
 
 // ClusterName returns the k3d cluster name (dev-friendly if not configured).
@@ -91,12 +97,12 @@ func (m *Manager) Ensure(ctx context.Context) (*state.ClusterState, error) {
 func (m *Manager) Delete(ctx context.Context) error {
 	name := m.ClusterName()
 	args := []string{"cluster", "delete", name}
-	if out, err := runCmd(ctx, "k3d", args...); err != nil {
+	if out, err := m.k3d(ctx, args...); err != nil {
 		return fmt.Errorf("cluster delete: %w\n%s", err, out)
 	}
 	if m.cfg.Registry {
 		regArgs := []string{"registry", "delete", m.RegistryName()}
-		_, _ = runCmd(ctx, "k3d", regArgs...) // best-effort
+		_, _ = m.k3d(ctx, regArgs...) // best-effort
 	}
 	return nil
 }
@@ -125,7 +131,7 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 		cs.RegistryName = &regName
 	}
 
-	if out, err := runCmd(ctx, "k3d", args...); err != nil {
+	if out, err := m.k3d(ctx, args...); err != nil {
 		return fmt.Errorf("cluster create: %w\n%s", err, out)
 	}
 
@@ -141,7 +147,7 @@ func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 	if err := os.MkdirAll(m.stateDir, 0o755); err != nil {
 		return fmt.Errorf("cluster: create state dir: %w", err)
 	}
-	out, err := runCmd(ctx, "k3d", "kubeconfig", "get", name)
+	out, err := m.k3d(ctx, "kubeconfig", "get", name)
 	if err != nil {
 		return fmt.Errorf("cluster: get kubeconfig: %w\n%s", err, out)
 	}
@@ -153,7 +159,7 @@ func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 
 // clusterExists checks via `k3d cluster list -o json` whether the named cluster is running.
 func (m *Manager) clusterExists(ctx context.Context, name string) (bool, error) {
-	out, err := runCmd(ctx, "k3d", "cluster", "list", "-o", "json")
+	out, err := m.k3d(ctx, "cluster", "list", "-o", "json")
 	if err != nil {
 		return false, nil // treat error (k3d not found, etc.) as "doesn't exist"
 	}
@@ -197,24 +203,31 @@ func runCmd(ctx context.Context, name string, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
-// KubectlApply runs kubectl apply -f path with the given kubeconfig.
-func KubectlApply(ctx context.Context, kubeconfig, path string) error {
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", "-f", path)
-	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
-	out, err := cmd.CombinedOutput()
+// k3d resolves the k3d binary (managed or system) and runs it.
+func (m *Manager) k3d(ctx context.Context, args ...string) (string, error) {
+	bin, err := m.tools.Path(ctx, tools.K3d)
 	if err != nil {
-		return fmt.Errorf("kubectl apply: %w\n%s", err, out)
+		return "", err
 	}
-	return nil
+	return runCmd(ctx, bin, args...)
 }
 
-// KubectlApplyDir runs kubectl apply -k for kustomize directories.
-func KubectlApplyDir(ctx context.Context, kubeconfig, path string, kustomize bool) error {
+// KubectlApply runs kubectl apply -f path with the given kubeconfig.
+func KubectlApply(ctx context.Context, r *tools.Resolver, kubeconfig, path string) error {
+	return KubectlApplyDir(ctx, r, kubeconfig, path, false)
+}
+
+// KubectlApplyDir runs kubectl apply -f (or -k for kustomize) on a path.
+func KubectlApplyDir(ctx context.Context, r *tools.Resolver, kubeconfig, path string, kustomize bool) error {
+	bin, err := r.Path(ctx, tools.Kubectl)
+	if err != nil {
+		return err
+	}
 	flag := "-f"
 	if kustomize {
 		flag = "-k"
 	}
-	cmd := exec.CommandContext(ctx, "kubectl", "apply", flag, path)
+	cmd := exec.CommandContext(ctx, bin, "apply", flag, path)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -224,8 +237,12 @@ func KubectlApplyDir(ctx context.Context, kubeconfig, path string, kustomize boo
 }
 
 // KubectlRollout restarts a deployment by name in the given namespace.
-func KubectlRollout(ctx context.Context, kubeconfig, namespace, name string) error {
-	cmd := exec.CommandContext(ctx, "kubectl", "rollout", "restart",
+func KubectlRollout(ctx context.Context, r *tools.Resolver, kubeconfig, namespace, name string) error {
+	bin, err := r.Path(ctx, tools.Kubectl)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, bin, "rollout", "restart",
 		fmt.Sprintf("deployment/%s", name), "-n", namespace)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
 	out, err := cmd.CombinedOutput()
@@ -237,8 +254,12 @@ func KubectlRollout(ctx context.Context, kubeconfig, namespace, name string) err
 
 // KubectlPortForward starts a port-forward subprocess in the background.
 // The caller is responsible for cancelling ctx to stop the forward.
-func KubectlPortForward(ctx context.Context, kubeconfig, namespace, target string, localPort uint16) {
-	cmd := exec.CommandContext(ctx, "kubectl", "port-forward",
+func KubectlPortForward(ctx context.Context, r *tools.Resolver, kubeconfig, namespace, target string, localPort uint16) {
+	bin, err := r.Path(ctx, tools.Kubectl)
+	if err != nil {
+		return
+	}
+	cmd := exec.CommandContext(ctx, bin, "port-forward",
 		"-n", namespace, target,
 		fmt.Sprintf("%d:%s", localPort, target[strings.LastIndex(target, ":")+1:]),
 	)

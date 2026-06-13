@@ -1044,6 +1044,39 @@ name = "custom-network-name"
 
 If omitted, devrig creates a network named `devrig-{slug}-net`.
 
+## `[tools]` section
+
+Controls how devrig resolves the external CLIs its cluster features depend on
+(`k3d`, `kubectl`, `helm`). devrig does not require these to be pre-installed:
+by default it fetches **pinned, checksum-verified** copies on demand into a
+private directory (`~/.devrig/bin`) and invokes them by absolute path, so they
+never shadow your own copies on `PATH`. Only Docker is genuinely required.
+
+```toml
+[tools]
+prefer = "vendored"                 # "vendored" (default) or "system"
+# kubectl = "/usr/local/bin/kubectl"  # explicit per-tool override
+# helm    = "/usr/local/bin/helm"
+# k3d     = "/usr/local/bin/k3d"
+```
+
+| Field     | Type   | Default      | Description                                               |
+|-----------|--------|--------------|-----------------------------------------------------------|
+| `prefer`  | string | `"vendored"` | `"vendored"` uses devrig-managed pinned copies first; `"system"` uses `PATH` first |
+| `kubectl` | string | —            | Explicit kubectl path (wins over managed and system)      |
+| `helm`    | string | —            | Explicit helm path                                        |
+| `k3d`     | string | —            | Explicit k3d path                                         |
+
+Resolution order for `prefer = "vendored"`: explicit override → managed pinned
+copy → fetch the managed copy (when interactive) → fall back to a `PATH` copy.
+`prefer = "system"` tries `PATH` before the managed copy. The pinned versions
+advance when you update devrig (they are the versions devrig is tested against);
+`devrig deps update` re-fetches them out of band.
+
+The `devrig kubectl` / `devrig k` passthrough is the exception: it always
+prefers your own `PATH` kubectl (so krew plugins and muscle memory work)
+regardless of `prefer`, while still honoring an explicit `kubectl` override.
+
 ## Template expressions
 
 Both `[env]` and `[services.*.env]` values support `{{ dotted.path }}`
@@ -1244,7 +1277,24 @@ devrig k exec -it deployment/api -- sh
 ### `devrig doctor`
 
 Check that required tools (Docker, k3d, kubectl, etc.) are installed and
-running.
+running. For the cluster tools (k3d/kubectl/helm) it reports whether a managed,
+system, or override copy will be used — a missing tool is not an error, since
+devrig fetches a managed copy on demand. See [`[tools]`](#tools-section).
+
+### `devrig deps`
+
+Manage devrig's pinned, managed copies of k3d/kubectl/helm (stored in
+`~/.devrig/bin`, invoked by absolute path — they never touch your `PATH`).
+
+```bash
+devrig deps list                 # pinned versions + which copy will be used
+devrig deps install              # fetch any missing managed tools (all)
+devrig deps install kubectl helm # fetch specific tools
+devrig deps update               # re-fetch pinned versions, overwriting
+```
+
+Downloads are verified against checksums baked into the devrig binary. See
+[`[tools]`](#tools-section) for how resolution and the `prefer` setting work.
 
 ### `devrig init`
 

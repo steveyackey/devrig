@@ -10,6 +10,7 @@ import (
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/identity"
 	"github.com/steveyackey/devrig/internal/state"
+	"github.com/steveyackey/devrig/internal/tools"
 )
 
 // NewClusterCmd returns the cluster subcommand tree.
@@ -37,7 +38,7 @@ func newClusterCreateCmd(cfgFile *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mgr := cluster.NewManager(cfg.Cluster, id.Slug, id.StateDir, "bridge")
+			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, true), id.Slug, id.StateDir, "bridge")
 			cs, err := mgr.Ensure(cmd.Context())
 			if err != nil {
 				return err
@@ -95,7 +96,7 @@ func newClusterRebuildCmd(cfgFile *string) *cobra.Command {
 				if noApply {
 					dc.Manifests = ""
 				}
-				if err := cluster.BuildAndDeploy(cmd.Context(), name, &dc, cs, id.StateDir); err != nil {
+				if err := cluster.BuildAndDeploy(cmd.Context(), tools.ResolverFromConfig(cfg.Tools, true), name, &dc, cs, id.StateDir); err != nil {
 					return fmt.Errorf("rebuild %s: %w", name, err)
 				}
 				fmt.Printf("rebuilt and deployed %s\n", name)
@@ -203,7 +204,7 @@ func newClusterDeleteCmd(cfgFile *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mgr := cluster.NewManager(cfg.Cluster, id.Slug, id.StateDir, "")
+			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, false), id.Slug, id.StateDir, "")
 			if err := mgr.Delete(cmd.Context()); err != nil {
 				return err
 			}

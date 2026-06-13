@@ -135,5 +135,14 @@ func buildTemplate(projectName, serviceName, serviceCommand string) string {
 	t += "# image = \"redis:7-alpine\"\n"
 	t += "# port = 6379\n"
 	t += "# ready_check = { type = \"cmd\", command = \"redis-cli ping\", expect = \"PONG\" }\n"
+	t += "\n"
+	t += "# -- External tools (k3d / kubectl / helm) --\n"
+	t += "# By default devrig fetches pinned, checksum-verified copies on demand\n"
+	t += "# into ~/.devrig/bin (run `devrig deps list`). Prefer your own PATH copies\n"
+	t += "# with prefer = \"system\", or point at specific binaries.\n"
+	t += "#\n"
+	t += "# [tools]\n"
+	t += "# prefer = \"vendored\"   # or \"system\"\n"
+	t += "# kubectl = \"/usr/local/bin/kubectl\"\n"
 	return t
 }
