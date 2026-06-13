@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.1](https://github.com/steveyackey/devrig/compare/v0.34.0...v0.34.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* **doctor:** report the tool copy that will actually be used ([#69](https://github.com/steveyackey/devrig/issues/69)) ([bae5919](https://github.com/steveyackey/devrig/commit/bae591934855196966c48c290e11e5ab84228673))
+
 ## [0.34.0](https://github.com/steveyackey/devrig/compare/v0.33.0...v0.34.0) (2026-06-13)
 
 
