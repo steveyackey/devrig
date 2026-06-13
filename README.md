@@ -95,7 +95,8 @@ The dashboard opens at `http://localhost:4000`.
 | `devrig delete`      | Stop services and remove all `.devrig/` state (`--all` for every project) |
 | `devrig ps`          | Show status of services in the current project    |
 | `devrig init`        | Generate a starter `devrig.toml` for your project |
-| `devrig doctor`      | Check that external dependencies are installed    |
+| `devrig doctor`      | Check dependencies; show managed/system tool resolution |
+| `devrig deps`        | Manage pinned k3d/kubectl/helm (`list`/`install`/`update`) |
 | `devrig validate`    | Validate the configuration file                   |
 | `devrig logs`        | Show and filter service logs                      |
 | `devrig env`         | Show resolved environment variables for a service |

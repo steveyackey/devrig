@@ -5,14 +5,21 @@ services into it, and using file watching for automatic rebuilds.
 
 ## Prerequisites
 
-- **Docker** -- Running and accessible without sudo.
-- **k3d** v5.x -- Lightweight k3s wrapper. Install from https://k3d.io.
-- **kubectl** -- Kubernetes CLI. Install from https://kubernetes.io/docs/tasks/tools/.
+- **Docker** -- Running and accessible without sudo. This is the only hard
+  requirement.
 
-Run `devrig doctor` to verify all tools are available:
+devrig manages **k3d**, **kubectl**, and **helm** for you: it fetches pinned,
+checksum-verified copies on demand into `~/.devrig/bin` the first time the
+cluster workflow needs them (they never shadow your own copies on `PATH`). To
+use your own instead, set `[tools] prefer = "system"`. See
+[Configuration → `[tools]`](configuration.md#tools-section).
+
+Run `devrig doctor` to see which copy of each tool will be used, or
+`devrig deps install` to fetch them ahead of time:
 
 ```bash
 devrig doctor
+devrig deps list
 ```
 
 ## Quick start
