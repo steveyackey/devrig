@@ -1165,7 +1165,7 @@ dependencies. On a filtered start, template variables that reference
 services outside the filter still resolve: fixed ports come from the
 config, auto ports from the last recorded state.
 
-### `devrig stop`
+### `devrig stop [--all]`
 
 Stop all running services and docker containers. Preserves state for restart.
 
@@ -1173,10 +1173,17 @@ All services run under a single supervisor process, so services cannot be
 stopped individually — `devrig stop <service>` is an error. To restart a
 subset, run `devrig stop` followed by `devrig start <service>`.
 
-### `devrig delete`
+`--all` stops every running devrig instance across all projects (walks the
+global instance registry — no config file needed). Failures on one instance
+are reported and skipped; the rest still stop.
+
+### `devrig delete [--all]`
 
 Stop everything and remove all Docker resources (containers, volumes,
 networks) and state files.
+
+`--all` deletes every running devrig instance across all projects, the same
+way `devrig stop --all` works.
 
 ### `devrig ps [--all]`
 

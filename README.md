@@ -91,8 +91,8 @@ The dashboard opens at `http://localhost:4000`.
 | Command              | Description                                      |
 |----------------------|--------------------------------------------------|
 | `devrig start`       | Start all services in dependency order            |
-| `devrig stop`        | Stop all running services gracefully              |
-| `devrig delete`      | Stop services and remove all `.devrig/` state     |
+| `devrig stop`        | Stop all running services gracefully (`--all` for every project) |
+| `devrig delete`      | Stop services and remove all `.devrig/` state (`--all` for every project) |
 | `devrig ps`          | Show status of services in the current project    |
 | `devrig init`        | Generate a starter `devrig.toml` for your project |
 | `devrig doctor`      | Check that external dependencies are installed    |
