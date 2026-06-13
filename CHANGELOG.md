@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.2](https://github.com/steveyackey/devrig/compare/v0.34.1...v0.34.2) (2026-06-13)
+
+
+### Bug Fixes
+
+* **doctor:** informational, works without Docker; honest Windows cluster job ([#72](https://github.com/steveyackey/devrig/issues/72)) ([2be6d79](https://github.com/steveyackey/devrig/commit/2be6d79be91c705a4e1b9f52eaa99152b6079c05))
+
 ## [0.34.1](https://github.com/steveyackey/devrig/compare/v0.34.0...v0.34.1) (2026-06-13)
 
 
