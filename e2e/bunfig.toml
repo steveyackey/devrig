@@ -1,3 +1,0 @@
-[test]
-preload = ["./setup.ts"]
-timeout = 30000

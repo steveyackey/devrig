@@ -1,10 +1,13 @@
+import { execFileSync } from 'node:child_process';
 import { chromium, type Browser, type Page } from 'playwright';
 
 function detectBaseUrl(): string {
+  // Explicit override wins (e.g. when another project's Vite is on :5173).
+  if (process.env.E2E_BASE_URL) return process.env.E2E_BASE_URL;
   // Check if Vite dev server is running on :5173
   try {
-    const res = Bun.spawnSync(['curl', '-sf', '--max-time', '1', 'http://localhost:5173']);
-    if (res.exitCode === 0) return 'http://localhost:5173';
+    execFileSync('curl', ['-sf', '--max-time', '1', 'http://localhost:5173'], { stdio: 'ignore' });
+    return 'http://localhost:5173';
   } catch {}
   return 'http://localhost:4000';
 }

@@ -3,29 +3,29 @@ import type { PhaseResult, PipelineConfig } from "../types.js";
 import { existsMilestone, read, readMilestone } from "../workspace.js";
 
 export async function verify(config: PipelineConfig, milestoneIndex: number): Promise<PhaseResult> {
-	const milestones = await read(config.workDir, "milestones.json");
-	const parsed = JSON.parse(milestones);
-	const milestone = parsed.milestones[milestoneIndex];
-	const milestoneDir = `${config.workDir}/milestone-${milestoneIndex}`;
+  const milestones = await read(config.workDir, "milestones.json");
+  const parsed = JSON.parse(milestones);
+  const milestone = parsed.milestones[milestoneIndex];
+  const milestoneDir = `${config.workDir}/milestone-${milestoneIndex}`;
 
-	let validationMd = "";
-	if (await existsMilestone(config.workDir, milestoneIndex, "validation.md")) {
-		validationMd = await readMilestone(config.workDir, milestoneIndex, "validation.md");
-	}
+  let validationMd = "";
+  if (await existsMilestone(config.workDir, milestoneIndex, "validation.md")) {
+    validationMd = await readMilestone(config.workDir, milestoneIndex, "validation.md");
+  }
 
-	let stepValidations = "";
-	if (await existsMilestone(config.workDir, milestoneIndex, "steps.json")) {
-		const stepsTxt = await readMilestone(config.workDir, milestoneIndex, "steps.json");
-		const steps = JSON.parse(stepsTxt);
-		stepValidations = steps
-			.map(
-				(s: { id: number; name: string; validation: string }) =>
-					`- **Step ${s.id} (${s.name}):** \`${s.validation}\``,
-			)
-			.join("\n");
-	}
+  let stepValidations = "";
+  if (await existsMilestone(config.workDir, milestoneIndex, "steps.json")) {
+    const stepsTxt = await readMilestone(config.workDir, milestoneIndex, "steps.json");
+    const steps = JSON.parse(stepsTxt);
+    stepValidations = steps
+      .map(
+        (s: { id: number; name: string; validation: string }) =>
+          `- **Step ${s.id} (${s.name}):** \`${s.validation}\``,
+      )
+      .join("\n");
+  }
 
-	const prompt = `You are a verification agent for milestone ${milestone.version} — "${milestone.name}" of the devrig project.
+  const prompt = `You are a verification agent for milestone ${milestone.version} — "${milestone.name}" of the devrig project.
 
 Run ALL verification checks and produce two output files:
 1. ${milestoneDir}/verification-results.md — Detailed output from every check
@@ -103,10 +103,10 @@ IMPORTANT: The "passed" top-level field should be true ONLY if ALL checks passed
 
 Run every check. Do not skip any. Do not assume results — actually run the commands.`;
 
-	return runQuery({
-		prompt,
-		config,
-		phase: `verify-${milestoneIndex}`,
-		tools: ["Read", "Write", "Bash", "Glob", "Grep"],
-	});
+  return runQuery({
+    prompt,
+    config,
+    phase: `verify-${milestoneIndex}`,
+    tools: ["Read", "Write", "Bash", "Glob", "Grep"],
+  });
 }

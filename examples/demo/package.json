@@ -1,12 +1,20 @@
 {
   "name": "devrig-demo",
   "private": true,
+  "type": "module",
+  "scripts": {
+    "api": "tsx api/index.ts",
+    "web": "tsx web/index.ts",
+    "loadgen": "tsx loadgen/index.ts"
+  },
   "dependencies": {
     "@opentelemetry/api": "^1.9",
     "@opentelemetry/sdk-node": "^0.219",
     "@opentelemetry/exporter-trace-otlp-http": "^0.219",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.219",
     "@opentelemetry/sdk-metrics": "^2.2",
-    "@opentelemetry/semantic-conventions": "^1.28"
+    "@opentelemetry/semantic-conventions": "^1.28",
+    "postgres": "^3.4",
+    "tsx": "^4.20"
   }
 }

@@ -1,0 +1,74 @@
+version: 2
+
+project_name: devrig
+
+before:
+  hooks:
+    - go mod tidy
+    # Build the Vue dashboard and stage it for go:embed.
+    - sh -c "cd web && pnpm install --frozen-lockfile && pnpm run build-only"
+    - sh -c "rm -rf internal/dashboard/dist && mkdir -p internal/dashboard/dist && cp -r web/dist/* internal/dashboard/dist/"
+
+builds:
+  - id: devrig
+    main: ./cmd/devrig
+    binary: devrig
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - embedspa
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: devrig
+    ids:
+      - devrig
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else }}{{ .Arch }}{{ end }}
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: "SHA256SUMS"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot-{{ .ShortCommit }}"
+
+changelog:
+  use: github
+  sort: asc
+  groups:
+    - title: Features
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: Bug fixes
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: Other
+      order: 999
+
+release:
+  draft: false
