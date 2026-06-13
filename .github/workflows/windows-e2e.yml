@@ -1,0 +1,106 @@
+name: Windows E2E (manual)
+
+# Manually triggered Windows validation — NOT run on every push/PR. devrig's
+# regular CI builds and unit-tests on windows-latest, and the managed-tools
+# integration job already covers fetching k3d/kubectl/helm on Windows. This
+# workflow goes further: it runs the full dashboard E2E suite on Windows (the
+# orchestrator, supervisor process handling, dashboard, and OTLP ingest), which
+# nothing else exercises on Windows.
+on:
+  workflow_dispatch:
+    inputs:
+      run_cluster_smoke:
+        description: "Attempt the k3d cluster smoke (needs Linux containers — usually unavailable on GitHub Windows runners; best-effort)"
+        type: boolean
+        default: false
+
+defaults:
+  run:
+    # Git Bash ships on windows-latest; using it lets the steps reuse the same
+    # unix-style commands as the Linux CI jobs.
+    shell: bash
+
+jobs:
+  managed-tools:
+    name: Managed tools (windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Fetch each pinned tool, verify its checksum, and run it.
+      - run: go test -tags toolsintegration -v ./internal/tools/
+
+  dashboard-e2e:
+    name: Dashboard E2E (windows)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Build dashboard
+        run: cd web && pnpm install --frozen-lockfile && pnpm run build-only
+
+      - name: Build binary with embedded dashboard
+        run: |
+          rm -rf internal/dashboard/dist
+          mkdir -p internal/dashboard/dist
+          cp -r web/dist/* internal/dashboard/dist/
+          go build -tags embedspa -o devrig.exe ./cmd/devrig
+
+      - name: Install E2E + seed deps
+        run: |
+          (cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install chromium)
+          (cd examples/telemetry-generator && pnpm install --frozen-lockfile)
+
+      # devrig start runs in the foreground, and backgrounded processes don't
+      # reliably survive between GitHub steps on Windows — so start, seed, and
+      # test all run in this one shell, with devrig stopped on exit.
+      - name: Start devrig, seed telemetry, run E2E
+        run: |
+          ./devrig.exe start -f devrig.run.toml &
+          DEVRIG_PID=$!
+          trap './devrig.exe stop -f devrig.run.toml || kill "$DEVRIG_PID" 2>/dev/null || true' EXIT
+
+          ready=0
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:4000/api/status > /dev/null; then ready=1; break; fi
+            sleep 2
+          done
+          if [ "$ready" -ne 1 ]; then
+            echo "devrig dashboard did not become ready on :4000"
+            exit 1
+          fi
+
+          (cd examples/telemetry-generator && pnpm exec tsx src/index.ts)
+          (cd e2e && pnpm test)
+
+  cluster-smoke:
+    name: Cluster smoke (windows, best-effort)
+    runs-on: windows-latest
+    if: ${{ inputs.run_cluster_smoke }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # k3d runs k3s inside Linux containers. GitHub's Windows runners default
+      # to Windows containers and have no WSL2/Docker-Desktop Linux backend, so
+      # this is expected to fail there — it is informational, not gating. If a
+      # future runner gains Linux-container support, this proves the workflow.
+      - name: Cluster smoke (managed k3d + kubectl + helm)
+        continue-on-error: true
+        run: go test -tags toolssmoke -timeout 30m -v ./internal/cluster/
