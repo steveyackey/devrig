@@ -11,6 +11,10 @@ $ErrorActionPreference = "Stop"
 $Repo = "steveyackey/devrig"
 $InstallDir = if ($env:DEVRIG_INSTALL_DIR) { $env:DEVRIG_INSTALL_DIR } else { "$env:LOCALAPPDATA\devrig\bin" }
 
+# Capture any pre-existing devrig before we install, to migrate off an old
+# cargo-dist (Rust) install (binary + devrig-update.exe sidecar + receipt).
+$preDevrig = (Get-Command devrig -ErrorAction SilentlyContinue).Source
+
 $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
 	"ARM64" { "arm64" }
 	default { "x86_64" }
@@ -52,6 +56,31 @@ try {
 		Write-Host "Added $InstallDir to your user PATH (restart your shell to pick it up)."
 	}
 	Write-Host "Installed devrig $ver to $InstallDir\devrig.exe"
+
+	# --- migrate off an old cargo-dist (Rust) install ---
+	$newBin = Join-Path $InstallDir "devrig.exe"
+	$receipt = Join-Path $env:LOCALAPPDATA "devrig\devrig-receipt.json"
+	$migrated = $false
+	if ($preDevrig -and ($preDevrig -ne $newBin)) {
+		$oldDir = Split-Path $preDevrig -Parent
+		$sidecar = Join-Path $oldDir "devrig-update.exe"
+		# Only remove something positively identified as the cargo-dist install.
+		if ((Test-Path $sidecar) -or (Test-Path $receipt)) {
+			Remove-Item -Force $preDevrig -ErrorAction SilentlyContinue
+			Remove-Item -Force $sidecar -ErrorAction SilentlyContinue
+			Write-Host "Removed old install at $preDevrig (and its devrig-update sidecar)"
+			$migrated = $true
+		}
+	}
+	$localSidecar = Join-Path $InstallDir "devrig-update.exe"
+	if (Test-Path $localSidecar) { Remove-Item -Force $localSidecar -ErrorAction SilentlyContinue; $migrated = $true }
+	if (Test-Path $receipt) {
+		Remove-Item -Force $receipt -ErrorAction SilentlyContinue
+		Remove-Item -Force (Split-Path $receipt -Parent) -ErrorAction SilentlyContinue
+		$migrated = $true
+	}
+	if ($migrated) { Write-Host "Migrated from the previous (Rust) devrig install." }
+
 	Write-Host "Run 'devrig update' to upgrade in place later."
 }
 finally {

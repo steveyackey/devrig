@@ -32,6 +32,13 @@ for arg in "$@"; do
 	esac
 done
 
+# Capture any pre-existing devrig on PATH *before* we install, so we can detect
+# and migrate off an old (cargo-dist / Rust) install that would otherwise shadow
+# ours on PATH (the Rust build installed to ~/.cargo/bin, which usually precedes
+# ~/.local/bin).
+PRE_DEVRIG="$(command -v "$BIN" 2>/dev/null || true)"
+[ -n "$PRE_DEVRIG" ] && PRE_DEVRIG="$(readlink -f "$PRE_DEVRIG" 2>/dev/null || echo "$PRE_DEVRIG")"
+
 # --- platform detection ---
 os="$(uname -s)"
 case "$os" in
@@ -106,6 +113,33 @@ chmod 0755 "$staged"
 mv -f "$staged" "$INSTALL_DIR/$BIN" || err "could not install to $INSTALL_DIR/$BIN"
 staged=""
 echo "Installed $BIN $VER to $INSTALL_DIR/$BIN"
+
+# --- migrate off an old cargo-dist (Rust) install ---
+# The Rust build installed `devrig` plus a `devrig-update` sidecar (and a
+# receipt at ~/.config/devrig/devrig-receipt.json). If such an install is still
+# present at a different location it would shadow ours on PATH, so remove it.
+receipt="${XDG_CONFIG_HOME:-$HOME/.config}/devrig/devrig-receipt.json"
+new_bin="$INSTALL_DIR/$BIN"
+migrated=0
+if [ -n "$PRE_DEVRIG" ] && [ "$PRE_DEVRIG" != "$new_bin" ]; then
+	old_dir="$(dirname "$PRE_DEVRIG")"
+	# Only remove something we positively identify as the cargo-dist install:
+	# a sidecar updater next to it, or the cargo-dist receipt.
+	if [ -f "$old_dir/$BIN-update" ] || [ -f "$receipt" ]; then
+		rm -f "$PRE_DEVRIG" "$old_dir/$BIN-update"
+		echo "Removed old install at $PRE_DEVRIG (and its ${BIN}-update sidecar)"
+		migrated=1
+	fi
+fi
+# Clean the cargo-dist sidecar/receipt even when the old binary was at our dir
+# (atomic-renamed over) or already gone.
+[ -f "$INSTALL_DIR/$BIN-update" ] && { rm -f "$INSTALL_DIR/$BIN-update"; migrated=1; }
+if [ -f "$receipt" ]; then
+	rm -f "$receipt"
+	rmdir "$(dirname "$receipt")" 2>/dev/null || true
+	migrated=1
+fi
+[ "$migrated" = "1" ] && echo "Migrated from the previous (Rust) devrig install."
 
 # --- add install dir to PATH ---
 on_path=0

@@ -37,6 +37,10 @@ func NewUpdateCmd(currentVersion string) *cobra.Command {
 		Use:   "update",
 		Short: "Update devrig to the latest release",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Clean up leftovers from a previous cargo-dist (Rust) install,
+			// regardless of whether a binary update is needed.
+			cleanupLegacyArtifacts()
+
 			rel, err := latestRelease(cmd.Context())
 			if err != nil {
 				return fmt.Errorf("fetching latest release: %w", err)
@@ -238,6 +242,57 @@ func extractFromZip(archive []byte, binName string) ([]byte, error) {
 		}
 	}
 	return nil, fmt.Errorf("binary %q not found in archive", binName)
+}
+
+// cleanupLegacyArtifacts removes leftovers from a previous cargo-dist (Rust)
+// install: the install receipt and the standalone `devrig-update` sidecar
+// binary. The Go build needs neither (update is built in). No-op when absent.
+func cleanupLegacyArtifacts() {
+	cleaned := false
+
+	// Receipt: ~/.config/devrig/devrig-receipt.json (Unix) or
+	// %LOCALAPPDATA%\devrig\devrig-receipt.json (Windows).
+	var receipt string
+	if runtime.GOOS == "windows" {
+		if la := os.Getenv("LOCALAPPDATA"); la != "" {
+			receipt = filepath.Join(la, "devrig", "devrig-receipt.json")
+		}
+	} else {
+		cfg := os.Getenv("XDG_CONFIG_HOME")
+		if cfg == "" {
+			if home, err := os.UserHomeDir(); err == nil {
+				cfg = filepath.Join(home, ".config")
+			}
+		}
+		if cfg != "" {
+			receipt = filepath.Join(cfg, "devrig", "devrig-receipt.json")
+		}
+	}
+	if receipt != "" {
+		if _, err := os.Stat(receipt); err == nil {
+			_ = os.Remove(receipt)
+			_ = os.Remove(filepath.Dir(receipt)) // only if now empty
+			cleaned = true
+		}
+	}
+
+	// Sidecar updater next to the running binary.
+	if exe, err := os.Executable(); err == nil {
+		if exe, err = filepath.EvalSymlinks(exe); err == nil {
+			sidecar := filepath.Join(filepath.Dir(exe), "devrig-update")
+			if runtime.GOOS == "windows" {
+				sidecar += ".exe"
+			}
+			if _, err := os.Stat(sidecar); err == nil {
+				_ = os.Remove(sidecar)
+				cleaned = true
+			}
+		}
+	}
+
+	if cleaned {
+		fmt.Println("Cleaned up leftover artifacts from the previous Rust install.")
+	}
 }
 
 // replaceRunningBinary writes newBin over the currently-running executable.
