@@ -40,18 +40,28 @@ func NewDoctorCmd(cfgFile *string) *cobra.Command {
 
 			// Managed cluster tools: show managed/system status. Absence is not
 			// a failure — devrig fetches a pinned copy on demand.
+			// Report the copy each tool will actually resolve to (honoring the
+			// [tools] prefer setting), and note when the other kind also exists.
 			r := depsResolver(cfgFile, false)
 			for _, t := range tools.All {
 				s := r.Status(t)
-				switch {
-				case s.OverridePath != "":
-					fmt.Printf("  ✓ %-20s  override: %s\n", t, s.OverridePath)
-				case s.ManagedPath != "":
-					fmt.Printf("  ✓ %-20s  managed %s\n", t, s.Pinned)
-				case s.SystemPath != "":
-					fmt.Printf("  ✓ %-20s  system: %s\n", t, s.SystemPath)
-				default:
+				switch s.WillUse {
+				case "":
 					fmt.Printf("  - %-20s  not installed — devrig will fetch managed %s on demand (or run `devrig deps install %s`)\n", t, s.Pinned, t)
+				case s.OverridePath:
+					fmt.Printf("  ✓ %-20s  override: %s\n", t, s.OverridePath)
+				case s.ManagedPath:
+					alt := ""
+					if s.SystemPath != "" {
+						alt = fmt.Sprintf(" (system %s also present)", s.SystemPath)
+					}
+					fmt.Printf("  ✓ %-20s  managed %s%s\n", t, s.Pinned, alt)
+				case s.SystemPath:
+					alt := ""
+					if s.ManagedPath != "" {
+						alt = fmt.Sprintf(" (managed %s also present)", s.Pinned)
+					}
+					fmt.Printf("  ✓ %-20s  system: %s%s\n", t, s.SystemPath, alt)
 				}
 			}
 

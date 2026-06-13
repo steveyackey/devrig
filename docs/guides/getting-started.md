@@ -5,12 +5,14 @@ running your first set of services.
 
 ## Prerequisites
 
-Optional (checked by `devrig doctor`):
+- **Docker** — required for container-based services and the local cluster.
 
-- **Docker** for container-based services
-- **k3d** for local Kubernetes clusters
-- **kubectl** for cluster interaction
-- **helm** for cluster addons
+The cluster tools — **k3d**, **kubectl**, and **helm** — do **not** need to be
+pre-installed. devrig fetches pinned, checksum-verified copies on demand into
+`~/.devrig/bin` (run `devrig deps list` to see them, or `devrig deps install`
+to fetch ahead of time). If you'd rather use your own copies on `PATH`, set
+`[tools] prefer = "system"`. `devrig doctor` reports which copy of each tool
+will be used.
 
 ## Install
 
