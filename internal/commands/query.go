@@ -60,21 +60,25 @@ func newQueryRelatedCmd(cfgFile *string) *cobra.Command {
 }
 
 func newQueryTracesCmd(cfgFile *string) *cobra.Command {
-	var service, search string
-	var limit int
+	var service, search, status string
+	var minDuration, limit int
 	cmd := &cobra.Command{
 		Use:   "traces",
 		Short: "List recent traces",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return queryAPI(cfgFile, "/api/traces", url.Values{
-				"service": {service},
-				"search":  {search},
-				"limit":   {fmt.Sprint(limit)},
+				"service":         {service},
+				"search":          {search},
+				"status":          {status},
+				"min_duration_ms": {fmt.Sprint(minDuration)},
+				"limit":           {fmt.Sprint(limit)},
 			})
 		},
 	}
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter by service")
 	cmd.Flags().StringVarP(&search, "search", "q", "", "Search operation name")
+	cmd.Flags().StringVar(&status, "status", "", "Filter by status (ok|error)")
+	cmd.Flags().IntVar(&minDuration, "min-duration", 0, "Minimum trace duration in ms")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 20, "Max results")
 	return cmd
 }
@@ -95,7 +99,8 @@ func newQueryLogsCmd(cfgFile *string) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter by service")
-	cmd.Flags().StringVar(&severity, "severity", "", "Filter by severity")
+	cmd.Flags().StringVar(&severity, "severity", "", "Filter by severity (minimum level)")
+	cmd.Flags().StringVar(&severity, "level", "", "Alias for --severity")
 	cmd.Flags().StringVarP(&search, "search", "q", "", "Search log body")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 50, "Max results")
 	return cmd

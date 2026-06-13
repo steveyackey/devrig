@@ -8,5 +8,10 @@
   },
   "devDependencies": {
     "tsx": "^4.20.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }

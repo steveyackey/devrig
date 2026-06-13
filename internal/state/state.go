@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -176,9 +175,9 @@ func withLock(stateDir string, fn func(*ProjectState)) {
 	}
 	defer f.Close()
 
-	// Exclusive flock.
-	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_EX)
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN) //nolint:errcheck
+	// Exclusive advisory lock across processes (multiple devrig instances).
+	lockFile(f)
+	defer unlockFile(f)
 
 	var s ProjectState
 	dec := json.NewDecoder(f)

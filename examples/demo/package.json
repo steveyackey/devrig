@@ -16,5 +16,10 @@
     "@opentelemetry/semantic-conventions": "^1.28",
     "postgres": "^3.4",
     "tsx": "^4.20"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
