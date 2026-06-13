@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.32.0](https://github.com/steveyackey/devrig/compare/v0.31.0...v0.32.0) (2026-06-13)
+
+
+### Features
+
+* **install:** PATH modification, --help, --no-modify-path, wget fallback ([91b0a26](https://github.com/steveyackey/devrig/commit/91b0a26af9eab6eda4428996edd917c6fdef74f4))
+* migrate off the old cargo-dist (Rust) install ([84327ab](https://github.com/steveyackey/devrig/commit/84327ab7407e395c76ef20c47f2b840b7a4abf20))
+* shell + powershell installers (curl|sh, irm|iex) ([564153e](https://github.com/steveyackey/devrig/commit/564153e9cc6c99a30d3b2e43f9e0947a90114360))
+
+
+### Bug Fixes
+
+* **install:** atomic binary replace (stage + rename, not cp-in-place) ([2d1e6a3](https://github.com/steveyackey/devrig/commit/2d1e6a3a9e271b98a0e72bb80bdf0dfaebc94f9c))
+
 ## [0.30.3](https://github.com/steveyackey/devrig/compare/v0.30.2...v0.30.3) (2026-06-12)
 
 
