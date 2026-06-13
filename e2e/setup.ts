@@ -1,4 +1,4 @@
-import { expect } from 'bun:test';
+import { expect } from 'vitest';
 import type { Locator } from 'playwright';
 
 /**
@@ -16,7 +16,7 @@ async function pollUntil(
   do {
     last = await fn();
     if (isNot ? !last : last) return last;
-    await Bun.sleep(100);
+    await new Promise((r) => setTimeout(r, 100));
   } while (Date.now() < deadline);
   return last;
 }

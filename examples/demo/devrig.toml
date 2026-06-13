@@ -18,17 +18,17 @@ POSTGRES_PASSWORD = "demo"
 POSTGRES_DB = "demo"
 
 [services.api]
-command = "bun run index.ts"
+command = "pnpm -C .. exec tsx api/index.ts"
 path = "./api"
 port = 3001
 depends_on = ["postgres"]
 
 [services.web]
-command = "bun run index.ts"
+command = "pnpm -C .. exec tsx web/index.ts"
 path = "./web"
 port = 3000
 
 [services.loadgen]
-command = "bun run index.ts"
+command = "pnpm -C .. exec tsx loadgen/index.ts"
 path = "./loadgen"
 depends_on = ["api"]

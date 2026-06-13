@@ -1,17 +1,22 @@
-declare module 'bun:test' {
-  interface Matchers<T> {
-    toBeVisible(options?: { timeout?: number }): Promise<void>;
-    toBeHidden(options?: { timeout?: number }): Promise<void>;
-    toHaveText(expected: string | RegExp, options?: { timeout?: number }): Promise<void>;
-    toHaveAttribute(
-      name: string,
-      value: string | RegExp,
-      options?: { timeout?: number },
-    ): Promise<void>;
-    toHaveClass(expected: string | RegExp, options?: { timeout?: number }): Promise<void>;
-    toHaveCount(expected: number, options?: { timeout?: number }): Promise<void>;
-    toHaveValue(expected: string, options?: { timeout?: number }): Promise<void>;
-    toBeDisabled(options?: { timeout?: number }): Promise<void>;
-    toBeEnabled(options?: { timeout?: number }): Promise<void>;
-  }
+import 'vitest';
+
+interface PlaywrightMatchers<R = unknown> {
+  toBeVisible(options?: { timeout?: number }): Promise<R>;
+  toBeHidden(options?: { timeout?: number }): Promise<R>;
+  toHaveText(expected: string | RegExp, options?: { timeout?: number }): Promise<R>;
+  toHaveAttribute(
+    name: string,
+    value: string | RegExp,
+    options?: { timeout?: number },
+  ): Promise<R>;
+  toHaveClass(expected: string | RegExp, options?: { timeout?: number }): Promise<R>;
+  toHaveCount(expected: number, options?: { timeout?: number }): Promise<R>;
+  toHaveValue(expected: string, options?: { timeout?: number }): Promise<R>;
+  toBeDisabled(options?: { timeout?: number }): Promise<R>;
+  toBeEnabled(options?: { timeout?: number }): Promise<R>;
+}
+
+declare module 'vitest' {
+  interface Assertion<T = any> extends PlaywrightMatchers<void> {}
+  interface AsymmetricMatchersContaining extends PlaywrightMatchers<void> {}
 }

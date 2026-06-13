@@ -1,20 +1,29 @@
-import { describe, test, beforeAll, afterAll } from 'bun:test';
+import { describe, test, beforeAll, afterAll } from 'vitest';
 import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
-import { execSync } from 'child_process';
-import * as path from 'path';
+import { execFileSync } from 'node:child_process';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const SCREENSHOT_DIR = '../docs/images';
-const GENERATOR_DIR = path.resolve(__dirname, '../../examples/telemetry-generator');
+const GENERATOR_DIR = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../examples/telemetry-generator',
+);
 
 function runGenerator() {
   const otlpPort = process.env.OTLP_HTTP_PORT ?? '4318';
-  execSync(
-    `bun run src/index.ts --otlp-url http://localhost:${otlpPort} --duration 30 --traces 20 --logs 60`,
+  execFileSync(
+    'pnpm',
+    [
+      'exec', 'tsx', 'src/index.ts',
+      '--otlp-url', `http://localhost:${otlpPort}`,
+      '--duration', '30', '--traces', '20', '--logs', '60',
+    ],
     {
       cwd: GENERATOR_DIR,
       stdio: 'pipe',
-      timeout: 30_000,
+      timeout: 60_000,
     },
   );
 }

@@ -1,4 +1,5 @@
-import { SQL } from "bun";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import postgres from "postgres";
 import {
   tracer,
   extractContext,
@@ -8,7 +9,7 @@ import {
 } from "../shared/tracing";
 
 const pgUrl = `${process.env.DEVRIG_POSTGRES_URL}/demo`;
-const sql = new SQL(pgUrl);
+const sql = postgres(pgUrl);
 const port = parseInt(process.env.PORT || "3001");
 
 function dbSpan<T>(name: string, statement: string, fn: () => Promise<T>): Promise<T> {
@@ -39,9 +40,24 @@ function dbSpan<T>(name: string, statement: string, fn: () => Promise<T>): Promi
   );
 }
 
-async function handleRequest(req: Request): Promise<Response> {
-  const url = new URL(req.url);
-  const method = req.method;
+function sendJson(res: ServerResponse, status: number, body: unknown): void {
+  const payload = JSON.stringify(body);
+  res.writeHead(status, { "content-type": "application/json;charset=utf-8" });
+  res.end(payload);
+}
+
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  const method = req.method ?? "GET";
   const path = url.pathname;
   const parentCtx = extractContext(req.headers);
 
@@ -55,7 +71,7 @@ async function handleRequest(req: Request): Promise<Response> {
       // GET /api/health
       if (path === "/api/health" && method === "GET") {
         span.setAttribute("http.status_code", 200);
-        return Response.json({ status: "ok" });
+        return sendJson(res, 200, { status: "ok" });
       }
 
       // GET /api/todos
@@ -66,16 +82,16 @@ async function handleRequest(req: Request): Promise<Response> {
           () => sql`SELECT * FROM todos ORDER BY created_at DESC`,
         );
         span.setAttribute("http.status_code", 200);
-        return Response.json(rows);
+        return sendJson(res, 200, rows);
       }
 
       // POST /api/todos
       if (path === "/api/todos" && method === "POST") {
-        const body = await req.json();
+        const body = JSON.parse(await readBody(req));
         const title = body?.title;
         if (!title || typeof title !== "string") {
           span.setAttribute("http.status_code", 400);
-          return Response.json({ error: "title is required" }, { status: 400 });
+          return sendJson(res, 400, { error: "title is required" });
         }
         const rows = await dbSpan(
           "INSERT todo",
@@ -83,7 +99,7 @@ async function handleRequest(req: Request): Promise<Response> {
           () => sql`INSERT INTO todos (title) VALUES (${title}) RETURNING *`,
         );
         span.setAttribute("http.status_code", 201);
-        return Response.json(rows[0], { status: 201 });
+        return sendJson(res, 201, rows[0]);
       }
 
       // PATCH /api/todos/:id
@@ -98,10 +114,10 @@ async function handleRequest(req: Request): Promise<Response> {
         );
         if (rows.length === 0) {
           span.setAttribute("http.status_code", 404);
-          return Response.json({ error: "not found" }, { status: 404 });
+          return sendJson(res, 404, { error: "not found" });
         }
         span.setAttribute("http.status_code", 200);
-        return Response.json(rows[0]);
+        return sendJson(res, 200, rows[0]);
       }
 
       // DELETE /api/todos/:id
@@ -115,22 +131,30 @@ async function handleRequest(req: Request): Promise<Response> {
         );
         if (rows.length === 0) {
           span.setAttribute("http.status_code", 404);
-          return Response.json({ error: "not found" }, { status: 404 });
+          return sendJson(res, 404, { error: "not found" });
         }
         span.setAttribute("http.status_code", 204);
-        return new Response(null, { status: 204 });
+        res.writeHead(204);
+        return res.end();
       }
 
       span.setAttribute("http.status_code", 404);
-      return Response.json({ error: "not found" }, { status: 404 });
+      return sendJson(res, 404, { error: "not found" });
     },
     parentCtx,
   );
 }
 
-Bun.serve({
-  port,
-  fetch: handleRequest,
+const server = createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "application/json;charset=utf-8" });
+    }
+    res.end(JSON.stringify({ error: message }));
+  });
 });
 
-console.log(`api listening on :${port}`);
+server.listen(port, () => {
+  console.log(`api listening on :${port}`);
+});

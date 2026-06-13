@@ -1,10 +1,11 @@
+import { readFile } from "node:fs/promises";
 import { runQuery } from "../query.js";
 import type { PhaseResult, PipelineConfig } from "../types.js";
 
 export async function parse(config: PipelineConfig): Promise<PhaseResult> {
-	const prdContent = await Bun.file(config.prdPath).text();
+  const prdContent = await readFile(config.prdPath, "utf8");
 
-	const prompt = `You are parsing a Product Requirements Document (PRD) into structured milestones for an automated build pipeline.
+  const prompt = `You are parsing a Product Requirements Document (PRD) into structured milestones for an automated build pipeline.
 
 Read the PRD content below, then produce a JSON file at: ${config.workDir}/milestones.json
 
@@ -53,11 +54,11 @@ After writing, verify the file is valid JSON by reading it back.
 ${prdContent}
 </prd>`;
 
-	return runQuery({
-		prompt,
-		config,
-		phase: "parse",
-		tools: ["Read", "Write", "Bash"],
-		cwd: config.workDir,
-	});
+  return runQuery({
+    prompt,
+    config,
+    phase: "parse",
+    tools: ["Read", "Write", "Bash"],
+    cwd: config.workDir,
+  });
 }

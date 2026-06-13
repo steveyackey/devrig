@@ -8,7 +8,7 @@ Accepted
 
 Multiple configuration formats are commonly used in developer tooling: YAML,
 JSON, TOML, HCL, and others. Projects like Docker Compose use YAML, Terraform
-uses HCL, and many Rust tools use TOML.
+uses HCL, and many Go and Rust tools use TOML.
 
 We need to choose a configuration format for `devrig.toml`. The choice affects
 error messages, editor support, the learning curve for users, and maintenance
@@ -23,17 +23,18 @@ documentation since every example would need to be shown in each format.
 Use TOML exclusively for all devrig configuration. The config file is always
 named `devrig.toml`. No alternative formats are supported or planned.
 
-The `toml` crate (v0.8) is used for deserialization into strongly typed Rust
-structs via serde. A custom `Deserialize` implementation is used for the `Port`
-type to accept either an integer or the string `"auto"`.
+The `BurntSushi/toml` package is used to decode the file into strongly typed Go
+structs. A custom `UnmarshalTOML` implementation is used for the `Port` type to
+accept either an integer or the string `"auto"`.
 
 ## Consequences
 
 **Positive:**
 
-- Familiar to Rust developers who already use `Cargo.toml` daily.
-- The `toml` crate produces clear, line-numbered error messages when
-  deserialization fails, making misconfiguration easy to diagnose.
+- Familiar to developers who already use `Cargo.toml`, `pyproject.toml`, or
+  similar TOML config daily.
+- The `BurntSushi/toml` decoder produces clear error messages when decoding
+  fails, making misconfiguration easy to diagnose.
 - No YAML gotchas (the Norway problem, implicit type coercion, significant
   whitespace).
 - Single format means every documentation example works as-is.

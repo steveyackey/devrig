@@ -30,12 +30,18 @@ export const tracer = trace.getTracer("demo");
 
 export { SpanKind, SpanStatusCode, context, propagation, trace };
 
-/** Extract W3C trace context from incoming request headers. */
-export function extractContext(headers: Headers): Context {
+/** Extract W3C trace context from incoming request headers (node:http style). */
+export function extractContext(
+  headers: Record<string, string | string[] | undefined>,
+): Context {
   const carrier: Record<string, string> = {};
-  headers.forEach((value, key) => {
-    carrier[key] = value;
-  });
+  for (const [key, value] of Object.entries(headers)) {
+    if (typeof value === "string") {
+      carrier[key] = value;
+    } else if (Array.isArray(value)) {
+      carrier[key] = value[0];
+    }
+  }
   return propagation.extract(context.active(), carrier);
 }
 

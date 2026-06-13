@@ -1,0 +1,11 @@
+allowBuilds:
+  esbuild: true
+  vue-demi: false
+catalog:
+  vite: npm:@voidzero-dev/vite-plus-core@^0.1.24
+  vite-plus: ^0.1.24
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"

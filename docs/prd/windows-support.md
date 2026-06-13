@@ -2,17 +2,38 @@
 
 ## Status
 
-Proposed
+Partially superseded — recommend human review.
+
+Much of this PRD's original premise has since been implemented during the Go
+rewrite, via per-package build-tag files rather than the single centralized
+platform module proposed below:
+
+- **Shell selection** — the supervisor already runs commands through `cmd /C`
+  on Windows and `sh -c` elsewhere (`internal/supervisor/supervisor.go`).
+- **Process-group / signal handling** — split across build-tag files
+  (`internal/orchestrator/signal_{unix,windows}.go`,
+  `internal/supervisor/process_{unix,windows}.go`).
+- **Process liveness** — handled per-platform in the same build-tag files.
+- **Home directory** — already cross-platform via `os.UserHomeDir()`
+  (`internal/registry/registry.go`).
+- **CI** — Windows (`windows-latest`) already runs `go build`, `go test`, and
+  `go vet` in `.github/workflows/ci.yml`.
+
+**Still open:** graceful Windows shutdown (the current Windows path is a hard
+`Process.Kill()`, not a SIGTERM-equivalent with a grace period) and port-owner
+identification (devrig currently reports only "port N in use", with no owning
+process name, on every platform). The sections below are kept for historical
+context and as a backlog for the remaining work; treat the implementation
+details as illustrative of intent, not as the current code.
 
 ## Problem Statement
 
-devrig currently targets Linux and macOS exclusively. All process lifecycle
-management uses Unix-specific APIs (`nix` crate, `sh -c`, `killpg`, process
-groups, `/proc` filesystem), and the `#[cfg(not(unix))]` fallbacks are stubs
-that return `false` or silently skip functionality. A developer on Windows
-cannot use devrig at all -- services won't terminate gracefully, port-owner
-identification is disabled, process liveness checks always return false, and
-the home directory lookup uses `$HOME` which is not set by default on Windows.
+The Go rewrite uses Unix-specific syscalls for process lifecycle management
+(`syscall.SIGTERM`, process groups via `Setpgid`, `Kill(-pgid, …)`). The
+Windows build-tag files currently fall back to a hard `Process.Kill()` with no
+graceful shutdown, and port-owner identification is not implemented on any
+platform. The goal of this PRD is full Windows feature parity: graceful
+shutdown of process trees and richer port-conflict diagnostics.
 
 Windows is the most popular desktop OS for developers. The 2024 Stack Overflow
 Developer Survey shows ~60% of professional developers use Windows as their
@@ -32,7 +53,7 @@ prefer a Linux environment on Windows.
 - Fix all 6 identified platform gaps (detailed below)
 - Windows CI (compile + unit tests + integration tests)
 - WSL2 getting-started guide
-- Conditional compilation with `#[cfg(windows)]` / `#[cfg(unix)]` where APIs
+- Per-platform build-tag files (`*_windows.go` / `*_unix.go`) where APIs
   diverge, sharing code where they don't
 
 ### Out of scope
@@ -46,83 +67,65 @@ prefer a Linux environment on Windows.
 
 Six areas of the codebase contain Unix-specific code that must be ported.
 
-### 1. Shell execution (`supervisor.rs:100`)
+### 1. Shell execution (`internal/supervisor/supervisor.go`)
 
-**Current:** `Command::new("sh").arg("-c").arg(&self.command)`
+**Current:** `exec.Command("sh", "-c", command)` on Unix; `exec.Command("cmd",
+"/C", command)` on Windows (already implemented).
 
-Commands are spawned via `sh -c`, which does not exist natively on Windows.
+**Impact:** Resolved — services start on Windows via `cmd /C`.
 
-**Impact:** Complete -- no service can start on Windows.
-
-### 2. Process group lifecycle (`supervisor.rs:114-338`)
+### 2. Process group lifecycle (`internal/supervisor/process_{unix,windows}.go`)
 
 **Current:**
-- `cmd.process_group(0)` creates a new Unix process group.
-- `killpg(pgid, Signal::SIGTERM)` sends SIGTERM to the group.
-- 5-second grace period, then `SIGKILL`.
-- `#[cfg(not(unix))]` fallback calls `child.kill()` with no graceful shutdown.
+- Unix: `Setpgid` puts the process in its own group; `Kill(-pgid, SIGTERM)`
+  with a 5-second grace period then `SIGKILL`.
+- Windows: `setProcGroup` is a no-op and `terminateProcess` calls
+  `Process.Kill()` with no graceful shutdown.
 
-**Impact:** Services and their child processes cannot be terminated gracefully.
-Orphaned processes will leak on stop/Ctrl+C.
+**Impact:** On Windows, services and their child processes cannot be terminated
+gracefully. Orphaned descendant processes may leak on stop/Ctrl+C.
 
-### 3. Process liveness detection (`commands/ps.rs:156-169`)
+### 3. Process liveness detection (`internal/orchestrator/signal_{unix,windows}.go`)
 
-**Current:** `nix::sys::signal::kill(Pid, None)` (the Unix `kill(pid, 0)`
-idiom). The `#[cfg(not(unix))]` branch returns `false` unconditionally.
+**Current:** Unix uses `Process.Signal(syscall.Signal(0))` (the `kill(pid, 0)`
+idiom). The Windows `isAlive` falls back to returning `false`.
 
-**Impact:** `devrig ps` always shows all services as "stopped" on Windows.
+**Impact:** `devrig ps` may show services as "stopped" on Windows.
 
-### 4. Home directory resolution (`orchestrator/registry.rs:20`)
+### 4. Home directory resolution (`internal/registry/registry.go`)
 
-**Current:** `std::env::var("HOME").unwrap_or("/tmp")` -- used to locate the
-global instance registry at `~/.devrig/instances.json`.
+**Current:** `os.UserHomeDir()` — used to locate the global instance registry
+at `~/.devrig/instances.json`.
 
-**Impact:** On Windows, `HOME` is usually unset. The fallback to `/tmp` is an
-invalid path. The registry file will fail to write, breaking `devrig ps --all`
-and multi-instance tracking.
+**Impact:** Resolved — `os.UserHomeDir()` is cross-platform (it uses
+`%USERPROFILE%` on Windows).
 
-### 5. Port owner identification (`orchestrator/ports.rs:89-150`)
+### 5. Port owner identification (`internal/ports/ports.go`)
 
-**Current:** Reads `/proc/net/tcp` and `/proc/<pid>/fd` symlinks to map a port
-to a process name. Gated on `#[cfg(target_os = "linux")]`. The
-`#[cfg(not(target_os = "linux"))]` branch returns `None`.
+**Current:** Not implemented on any platform. A port conflict is reported as
+"port N required by … is already in use" without the owning process name.
 
-**Impact:** Port-conflict error messages lose the "in use by X (PID Y)" detail
-on both macOS and Windows. macOS already has this gap; Windows needs its own
-implementation.
+**Impact:** Port-conflict messages lose the "in use by X (PID Y)" detail. A
+Linux implementation (parsing `/proc/net/tcp`) and a Windows implementation
+(IP Helper API) would both be new work.
 
-### 6. `nix` crate dependency (`Cargo.toml:18`)
+### 6. Platform-specific syscalls (build tags)
 
-**Current:** `nix = { version = "0.29", features = ["signal", "process"] }` is
-an unconditional dependency. The `nix` crate does not compile on Windows.
+**Current:** Unix signal handling lives in `*_unix.go` files behind a
+`//go:build !windows` tag; the Windows counterparts live in `*_windows.go`
+files behind `//go:build windows`. Go's standard `syscall`/`os` packages cover
+both, so no third-party platform dependency is required.
 
-**Impact:** `cargo build` fails on Windows targets.
+**Impact:** `go build` already succeeds for Windows targets; the remaining work
+is enriching the Windows code paths, not making them compile.
 
 ## Design
 
 ### 1. Shell execution
 
-**Windows:** Use `cmd.exe /C` as the shell wrapper.
-
-```rust
-#[cfg(unix)]
-fn shell_command(script: &str) -> Command {
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(script);
-    cmd
-}
-
-#[cfg(windows)]
-fn shell_command(script: &str) -> Command {
-    let mut cmd = Command::new("cmd.exe");
-    cmd.arg("/C").arg(script);
-    cmd
-}
-```
-
-Place this in a new `src/platform.rs` module that centralizes all
-platform-specific helpers. The supervisor calls `platform::shell_command()`
-instead of hard-coding `sh -c`.
+**Windows:** Use `cmd /C` as the shell wrapper (already implemented — the
+supervisor selects `cmd /C` on Windows and `sh -c` elsewhere at runtime via a
+`runtime.GOOS` check in `internal/supervisor/supervisor.go`).
 
 **Alternative considered:** Always use `sh` and require Git Bash / MSYS2 on
 PATH. Rejected -- introduces an undocumented dependency and breaks for users
@@ -134,152 +137,69 @@ A future `shell` config key could let users opt into PowerShell per-service.
 
 ### 2. Process group lifecycle
 
-**Windows:** Use Win32 Job Objects to group a process and all its descendants.
+**Windows:** Use Win32 Job Objects to group a process and all its descendants,
+so the whole tree can be terminated together. The remaining design:
 
-```rust
-#[cfg(windows)]
-fn spawn_in_job(cmd: &mut Command) -> Result<(Child, JobHandle)> {
-    // 1. CreateJobObjectW(NULL, NULL)
-    // 2. SetInformationJobObject with JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
-    // 3. Spawn child
-    // 4. AssignProcessToJobObject(job, child_handle)
-}
-```
+1. Create a Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, spawn the
+   child, and assign it to the job.
+2. For graceful shutdown, send `CTRL_BREAK_EVENT` to the process group
+   (requires `CREATE_NEW_PROCESS_GROUP` on spawn), wait up to 5 seconds
+   (matching the Unix grace period), then fall back to `TerminateJobObject`
+   (the SIGKILL-equivalent for the whole job).
 
-For graceful shutdown:
-
-1. Send `CTRL_BREAK_EVENT` via `GenerateConsoleCtrlEvent` to the process
-   group (requires `CREATE_NEW_PROCESS_GROUP` on spawn).
-2. Wait up to 5 seconds for exit (matching the Unix grace period).
-3. Fall back to `TerminateJobObject` (equivalent of SIGKILL to the entire
-   job, killing all descendants).
-
-Use the `windows-sys` crate for raw Win32 FFI (zero-cost, official Microsoft
-crate). Avoid pulling in the full `windows` crate to minimize compile time.
-
-**Graceful shutdown detail:** `CTRL_BREAK_EVENT` is the Windows equivalent of
-SIGTERM for console applications. Most Node.js, Python, and Go runtimes
-handle it correctly. If the process doesn't handle it, the 5-second timeout
-and `TerminateJobObject` ensure cleanup.
+This would live in `internal/supervisor/process_windows.go`, replacing the
+current hard `Process.Kill()`. Go can reach the Win32 APIs through
+`golang.org/x/sys/windows`. `CTRL_BREAK_EVENT` is the Windows analogue of
+SIGTERM for console apps; most Node.js, Python, and Go runtimes handle it.
 
 ### 3. Process liveness detection
 
-**Windows:** Use `OpenProcess` with `PROCESS_QUERY_LIMITED_INFORMATION` access,
-then check the result.
-
-```rust
-#[cfg(windows)]
-fn is_process_alive(pid: u32) -> bool {
-    use windows_sys::Win32::System::Threading::*;
-    unsafe {
-        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
-        if handle == 0 {
-            return false;
-        }
-        let mut exit_code: u32 = 0;
-        let alive = GetExitCodeProcess(handle, &mut exit_code) != 0
-            && exit_code == STILL_ACTIVE;
-        CloseHandle(handle);
-        alive
-    }
-}
-```
+**Windows:** Use `OpenProcess` with `PROCESS_QUERY_LIMITED_INFORMATION`, then
+`GetExitCodeProcess`, treating `STILL_ACTIVE` as alive. This would replace the
+current `isAlive` fallback in the Windows build-tag file.
 
 ### 4. Home directory resolution
 
-**Cross-platform fix:** Replace the `$HOME` lookup with `dirs::home_dir()` from
-the `dirs` crate (or the equivalent `std::env::var("USERPROFILE")` on Windows).
-
-The simplest and most portable approach:
-
-```rust
-fn devrig_home() -> PathBuf {
-    // Works on Linux ($HOME), macOS ($HOME), Windows (%USERPROFILE%)
-    dirs::home_dir()
-        .expect("could not determine home directory")
-        .join(".devrig")
-}
-```
-
-This fixes the existing code for all platforms, not just Windows. The `dirs`
-crate is a lightweight, well-maintained dependency (~30 LOC, no transitive
-deps).
+**Resolved.** `internal/registry/registry.go` already uses `os.UserHomeDir()`,
+which resolves `%USERPROFILE%` on Windows and `$HOME` on Unix, and joins
+`.devrig/instances.json`. No further change is needed.
 
 ### 5. Port owner identification
 
-**Windows:** Use `GetExtendedTcpTable` from the IP Helper API to map a local
-port to a PID, then `OpenProcess` + `QueryFullProcessImageNameW` to get the
-process name.
+This is unimplemented on every platform today. To enrich port-conflict
+messages with the owning process name:
 
-```rust
-#[cfg(windows)]
-pub fn identify_port_owner(port: u16) -> Option<String> {
-    // 1. GetExtendedTcpTable(AF_INET, TCP_TABLE_OWNER_PID_LISTENER)
-    //    -> MIB_TCPTABLE_OWNER_PID rows
-    // 2. Find row where dwLocalPort == port
-    // 3. OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, row.dwOwningPid)
-    // 4. QueryFullProcessImageNameW -> exe path
-    // 5. Return "notepad.exe (PID 1234)" style string
-}
-```
+- **Linux:** parse `/proc/net/tcp` and the `/proc/<pid>/fd` symlinks.
+- **Windows:** use `GetExtendedTcpTable` (IP Helper API) to map the local port
+  to a PID, then `OpenProcess` + `QueryFullProcessImageNameW` for the exe name.
+- **macOS:** shell out to `lsof -i :<port> -P -n` (or use `libproc`).
 
-This also fills the existing gap on macOS, where `identify_port_owner` currently
-returns `None`. A macOS implementation using `lsof -i :<port> -P -n` (or
-`libproc`) can be added in the same milestone but is not required for this PRD.
+Each would be a per-platform build-tag file under `internal/ports/`.
 
-### 6. `nix` crate conditionalization
+### 6. Platform-specific syscalls
 
-**Fix:** Make `nix` a Unix-only dependency and add `windows-sys` for Windows.
+No third-party platform crate is needed in Go: the standard `os`, `syscall`,
+and (for richer Win32 access) `golang.org/x/sys/windows` packages cover the
+required APIs. Divergent code is already isolated in `*_unix.go` /
+`*_windows.go` files guarded by `//go:build` tags, so each platform compiles
+only its own implementation.
 
-```toml
-[target.'cfg(unix)'.dependencies]
-nix = { version = "0.29", features = ["signal", "process"] }
+### Platform boundary
 
-[target.'cfg(windows)'.dependencies]
-windows-sys = { version = "0.59", features = [
-    "Win32_System_Threading",
-    "Win32_System_Console",
-    "Win32_System_JobObjects",
-    "Win32_Security",
-    "Win32_NetworkManagement_IpHelper",
-    "Win32_Foundation",
-] }
-```
-
-All `use nix::` imports are already behind `#[cfg(unix)]` in the source. The
-only change needed in `Cargo.toml` is moving the dependency under
-`[target.'cfg(unix)'.dependencies]`.
-
-### New module: `src/platform.rs`
-
-All platform-specific code is consolidated into a single module with a clean
-internal API:
-
-```rust
-// src/platform.rs
-
-/// Build a Command that runs `script` through the platform shell.
-pub fn shell_command(script: &str) -> Command;
-
-/// Check if a process is still alive.
-pub fn is_process_alive(pid: u32) -> bool;
-
-/// Return the user's home directory.
-pub fn home_dir() -> PathBuf;
-
-/// Identify which process owns a given TCP port.
-pub fn identify_port_owner(port: u16) -> Option<String>;
-```
-
-The supervisor and other modules call into `platform::*` instead of using
-inline `#[cfg]` blocks scattered throughout the codebase. This makes the
-platform boundary explicit and testable.
+Rather than a single centralized platform module, devrig keeps each platform
+detail next to the package that needs it, in paired build-tag files
+(`signal_{unix,windows}.go`, `process_{unix,windows}.go`, and any future
+`ports/*_{unix,windows}.go`). The shared code calls one function name
+(`sendStop`, `terminateProcess`, `isAlive`, …) and the build tag selects the
+right implementation. This keeps the platform boundary explicit and each file
+testable on its own OS.
 
 ## Testing Strategy
 
 ### CI matrix
 
-Add a `windows-latest` runner to the GitHub Actions CI workflow:
+The CI workflow already runs a `windows-latest` runner alongside
+`ubuntu-latest`. A `macos-latest` runner could be added for full coverage:
 
 ```yaml
 strategy:
@@ -291,72 +211,56 @@ strategy:
 
 | Tier | What | Runs on |
 |------|------|---------|
-| Compile | `cargo check --all-targets` | All 3 OSes |
-| Unit tests | `cargo test` (no integration feature) | All 3 OSes |
-| Integration | `cargo test --features integration` | Linux + macOS (Docker required) |
-| Windows integration | Subset of integration tests using `#[cfg(windows)]` | Windows (Docker Desktop required) |
+| Compile | `go build ./...` | All 3 OSes |
+| Unit / `go test` | `go test ./...`, `go vet ./...` | All 3 OSes |
+| Docker-dependent | tests that spawn containers | Linux + macOS (Docker required) |
+| Windows-specific | process-tree shutdown assertions | Windows |
 
 ### Platform-specific test guards
 
-Integration tests that send Unix signals (`nix::sys::signal::kill`) need
-Windows equivalents or must be skipped:
-
-```rust
-#[cfg(unix)]
-{
-    nix::sys::signal::kill(pid, Signal::SIGINT);
-}
-#[cfg(windows)]
-{
-    // Use GenerateConsoleCtrlEvent or taskkill
-    std::process::Command::new("taskkill")
-        .args(["/PID", &pid.to_string()])
-        .status()
-        .unwrap();
-}
-```
-
-Tests that verify graceful shutdown behavior (SIGTERM -> wait -> SIGKILL) will
-have Windows-specific assertions that verify the Job Object cleanup path.
+Tests that exercise Unix signals must be guarded with build tags
+(`//go:build !windows` / `//go:build windows`) or skipped at runtime via
+`runtime.GOOS`, with a Windows equivalent (e.g. `taskkill /PID`) where one is
+needed. Tests that verify graceful shutdown (SIGTERM → wait → SIGKILL) would
+gain Windows-specific assertions for the Job Object cleanup path once
+implemented.
 
 ### Docker requirement
 
-Integration tests require Docker. On Windows CI, Docker Desktop is not
-available by default on GitHub Actions `windows-latest`. Options:
+Some tests require Docker. On Windows CI, Docker Desktop is not available by
+default on GitHub Actions `windows-latest`. Options:
 
-1. **Skip Docker-dependent tests on Windows CI** with
-   `#[cfg_attr(windows, ignore)]` and run them manually or in a self-hosted
+1. **Skip Docker-dependent tests on Windows CI** (e.g. behind a build tag or
+   a `runtime.GOOS`/env-var check) and run them manually or on a self-hosted
    runner.
 2. **Use Docker-in-Docker** via a Windows container agent (complex, not
    recommended for initial rollout).
 
-Recommendation: Option 1 for the initial release. Docker-dependent integration
-tests run on Linux/macOS CI; Windows CI runs compile + unit + non-Docker
-integration tests.
+Recommendation: Option 1 for the initial release. Docker-dependent tests run on
+Linux/macOS CI; Windows CI runs build + `go test` + non-Docker tests.
 
 ## Milestones
 
-### M1: Compilation (no runtime)
+### M1: Compilation (no runtime) — done
 
-**Goal:** `cargo check --target x86_64-pc-windows-msvc` passes.
+**Goal:** `go build ./...` passes for Windows.
 
-- Move `nix` to `[target.'cfg(unix)'.dependencies]`
-- Add `windows-sys` to `[target.'cfg(windows)'.dependencies]`
-- Create `src/platform.rs` with stub implementations for Windows
-- Add `windows-latest` to CI matrix (compile-only)
+- Isolate platform syscalls in `*_unix.go` / `*_windows.go` build-tag files
+- Add `windows-latest` to the CI matrix (build + `go test` + `go vet`)
 
-**Verification:** CI green on all 3 OSes.
+**Status:** Already complete — the Go rewrite ships build-tag files and Windows
+CI is green.
 
 ### M2: Core runtime
 
-**Goal:** `devrig start` / `devrig stop` work on Windows.
+**Goal:** `devrig start` / `devrig stop` work cleanly on Windows.
 
-- Implement `platform::shell_command()` using `cmd.exe /C`
-- Implement Job Object process group management
-- Implement `CTRL_BREAK_EVENT` graceful shutdown with 5s timeout
-- Implement `platform::is_process_alive()` via `OpenProcess`
-- Fix home directory with `dirs::home_dir()`
-- Port unit tests, add Windows-specific unit tests
+- Shell selection via `cmd /C` (done)
+- Implement Job Object process-group management in `process_windows.go`
+- Implement `CTRL_BREAK_EVENT` graceful shutdown with a 5s timeout
+- Implement a real `isAlive` for Windows via `OpenProcess`
+- Cross-platform home directory via `os.UserHomeDir()` (done)
+- Add Windows-specific unit tests
 
 **Verification:** `devrig start` runs services, `Ctrl+C` stops them cleanly,
 `devrig ps` shows correct status. Manual testing on a Windows machine.
@@ -365,7 +269,7 @@ integration tests.
 
 **Goal:** Full feature parity with Linux.
 
-- Implement `identify_port_owner` using `GetExtendedTcpTable`
+- Implement port-owner identification using `GetExtendedTcpTable`
 - Verify Docker Desktop integration (container lifecycle, port mapping)
 - Verify k3d integration on Windows
 - Add Windows-specific integration tests to CI
@@ -397,9 +301,9 @@ Include a `docs/guides/wsl2.md` guide covering:
 # Install WSL2 (PowerShell, admin)
 wsl --install -d Ubuntu
 
-# Inside WSL2:
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-cargo install devrig
+# Inside WSL2: download the latest Linux release binary and put it on PATH,
+# or `go install github.com/steveyackey/devrig/cmd/devrig@latest`
+# (see docs/guides/getting-started.md for both options)
 
 # Docker: Install Docker Desktop for Windows, enable WSL2 backend
 # The `docker` CLI is automatically available inside WSL2

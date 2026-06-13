@@ -1,25 +1,29 @@
+import { readFile } from "node:fs/promises";
 import { runQuery } from "../query.js";
 import type { PhaseResult, PipelineConfig } from "../types.js";
 import { existsMilestone, read, readMilestone } from "../workspace.js";
 
-export async function research(config: PipelineConfig, milestoneIndex: number): Promise<PhaseResult> {
-	const milestones = await read(config.workDir, "milestones.json");
-	const parsed = JSON.parse(milestones);
-	const milestone = parsed.milestones[milestoneIndex];
+export async function research(
+  config: PipelineConfig,
+  milestoneIndex: number,
+): Promise<PhaseResult> {
+  const milestones = await read(config.workDir, "milestones.json");
+  const parsed = JSON.parse(milestones);
+  const milestone = parsed.milestones[milestoneIndex];
 
-	// Gather context from prior milestones
-	const priorContext: string[] = [];
-	for (let i = 0; i < milestoneIndex; i++) {
-		if (await existsMilestone(config.workDir, i, "report.md")) {
-			const report = await readMilestone(config.workDir, i, "report.md");
-			priorContext.push(`## Milestone ${i} (${parsed.milestones[i].version}) Report\n\n${report}`);
-		}
-	}
+  // Gather context from prior milestones
+  const priorContext: string[] = [];
+  for (let i = 0; i < milestoneIndex; i++) {
+    if (await existsMilestone(config.workDir, i, "report.md")) {
+      const report = await readMilestone(config.workDir, i, "report.md");
+      priorContext.push(`## Milestone ${i} (${parsed.milestones[i].version}) Report\n\n${report}`);
+    }
+  }
 
-	const prdContent = await Bun.file(config.prdPath).text();
-	const milestoneDir = `${config.workDir}/milestone-${milestoneIndex}`;
+  const prdContent = await readFile(config.prdPath, "utf8");
+  const milestoneDir = `${config.workDir}/milestone-${milestoneIndex}`;
 
-	const prompt = `You are a research agent preparing for milestone ${milestone.version} — "${milestone.name}" of the devrig project.
+  const prompt = `You are a research agent preparing for milestone ${milestone.version} — "${milestone.name}" of the devrig project.
 
 Your goal is to research best practices, crate/library choices, design patterns, and implementation strategies for this milestone's features. Write your findings to: ${milestoneDir}/research.md
 
@@ -67,10 +71,10 @@ Structure the output as:
 - ## Risks and Considerations
 - ## References`;
 
-	return runQuery({
-		prompt,
-		config,
-		phase: `research-${milestoneIndex}`,
-		tools: ["Read", "Write", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"],
-	});
+  return runQuery({
+    prompt,
+    config,
+    phase: `research-${milestoneIndex}`,
+    tools: ["Read", "Write", "Glob", "Grep", "Bash", "WebSearch", "WebFetch"],
+  });
 }

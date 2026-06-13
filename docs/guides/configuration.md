@@ -41,7 +41,7 @@ and `depends_on` references.
 
 ```toml
 [services.api]
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 ```
 
 ### Full service
@@ -49,7 +49,7 @@ command = "cargo watch -x run"
 ```toml
 [services.api]
 path = "./services/api"
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000
 depends_on = ["postgres", "redis"]
 
@@ -90,7 +90,7 @@ The `command` string is passed to `sh -c`, so shell features (pipes,
 redirects, `&&` chains) work:
 
 ```toml
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 command = "npm run dev -- --port $PORT"
 ```
 
@@ -142,7 +142,7 @@ service names, docker names, or compose service names:
 
 ```toml
 [services.api]
-command = "cargo run"
+command = "go run ./cmd/api"
 depends_on = ["postgres", "redis"]  # postgres is [docker.postgres]
 ```
 
@@ -728,8 +728,8 @@ retention = "1h"
 | `log_buffer`   | integer | `100000` | Maximum number of log records stored           |
 | `retention`    | string  | `"1h"`   | How long to keep telemetry data (e.g. `"1h"`, `"30m"`, `"2h30m"`) |
 
-The `retention` field accepts any duration string supported by the
-`humantime` crate. Telemetry older than the retention period is
+The `retention` field accepts any duration string supported by Go's
+`time.ParseDuration`. Telemetry older than the retention period is
 automatically swept from memory every 30 seconds. If the buffer fills
 before the retention period, the oldest entries are evicted first.
 
@@ -778,7 +778,7 @@ type = "pg_isready"
 
 [services.api]
 path = "./api"
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000
 depends_on = ["postgres"]
 [services.api.env]
@@ -893,7 +893,7 @@ is resolved later, so both can coexist in the same value.
 ### Lookup order
 
 1. Values from `.env` files (project-level and per-service)
-2. Host process environment (`std::env::var`)
+2. Host process environment (`os.Environ`)
 
 ### Escaping
 
@@ -921,7 +921,7 @@ name = "myapp"
 env_file = ".env"              # project-wide secrets
 
 [services.api]
-command = "cargo run"
+command = "go run ./cmd/api"
 env_file = ".env.api"          # per-service overrides
 ```
 
@@ -1245,9 +1245,10 @@ Generate a starter `devrig.toml` based on project type detection.
 
 ### `devrig validate`
 
-Validate the configuration file and report errors with rich diagnostics.
-Uses rustc-style error messages with source spans, labels, and "did you
-mean?" suggestions for typos.
+Validate the configuration file and report errors. Decoding errors (malformed
+TOML/YAML, wrong types) and semantic errors (unknown dependency references,
+duplicate ports, dependency cycles, empty commands) are reported so you can fix
+them before starting services.
 
 ```bash
 devrig validate
@@ -1339,7 +1340,7 @@ expect = "PONG"
 
 [services.api]
 path = "./api"
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000
 depends_on = ["postgres", "redis"]
 [services.api.env]
@@ -1396,9 +1397,10 @@ With this configuration:
 
 ## Validation rules
 
-devrig validates the configuration before starting any services. Errors are
-displayed with rich diagnostics powered by miette, including source spans,
-labels, and "did you mean?" suggestions for typos.
+devrig validates the configuration before starting any services. Decoding
+errors (malformed TOML/YAML, wrong types) and semantic errors (unknown
+dependency references, duplicate ports, dependency cycles, empty commands) are
+reported so you can fix them before anything starts.
 
 Run `devrig validate` to check your config without starting services.
 

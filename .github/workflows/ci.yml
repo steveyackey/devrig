@@ -14,52 +14,41 @@ on:
       - 'docs/**'
       - 'LICENSE'
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  check:
-    name: Check (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Create dashboard dist stub
-        run: mkdir -p dashboard/dist
-        shell: bash
-      - run: cargo check
-
   test:
-    name: Test (${{ matrix.os }})
+    name: Go test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Create dashboard dist stub
-        run: mkdir -p dashboard/dist
-        shell: bash
-      - run: cargo test
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go build ./...
+      - run: go test ./...
+      - run: go vet ./...
 
-  clippy:
-    name: Clippy
+  typecheck-web:
+    name: Frontend type check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: pnpm/action-setup@v4
         with:
-          components: clippy
-      - uses: Swatinem/rust-cache@v2
-      - name: Create dashboard dist stub
-        run: mkdir -p dashboard/dist
-      - run: cargo clippy -- -D warnings
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Check (format, lint, types)
+        run: |
+          cd web
+          pnpm install --frozen-lockfile
+          pnpm run check
+          pnpm run type-check
 
   e2e:
     name: E2E
@@ -67,21 +56,35 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
       - name: Build dashboard
-        run: cd dashboard && bun install --frozen-lockfile && bun run build
-      - name: Rebuild binary with embedded dashboard
-        run: touch src/dashboard/static_files.rs && cargo build
+        run: cd web && pnpm install --frozen-lockfile && pnpm run build-only
+      - name: Build binary with embedded dashboard
+        run: |
+          rm -rf internal/dashboard/dist
+          mkdir -p internal/dashboard/dist
+          cp -r web/dist/* internal/dashboard/dist/
+          go build -tags embedspa -o devrig ./cmd/devrig
       - name: Install Playwright browsers
-        run: cd e2e && bun install --frozen-lockfile && bunx playwright install chromium
+        run: cd e2e && pnpm install --frozen-lockfile && pnpm exec playwright install --with-deps chromium
       - name: Start devrig
         run: |
-          ./target/debug/devrig start -f devrig.run.toml &
+          ./devrig start -f devrig.run.toml &
           for i in $(seq 1 30); do
             curl -sf http://localhost:4000/api/status > /dev/null && break
             sleep 2
           done
+      - name: Seed telemetry
+        run: cd examples/telemetry-generator && pnpm install --frozen-lockfile && pnpm exec tsx src/index.ts
       - name: Run E2E tests
-        run: cd e2e && bun test
+        run: cd e2e && pnpm test

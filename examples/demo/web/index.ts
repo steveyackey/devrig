@@ -1,47 +1,79 @@
-import { join } from "path";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import { dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   extractContext,
   withSpan,
   injectHeaders,
   SpanKind,
-  context,
 } from "../shared/tracing";
 
 const port = parseInt(process.env.PORT || "3000");
 const apiUrl = process.env.DEVRIG_API_URL || "http://localhost:3001";
-const publicDir = join(import.meta.dir, "public");
+const publicDir = join(dirname(fileURLToPath(import.meta.url)), "public");
 
-async function handleRequest(req: Request): Promise<Response> {
-  const url = new URL(req.url);
+const mimeTypes: Record<string, string> = {
+  ".html": "text/html;charset=utf-8",
+  ".js": "text/javascript;charset=utf-8",
+  ".css": "text/css;charset=utf-8",
+  ".json": "application/json;charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".txt": "text/plain;charset=utf-8",
+};
+
+function readBody(req: IncomingMessage): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const url = new URL(req.url ?? "/", "http://localhost");
   const path = url.pathname;
+  const method = req.method ?? "GET";
   const parentCtx = extractContext(req.headers);
 
   // Proxy /api/* to the api service
   if (path.startsWith("/api/")) {
     return withSpan(
-      `proxy ${req.method} ${path}`,
+      `proxy ${method} ${path}`,
       SpanKind.SERVER,
       async (serverSpan) => {
-        serverSpan.setAttribute("http.method", req.method);
+        serverSpan.setAttribute("http.method", method);
         serverSpan.setAttribute("http.url", path);
 
         const response = await withSpan(
-          `${req.method} ${apiUrl}${path}`,
+          `${method} ${apiUrl}${path}`,
           SpanKind.CLIENT,
           async (clientSpan) => {
-            clientSpan.setAttribute("http.method", req.method);
+            clientSpan.setAttribute("http.method", method);
             clientSpan.setAttribute("http.url", `${apiUrl}${path}`);
 
-            const headers = new Headers(req.headers);
+            const headers = new Headers();
+            for (const [k, v] of Object.entries(req.headers)) {
+              if (v === undefined) continue;
+              if (k === "host" || k === "connection" || k === "content-length") continue;
+              headers.set(k, Array.isArray(v) ? v.join(", ") : v);
+            }
             const traceHeaders = injectHeaders();
             for (const [k, v] of Object.entries(traceHeaders)) {
               headers.set(k, v);
             }
 
+            const body =
+              method === "GET" || method === "HEAD" ? undefined : await readBody(req);
+
             const upstream = await fetch(`${apiUrl}${path}`, {
-              method: req.method,
+              method,
               headers,
-              body: req.body,
+              body,
             });
 
             clientSpan.setAttribute("http.status_code", upstream.status);
@@ -51,10 +83,16 @@ async function handleRequest(req: Request): Promise<Response> {
 
         serverSpan.setAttribute("http.status_code", response.status);
 
-        return new Response(response.body, {
-          status: response.status,
-          headers: response.headers,
+        const responseHeaders: Record<string, string> = {};
+        response.headers.forEach((v, k) => {
+          if (k === "content-encoding" || k === "content-length" || k === "transfer-encoding" || k === "connection") {
+            return;
+          }
+          responseHeaders[k] = v;
         });
+        res.writeHead(response.status, responseHeaders);
+        const responseBody = Buffer.from(await response.arrayBuffer());
+        res.end(responseBody.length > 0 ? responseBody : undefined);
       },
       parentCtx,
     );
@@ -62,17 +100,28 @@ async function handleRequest(req: Request): Promise<Response> {
 
   // Serve static files
   const filePath = path === "/" ? "/index.html" : path;
-  const file = Bun.file(join(publicDir, filePath));
-  if (await file.exists()) {
-    return new Response(file);
+  try {
+    const contents = await readFile(join(publicDir, filePath));
+    const contentType = mimeTypes[extname(filePath).toLowerCase()] ?? "application/octet-stream";
+    res.writeHead(200, { "content-type": contentType });
+    res.end(contents);
+    return;
+  } catch {
+    res.writeHead(404, { "content-type": "text/plain;charset=utf-8" });
+    res.end("Not Found");
   }
-
-  return new Response("Not Found", { status: 404 });
 }
 
-Bun.serve({
-  port,
-  fetch: handleRequest,
+const server = createServer((req, res) => {
+  handleRequest(req, res).catch((err) => {
+    const message = err instanceof Error ? err.message : String(err);
+    if (!res.headersSent) {
+      res.writeHead(500, { "content-type": "text/plain;charset=utf-8" });
+    }
+    res.end(message);
+  });
 });
 
-console.log(`web listening on :${port}`);
+server.listen(port, () => {
+  console.log(`web listening on :${port}`);
+});

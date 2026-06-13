@@ -28,32 +28,21 @@ Explore metrics with sparkline cards and expandable time-series charts:
 
 ## Install
 
-**Shell installer** (recommended — Linux/macOS):
+**Prebuilt binaries** (Linux/macOS/Windows) — download the archive for your
+platform from the [latest release](https://github.com/steveyackey/devrig/releases/latest)
+and put `devrig` on your `PATH`.
+
+**From source** (Go 1.26+):
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.sh | sh
+go install github.com/steveyackey/devrig/cmd/devrig@latest
 ```
 
-**PowerShell installer** (Windows):
+(Note: `go install` builds without the embedded dashboard UI — use a release
+binary for the full dashboard, or build with `-tags embedspa` after staging
+`web/dist` into `internal/dashboard/dist`.)
 
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.ps1 | iex"
-```
-
-These installers include a built-in updater — run `devrig update` to get the
-latest version.
-
-**cargo binstall** (prebuilt binary, no updater):
-
-```bash
-cargo binstall devrig
-```
-
-**From source:**
-
-```bash
-cargo install devrig
-```
+Run `devrig update` to get the latest version.
 
 ## Quickstart
 
@@ -71,7 +60,7 @@ name = "myapp"
 [dashboard]
 
 [services.api]
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000
 
 [services.web]
@@ -128,24 +117,22 @@ The dashboard opens at `http://localhost:4000`.
 6. **Observe** — a built-in OTel collector receives traces, metrics, and logs
    over OTLP (HTTP :4318 / gRPC :4317) and serves them to the dashboard and
    CLI query commands.
-7. **Dashboard** — an embedded SolidJS app on :4000 provides real-time views
+7. **Dashboard** — an embedded Vue app on :4000 provides real-time views
    of service status, traces, logs, and metrics.
 8. **Shutdown** — Ctrl+C triggers graceful shutdown: SIGTERM to process groups,
    grace period, then SIGKILL. Containers and state are cleaned up.
 
 ## Tech stack
 
-- **Rust** with Tokio async runtime
-- **clap** for CLI parsing
-- **petgraph** for dependency resolution
-- **serde** + **toml** for configuration
-- **bollard** for Docker container management
-- **tonic** + **opentelemetry-proto** for OTLP ingest
-- **axum** for the dashboard API and WebSocket server
-- **rust-embed** for compiled-in frontend assets
-- **miette** / **thiserror** / **anyhow** for error reporting
-- **SolidJS** + **Vite** + **Tailwind v4** for the dashboard
-- **Kobalte** for accessible UI primitives
+- **Go** (goroutines + channels for orchestration)
+- **cobra** for CLI parsing
+- **BurntSushi/toml** + **yaml.v3** for configuration
+- **docker/docker** client for container management
+- **grpc-go** + **opentelemetry-proto** for OTLP ingest
+- **net/http** for the dashboard API and WebSocket server (nhooyr.io/websocket)
+- **go:embed** for compiled-in frontend assets
+- **yauth** for the built-in OIDC provider
+- **Vue 3** + **Vite** + **Tailwind v4** for the dashboard
 
 ## Documentation
 

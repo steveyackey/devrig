@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { describe, test, expect, beforeAll, afterAll, beforeEach, afterEach } from 'vitest';
 import { sharedBrowser, newPage } from '../helpers';
 import type { Browser, Page } from 'playwright';
 

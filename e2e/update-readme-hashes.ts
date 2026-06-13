@@ -12,11 +12,12 @@
  * no README diff.
  */
 
-import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, readdirSync } from "fs";
-import { createHash } from "crypto";
-import { resolve, basename } from "path";
+import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, readdirSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { resolve, basename, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const ROOT = resolve(__dirname, "..");
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const README = resolve(ROOT, "README.md");
 const IMAGES_DIR = resolve(ROOT, "docs/images");
 

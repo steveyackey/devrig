@@ -1,16 +1,25 @@
+# Binaries
+/devrig
+/devrig-*
+
 # Runtime state
 .devrig/
+
+# Go frontend embed staging (copied from web/dist at build time)
+internal/dashboard/dist/*
+!internal/dashboard/dist/.gitkeep
+
+# Web frontend
+web/node_modules/
+web/dist/
 
 # Pipeline runtime artifacts
 pipeline/agent-data/
 pipeline/node_modules/
 pipeline/dist/
-pipeline/bun.lock
 
-
-# Dashboard frontend
-dashboard/node_modules/
-dashboard/dist/
+# Telemetry generator
+examples/telemetry-generator/node_modules/
 
 # Claude Code
 .claude/worktrees/
@@ -18,7 +27,3 @@ dashboard/dist/
 # E2E
 e2e/node_modules/
 test-results/
-
-# Added by cargo
-
-/target

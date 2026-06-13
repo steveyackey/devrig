@@ -3,27 +3,37 @@ import type { PhaseResult, PipelineConfig } from "../types.js";
 import { exists, existsMilestone, read, readMilestone } from "../workspace.js";
 
 export async function report(config: PipelineConfig, milestoneIndex: number): Promise<PhaseResult> {
-	const milestones = await read(config.workDir, "milestones.json");
-	const parsed = JSON.parse(milestones);
-	const milestone = parsed.milestones[milestoneIndex];
-	const milestoneDir = `${config.workDir}/milestone-${milestoneIndex}`;
+  const milestones = await read(config.workDir, "milestones.json");
+  const parsed = JSON.parse(milestones);
+  const milestone = parsed.milestones[milestoneIndex];
+  const milestoneDir = `${config.workDir}/milestone-${milestoneIndex}`;
 
-	// Collect all milestone artifacts
-	const artifacts: string[] = [];
+  // Collect all milestone artifacts
+  const artifacts: string[] = [];
 
-	for (const file of ["research.md", "plan.md", "steps.json", "execution-results.md", "verification-results.md"]) {
-		if (await existsMilestone(config.workDir, milestoneIndex, file)) {
-			const content = await readMilestone(config.workDir, milestoneIndex, file);
-			artifacts.push(`## ${file}\n\n${content}`);
-		}
-	}
+  for (const file of [
+    "research.md",
+    "plan.md",
+    "steps.json",
+    "execution-results.md",
+    "verification-results.md",
+  ]) {
+    if (await existsMilestone(config.workDir, milestoneIndex, file)) {
+      const content = await readMilestone(config.workDir, milestoneIndex, file);
+      artifacts.push(`## ${file}\n\n${content}`);
+    }
+  }
 
-	let verificationStatus = "";
-	if (await existsMilestone(config.workDir, milestoneIndex, "verification-status.json")) {
-		verificationStatus = await readMilestone(config.workDir, milestoneIndex, "verification-status.json");
-	}
+  let verificationStatus = "";
+  if (await existsMilestone(config.workDir, milestoneIndex, "verification-status.json")) {
+    verificationStatus = await readMilestone(
+      config.workDir,
+      milestoneIndex,
+      "verification-status.json",
+    );
+  }
 
-	const prompt = `You are generating a milestone report for ${milestone.version} — "${milestone.name}" of the devrig project.
+  const prompt = `You are generating a milestone report for ${milestone.version} — "${milestone.name}" of the devrig project.
 
 Synthesize all artifacts from this milestone into a clear, comprehensive report.
 
@@ -54,36 +64,36 @@ Structure:
 
 Be factual — reference actual files, test names, and error messages. Don't invent or assume results.`;
 
-	return runQuery({
-		prompt,
-		config,
-		phase: `report-${milestoneIndex}`,
-		tools: ["Read", "Write", "Glob", "Grep"],
-	});
+  return runQuery({
+    prompt,
+    config,
+    phase: `report-${milestoneIndex}`,
+    tools: ["Read", "Write", "Glob", "Grep"],
+  });
 }
 
 export async function finalReport(config: PipelineConfig): Promise<PhaseResult> {
-	const milestones = await read(config.workDir, "milestones.json");
-	const parsed = JSON.parse(milestones);
+  const milestones = await read(config.workDir, "milestones.json");
+  const parsed = JSON.parse(milestones);
 
-	// Collect all milestone reports
-	const milestoneReports: string[] = [];
-	for (let i = 0; i < parsed.milestones.length; i++) {
-		if (await existsMilestone(config.workDir, i, "report.md")) {
-			const report = await readMilestone(config.workDir, i, "report.md");
-			milestoneReports.push(
-				`## Milestone ${i} — ${parsed.milestones[i].version}: ${parsed.milestones[i].name}\n\n${report}`,
-			);
-		}
-	}
+  // Collect all milestone reports
+  const milestoneReports: string[] = [];
+  for (let i = 0; i < parsed.milestones.length; i++) {
+    if (await existsMilestone(config.workDir, i, "report.md")) {
+      const report = await readMilestone(config.workDir, i, "report.md");
+      milestoneReports.push(
+        `## Milestone ${i} — ${parsed.milestones[i].version}: ${parsed.milestones[i].name}\n\n${report}`,
+      );
+    }
+  }
 
-	// Read pipeline state
-	let pipelineState = "";
-	if (await exists(config.workDir, "pipeline-state.json")) {
-		pipelineState = await read(config.workDir, "pipeline-state.json");
-	}
+  // Read pipeline state
+  let pipelineState = "";
+  if (await exists(config.workDir, "pipeline-state.json")) {
+    pipelineState = await read(config.workDir, "pipeline-state.json");
+  }
 
-	const prompt = `You are generating the final comprehensive report for the devrig project pipeline.
+  const prompt = `You are generating the final comprehensive report for the devrig project pipeline.
 
 All milestones have been processed. Synthesize everything into a final report.
 
@@ -115,10 +125,10 @@ Structure:
 
 Also explore the current codebase to verify the final state matches expectations.`;
 
-	return runQuery({
-		prompt,
-		config,
-		phase: "final-report",
-		tools: ["Read", "Write", "Glob", "Grep", "Bash"],
-	});
+  return runQuery({
+    prompt,
+    config,
+    phase: "final-report",
+    tools: ["Read", "Write", "Glob", "Grep", "Bash"],
+  });
 }

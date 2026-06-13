@@ -1,9 +1,12 @@
 {
   "name": "devrig-telemetry-generator",
   "private": true,
+  "type": "module",
   "scripts": {
-    "generate": "bun run src/index.ts",
-    "generate:continuous": "bun run src/index.ts --continuous"
+    "generate": "tsx src/index.ts",
+    "generate:continuous": "tsx src/index.ts --continuous"
   },
-  "dependencies": {}
+  "devDependencies": {
+    "tsx": "^4.20.0"
+  }
 }

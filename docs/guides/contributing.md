@@ -4,96 +4,122 @@
 
 ### Prerequisites
 
-- Rust 1.75+ (install via [rustup](https://rustup.rs/))
+- Go (see `go.mod` for the required version)
+- Node.js 20+ and [pnpm](https://pnpm.io/) (for the `web/` dashboard and `e2e/`)
 - Git
 
 ### Clone and build
 
 ```bash
-git clone https://github.com/your-org/devrig.git
+git clone https://github.com/steveyackey/devrig.git
 cd devrig
-cargo build
+go build ./...
+```
+
+To build the binary **with the embedded dashboard**:
+
+```bash
+cd web && pnpm install && pnpm run build-only
+cd .. && cp -r web/dist/* internal/dashboard/dist/
+go build -tags embedspa ./cmd/devrig
 ```
 
 ### Run from source
 
 ```bash
-cargo run -- start
-cargo run -- doctor
-cargo run -- --help
+go run ./cmd/devrig start
+go run ./cmd/devrig doctor
+go run ./cmd/devrig --help
+```
+
+For dashboard hot-reload, run with `--dev` (spawns Vite on `:5173`, proxying
+`/api` and `/ws` to the Go server on `:4000`):
+
+```bash
+go run ./cmd/devrig start --dev -f devrig.run.toml
 ```
 
 ### Run tests
 
 ```bash
-cargo test
+go test ./...
+go vet ./...
 ```
 
-### Run integration tests
+Some tests spawn real processes and bind ports; they are slower than pure unit
+tests and should pass before submitting a PR.
 
-Integration tests are gated behind a feature flag to avoid running them in
-quick feedback loops:
+### Frontend checks
 
 ```bash
-cargo test --features integration
+cd web
+pnpm run check        # format + lint (Biome) + checks
+pnpm run type-check   # vue-tsc
 ```
 
-Integration tests may spawn real processes and bind ports. They are slower
-than unit tests and should be run before submitting a PR.
+### E2E tests
 
-### Check formatting and lints
+The dashboard E2E suite uses Playwright via vitest (`vp test`) and requires a
+running devrig with the embedded dashboard:
 
 ```bash
-cargo fmt --check
-cargo clippy -- -D warnings
+cd e2e && pnpm test
 ```
 
 ## Code organization
 
 ```
-src/
-  main.rs                  Entrypoint. Initializes tracing, parses CLI,
-                           dispatches to commands or orchestrator.
+cmd/devrig/
+  main.go                  Entrypoint. Wires up the cobra command tree and
+                           dispatches to commands or the orchestrator.
 
-  lib.rs                   Declares public modules.
-
-  cli.rs                   Clap derive structs (Cli, GlobalOpts, Commands).
-
-  identity.rs              ProjectIdentity: name + SHA-256 slug derivation.
+internal/
+  identity/identity.go     ProjectIdentity: name + SHA-256 slug derivation.
 
   config/
-    mod.rs                 load_config() -- reads file and deserializes TOML.
-    model.rs               DevrigConfig, ServiceConfig, Port enum with
-                           custom serde Visitor.
-    resolve.rs             find_config() walk-up search, resolve_config()
-                           for -f flag.
-    validate.rs            Semantic validation: dependency refs, duplicate
+    load.go                Reads the config file and decodes TOML/YAML.
+    model.go               Config, ServiceConfig, Port with custom
+                           UnmarshalTOML/UnmarshalYAML.
+    resolve.go             Walk-up config discovery and -f flag handling.
+    interpolate.go         Template-variable interpolation.
+    validate.go            Semantic validation: dependency refs, duplicate
                            ports, cycles, empty commands.
 
+  graph/graph.go           Resolver: unified dependency DAG (services, docker,
+                           compose, cluster) with Kahn's topological sort.
+
   orchestrator/
-    mod.rs                 Orchestrator struct. Coordinates start, stop,
-                           delete flows. Spawns supervisors, manages state.
-    graph.rs               DependencyResolver using petgraph DiGraph.
-                           Topological sort for start order.
-    ports.rs               check_port_available(), find_free_port(),
-                           identify_port_owner() (Linux /proc parsing).
-    registry.rs            InstanceRegistry: global ~/.devrig/instances.json.
-    state.rs               ProjectState: per-project .devrig/state.json.
-    supervisor.rs          ServiceSupervisor: process lifecycle, stdout/stderr
-                           piping, restart with exponential backoff, SIGTERM/
-                           SIGKILL shutdown.
+    orchestrator.go        Orchestrator: coordinates start, stop, delete flows.
+                           Spawns supervisors, manages state.
+    signal_unix.go /       Per-platform shutdown signal handling (build tags).
+    signal_windows.go
+
+  supervisor/
+    supervisor.go          Process lifecycle, stdout/stderr piping, restart
+                           with exponential backoff, SIGTERM/SIGKILL shutdown.
+    process_unix.go /      Per-platform process-group control (build tags).
+    process_windows.go
+
+  ports/ports.go           Availability checks, free-port assignment, port
+                           owner identification.
+  registry/registry.go     Global ~/.devrig/instances.json registry.
+  state/state.go           Per-project .devrig/state.json persistence.
+
+  otel/                    In-memory OTLP receiver + telemetry store.
+  dashboard/               net/http API, WebSocket, embedded SPA (go:embed).
+  docker/, compose/,       Docker, compose, and k3d cluster integrations.
+  cluster/
 
   commands/
-    mod.rs                 Module declarations for subcommands.
-    init.rs                Generate starter devrig.toml. Detects project type
-                           (Cargo.toml, package.json, go.mod, Python).
-    doctor.rs              Checks for docker, k3d, kubectl, helm.
-    ps.rs                  Displays local project status or all instances.
+    init.go                Generate starter devrig.toml. Detects project type
+                           (go.mod, package.json, Cargo.toml, Python).
+    doctor.go              Checks for docker, k3d, kubectl, helm.
+    ps.go                  Displays local project status or all instances.
+    start.go, stop.go,     One file per subcommand.
+    logs.go, query.go, ...
 
-  ui/
-    mod.rs                 Module declarations for UI components.
-    logs.rs                LogWriter: async mpsc receiver, color-coded output.
-    summary.rs             print_startup_summary(): table of services, ports.
+web/                       Vue 3 + Tailwind v4 + Vite dashboard (pnpm).
+e2e/                       Playwright + vitest dashboard tests (pnpm).
 ```
 
 ## Architecture decisions
@@ -121,12 +147,13 @@ before proposing changes to core behavior:
 
 3. **Run the full check suite** before submitting:
    ```bash
-   cargo fmt --check && cargo clippy -- -D warnings && cargo test
+   go build ./... && go vet ./... && go test ./...
    ```
+   For dashboard changes, also run `cd web && pnpm run check && pnpm run type-check`.
 
-4. **Follow existing patterns.** The codebase uses `anyhow::Result` for
-   fallible operations, `thiserror` for typed error enums in library code,
-   and `BTreeMap` (not `HashMap`) for deterministic ordering.
+4. **Follow existing patterns.** The codebase wraps errors with `fmt.Errorf`
+   and `%w`, threads a `context.Context` for cancellation, and sorts map keys
+   explicitly where deterministic ordering matters.
 
 5. **Update documentation** if your change affects user-facing behavior,
    configuration options, or architectural decisions.
