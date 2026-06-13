@@ -20,10 +20,5 @@
     "typescript": "^5.7.2",
     "vite": "npm:@voidzero-dev/vite-plus-core@^0.1.24",
     "vite-plus": "^0.1.24"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
   }
 }
