@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.33.0](https://github.com/steveyackey/devrig/compare/v0.32.0...v0.33.0) (2026-06-13)
+
+
+### Features
+
+* restore Rust-era CLI parity (stop/delete --all, logs flags) ([#65](https://github.com/steveyackey/devrig/issues/65)) ([e8b8da7](https://github.com/steveyackey/devrig/commit/e8b8da7565b564bfc24d9b6550dcbca249b6885c))
+
 ## [0.32.0](https://github.com/steveyackey/devrig/compare/v0.31.0...v0.32.0) (2026-06-13)
 
 
