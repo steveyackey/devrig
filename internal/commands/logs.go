@@ -3,8 +3,10 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"time"
 
@@ -16,7 +18,7 @@ import (
 
 // NewLogsCmd queries stored logs from the running devrig dashboard.
 func NewLogsCmd(cfgFile *string) *cobra.Command {
-	var service, severity, search, exclude, since string
+	var service, severity, search, exclude, since, format, output string
 	var limit int
 	var follow, timestamps bool
 
@@ -24,6 +26,12 @@ func NewLogsCmd(cfgFile *string) *cobra.Command {
 		Use:   "logs [services...]",
 		Short: "Query stored logs from the running devrig instance",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			switch format {
+			case "", "text", "json":
+			default:
+				return fmt.Errorf("invalid --format %q (text|json)", format)
+			}
+
 			dashPort, err := dashboardPort(cfgFile)
 			if err != nil {
 				return err
@@ -31,6 +39,17 @@ func NewLogsCmd(cfgFile *string) *cobra.Command {
 			// Positional service arg (Rust CLI parity).
 			if service == "" && len(args) > 0 {
 				service = args[0]
+			}
+
+			// Output sink: stdout by default, or a file when -o is given.
+			out := io.Writer(os.Stdout)
+			if output != "" {
+				f, ferr := os.Create(output)
+				if ferr != nil {
+					return fmt.Errorf("opening output file: %w", ferr)
+				}
+				defer f.Close()
+				out = f
 			}
 
 			var excludeRe *regexp.Regexp
@@ -80,10 +99,18 @@ func NewLogsCmd(cfgFile *string) *cobra.Command {
 					if excludeRe != nil && excludeRe.MatchString(body) {
 						continue
 					}
+					if format == "json" {
+						line, merr := json.Marshal(l)
+						if merr != nil {
+							continue
+						}
+						fmt.Fprintf(out, "%s\n", line)
+						continue
+					}
 					if timestamps {
-						fmt.Printf("[%s] [%s] [%s] %s\n", ts, svc, sev, body)
+						fmt.Fprintf(out, "[%s] [%s] [%s] %s\n", ts, svc, sev, body)
 					} else {
-						fmt.Printf("[%s] [%s] %s\n", svc, sev, body)
+						fmt.Fprintf(out, "[%s] [%s] %s\n", svc, sev, body)
 					}
 				}
 				return nil
@@ -102,14 +129,16 @@ func NewLogsCmd(cfgFile *string) *cobra.Command {
 
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Filter by service name")
 	cmd.Flags().StringVar(&severity, "severity", "", "Filter by severity (debug|info|warn|error)")
-	cmd.Flags().StringVar(&severity, "level", "", "Alias for --severity")
+	cmd.Flags().StringVarP(&severity, "level", "l", "", "Alias for --severity")
 	cmd.Flags().StringVarP(&search, "grep", "g", "", "Search log body")
-	cmd.Flags().StringVar(&exclude, "exclude", "", "Exclude lines matching this regex")
+	cmd.Flags().StringVarP(&exclude, "exclude", "v", "", "Exclude lines matching this regex")
 	cmd.Flags().StringVar(&since, "since", "", "Only logs newer than a duration (5m) or RFC3339 time")
 	cmd.Flags().IntVarP(&limit, "limit", "n", 100, "Maximum number of log records")
 	cmd.Flags().IntVar(&limit, "tail", 100, "Alias for --limit")
-	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Poll for new logs every 2s")
+	cmd.Flags().BoolVarP(&follow, "follow", "F", false, "Poll for new logs every 2s")
 	cmd.Flags().BoolVarP(&timestamps, "timestamps", "t", false, "Show timestamps")
+	cmd.Flags().StringVar(&format, "format", "text", "Output format: text or json")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "Write output to a file instead of stdout")
 	return cmd
 }
 

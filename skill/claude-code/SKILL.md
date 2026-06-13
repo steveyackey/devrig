@@ -114,3 +114,4 @@ version = "1.2.0"
 - Output formats: `--format table` (human), `--format json` (pretty), `--format jsonl` (pipe to jq)
 - `devrig logs -F` for live tailing, `devrig query logs` for OTel-collected logs
 - `devrig stop` always stops the whole project (one supervisor process — no per-service stop). To restart one service: `devrig stop`, then `devrig start <service>` (other services' template vars still resolve from config/state)
+- `devrig stop --all` / `devrig delete --all` act on every running devrig instance across all projects (no config file needed) — useful for clearing out stale instances
