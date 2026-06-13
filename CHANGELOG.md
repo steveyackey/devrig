@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.34.0](https://github.com/steveyackey/devrig/compare/v0.33.0...v0.34.0) (2026-06-13)
+
+
+### Features
+
+* managed k3d/kubectl/helm with pinned, checksum-verified fetch ([#67](https://github.com/steveyackey/devrig/issues/67)) ([1770953](https://github.com/steveyackey/devrig/commit/177095363707884ba2c98ebb9a86b890a73a8124))
+
+
+### Bug Fixes
+
+* **cluster:** helm addons passed `helm upgrade --install --include-crds`, ([1770953](https://github.com/steveyackey/devrig/commit/177095363707884ba2c98ebb9a86b890a73a8124))
+
 ## [0.33.0](https://github.com/steveyackey/devrig/compare/v0.32.0...v0.33.0) (2026-06-13)
 
 
