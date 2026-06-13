@@ -1,19 +1,36 @@
 #!/bin/sh
 # devrig installer — downloads the latest release archive, verifies its
-# SHA256, and installs the `devrig` binary (dashboard included).
+# SHA256, installs the `devrig` binary (dashboard included), and adds the
+# install dir to your PATH.
 #
 #   curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/install.sh | sh
 #
-# Env overrides:
-#   DEVRIG_INSTALL_DIR   target dir (default: $HOME/.local/bin)
-#   DEVRIG_VERSION       version tag to install (default: latest)
+# Flags / env:
+#   --help                  show this help
+#   --no-modify-path        don't touch shell rc files (or DEVRIG_NO_MODIFY_PATH=1)
+#   DEVRIG_INSTALL_DIR=DIR   install location (default: $HOME/.local/bin)
+#   DEVRIG_VERSION=vX.Y.Z    version to install (default: latest)
 set -eu
 
 REPO="steveyackey/devrig"
 BIN="devrig"
 INSTALL_DIR="${DEVRIG_INSTALL_DIR:-$HOME/.local/bin}"
+MODIFY_PATH="${DEVRIG_NO_MODIFY_PATH:+0}"
+MODIFY_PATH="${MODIFY_PATH:-1}"
 
+usage() {
+	sed -n '2,15p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//'
+	exit 0
+}
 err() { echo "devrig-install: $*" >&2; exit 1; }
+
+for arg in "$@"; do
+	case "$arg" in
+		--help | -h) usage ;;
+		--no-modify-path) MODIFY_PATH=0 ;;
+		*) err "unknown argument: $arg (try --help)" ;;
+	esac
+done
 
 # --- platform detection ---
 os="$(uname -s)"
@@ -22,7 +39,6 @@ case "$os" in
 	Darwin) OS="darwin" ;;
 	*) err "unsupported OS: $os (use the prebuilt archive or 'go install')" ;;
 esac
-
 arch="$(uname -m)"
 case "$arch" in
 	x86_64 | amd64) ARCH="x86_64" ;;
@@ -30,14 +46,22 @@ case "$arch" in
 	*) err "unsupported architecture: $arch" ;;
 esac
 
-need() { command -v "$1" >/dev/null 2>&1 || err "required tool not found: $1"; }
-need curl
-need tar
+# --- downloader (curl or wget) ---
+if command -v curl >/dev/null 2>&1; then
+	dl() { curl -fsSL "$1" -o "$2"; }
+	dl_stdout() { curl -fsSL "$1"; }
+elif command -v wget >/dev/null 2>&1; then
+	dl() { wget -qO "$2" "$1"; }
+	dl_stdout() { wget -qO - "$1"; }
+else
+	err "need curl or wget"
+fi
+command -v tar >/dev/null 2>&1 || err "need tar"
 
 # --- resolve version ---
 VERSION="${DEVRIG_VERSION:-}"
 if [ -z "$VERSION" ]; then
-	VERSION="$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" \
+	VERSION="$(dl_stdout "https://api.github.com/repos/$REPO/releases/latest" \
 		| grep '"tag_name"' | head -1 | sed -E 's/.*"tag_name": *"([^"]+)".*/\1/')"
 	[ -n "$VERSION" ] || err "could not determine latest version"
 fi
@@ -50,8 +74,8 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT INT TERM
 
 echo "Downloading $ARCHIVE ..."
-curl -fsSL "$BASE/$ARCHIVE" -o "$tmp/$ARCHIVE" || err "download failed: $BASE/$ARCHIVE"
-curl -fsSL "$BASE/SHA256SUMS" -o "$tmp/SHA256SUMS" || err "could not fetch SHA256SUMS"
+dl "$BASE/$ARCHIVE" "$tmp/$ARCHIVE" || err "download failed: $BASE/$ARCHIVE"
+dl "$BASE/SHA256SUMS" "$tmp/SHA256SUMS" || err "could not fetch SHA256SUMS"
 
 echo "Verifying checksum ..."
 (
@@ -72,11 +96,29 @@ tar -xzf "$tmp/$ARCHIVE" -C "$tmp"
 mkdir -p "$INSTALL_DIR"
 install -m 0755 "$tmp/$BIN" "$INSTALL_DIR/$BIN" 2>/dev/null \
 	|| { cp "$tmp/$BIN" "$INSTALL_DIR/$BIN" && chmod 0755 "$INSTALL_DIR/$BIN"; }
-
 echo "Installed $BIN $VER to $INSTALL_DIR/$BIN"
-case ":$PATH:" in
-	*":$INSTALL_DIR:"*) ;;
-	*) echo "NOTE: $INSTALL_DIR is not on your PATH. Add it, e.g.:"
-	   echo "      export PATH=\"$INSTALL_DIR:\$PATH\"" ;;
-esac
+
+# --- add install dir to PATH ---
+on_path=0
+case ":$PATH:" in *":$INSTALL_DIR:"*) on_path=1 ;; esac
+
+if [ "$on_path" = "1" ]; then
+	: # already on PATH, nothing to do
+elif [ "$MODIFY_PATH" = "0" ]; then
+	echo "NOTE: $INSTALL_DIR is not on your PATH. Add it: export PATH=\"$INSTALL_DIR:\$PATH\""
+else
+	line="export PATH=\"$INSTALL_DIR:\$PATH\""
+	added=""
+	for rc in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
+		# only touch rc files that already exist, plus always ensure .profile
+		if [ -f "$rc" ] || [ "$rc" = "$HOME/.profile" ]; then
+			if ! { [ -f "$rc" ] && grep -qF "$INSTALL_DIR" "$rc"; }; then
+				printf '\n# added by devrig installer\n%s\n' "$line" >> "$rc"
+				added="$added $rc"
+			fi
+		fi
+	done
+	[ -n "$added" ] && echo "Added $INSTALL_DIR to PATH in:$added (restart your shell or 'source' it)"
+fi
+
 echo "Run 'devrig update' to upgrade in place later."
