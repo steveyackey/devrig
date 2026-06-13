@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       run_cluster_smoke:
-        description: "Attempt the k3d cluster smoke (needs Linux containers — usually unavailable on GitHub Windows runners; best-effort)"
+        description: "Attempt the k3d cluster smoke. CONFIRMED to fail on GitHub-hosted Windows runners (Docker runs Windows containers, which have no 'bridge' network driver — k3d needs Linux containers). Only meaningful on a self-hosted Windows runner with Docker Desktop + WSL2."
         type: boolean
         default: false
 
@@ -88,7 +88,7 @@ jobs:
           (cd e2e && pnpm test)
 
   cluster-smoke:
-    name: Cluster smoke (windows, best-effort)
+    name: Cluster smoke (windows — self-hosted only)
     runs-on: windows-latest
     if: ${{ inputs.run_cluster_smoke }}
     timeout-minutes: 35
@@ -97,10 +97,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-      # k3d runs k3s inside Linux containers. GitHub's Windows runners default
-      # to Windows containers and have no WSL2/Docker-Desktop Linux backend, so
-      # this is expected to fail there — it is informational, not gating. If a
-      # future runner gains Linux-container support, this proves the workflow.
+      # k3d runs k3s inside Linux containers. GitHub's hosted Windows runners
+      # run Docker in Windows-containers mode (no 'bridge' network driver), so
+      # this job FAILS there — confirmed 2026-06-13. It is opt-in and reports an
+      # honest red so the result isn't masked; it only passes on a self-hosted
+      # Windows runner with Docker Desktop + WSL2 (a Linux container backend).
       - name: Cluster smoke (managed k3d + kubectl + helm)
-        continue-on-error: true
         run: go test -tags toolssmoke -timeout 30m -v ./internal/cluster/
