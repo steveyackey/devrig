@@ -71,7 +71,8 @@ ARCHIVE="${BIN}_${VER}_${OS}_${ARCH}.tar.gz"
 BASE="https://github.com/$REPO/releases/download/$VERSION"
 
 tmp="$(mktemp -d)"
-trap 'rm -rf "$tmp"' EXIT INT TERM
+staged=""
+trap 'rm -rf "$tmp" ${staged:+"$staged"}' EXIT INT TERM
 
 echo "Downloading $ARCHIVE ..."
 dl "$BASE/$ARCHIVE" "$tmp/$ARCHIVE" || err "download failed: $BASE/$ARCHIVE"
@@ -94,8 +95,16 @@ tar -xzf "$tmp/$ARCHIVE" -C "$tmp"
 [ -f "$tmp/$BIN" ] || err "binary $BIN not found in archive"
 
 mkdir -p "$INSTALL_DIR"
-install -m 0755 "$tmp/$BIN" "$INSTALL_DIR/$BIN" 2>/dev/null \
-	|| { cp "$tmp/$BIN" "$INSTALL_DIR/$BIN" && chmod 0755 "$INSTALL_DIR/$BIN"; }
+# Atomic install: stage the binary in the target dir, then rename over the
+# destination. rename(2) swaps the directory entry without touching the old
+# inode — so a currently-running `devrig` keeps working, there's no
+# partial-write window, and no ETXTBSY ("text file busy") from overwriting a
+# binary in use. (Same approach as `devrig update`.)
+staged="$INSTALL_DIR/.$BIN.new.$$"
+cp "$tmp/$BIN" "$staged" || err "could not write to $INSTALL_DIR (permission?)"
+chmod 0755 "$staged"
+mv -f "$staged" "$INSTALL_DIR/$BIN" || err "could not install to $INSTALL_DIR/$BIN"
+staged=""
 echo "Installed $BIN $VER to $INSTALL_DIR/$BIN"
 
 # --- add install dir to PATH ---
