@@ -43,6 +43,7 @@ import (
 	"github.com/steveyackey/devrig/internal/registry"
 	"github.com/steveyackey/devrig/internal/state"
 	"github.com/steveyackey/devrig/internal/supervisor"
+	"github.com/steveyackey/devrig/internal/tools"
 )
 
 // Orchestrator manages the full lifecycle of a devrig project.
@@ -377,7 +378,8 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		if networkName != nil {
 			net = *networkName
 		}
-		clusterMgr := cluster.NewManager(o.cfg.Cluster, o.id.Slug, o.stateDir, net)
+		resolver := tools.ResolverFromConfig(o.cfg.Tools, true)
+		clusterMgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, net)
 		cs, err := clusterMgr.Ensure(ctx)
 		if err != nil {
 			return fmt.Errorf("cluster: %w", err)
@@ -398,7 +400,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 
 		// Install addons.
 		if len(o.cfg.Cluster.Addons) > 0 {
-			if err := cluster.InstallAddons(ctx, o.cfg.Cluster.Addons, cs, o.stateDir); err != nil {
+			if err := cluster.InstallAddons(ctx, resolver, o.cfg.Cluster.Addons, cs, o.stateDir); err != nil {
 				return fmt.Errorf("cluster addons: %w", err)
 			}
 		}
@@ -410,7 +412,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 			if err != nil {
 				return fmt.Errorf("cluster log collector: %w", err)
 			}
-			if err := cluster.KubectlApply(ctx, cs.KubeconfigPath, manifestPath); err != nil {
+			if err := cluster.KubectlApply(ctx, resolver, cs.KubeconfigPath, manifestPath); err != nil {
 				return fmt.Errorf("cluster log collector apply: %w", err)
 			}
 		}
@@ -418,7 +420,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		// Build and deploy cluster services.
 		for svcName, svcCfg := range o.cfg.Cluster.Deploy {
 			sc := svcCfg
-			if err := cluster.BuildAndDeploy(ctx, svcName, &sc, cs, o.stateDir); err != nil {
+			if err := cluster.BuildAndDeploy(ctx, resolver, svcName, &sc, cs, o.stateDir); err != nil {
 				return fmt.Errorf("cluster deploy %s: %w", svcName, err)
 			}
 		}
@@ -743,7 +745,8 @@ func (o *Orchestrator) Delete() error {
 
 	// TODO Phase 3: stop docker containers
 	if o.cfg != nil && o.cfg.Cluster != nil {
-		mgr := cluster.NewManager(o.cfg.Cluster, o.id.Slug, o.stateDir, "")
+		resolver := tools.ResolverFromConfig(o.cfg.Tools, false)
+		mgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, "")
 		_ = mgr.Delete(context.Background())
 	}
 

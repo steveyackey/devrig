@@ -280,6 +280,26 @@ grafana = "http://localhost:3000"
 
 ---
 
+## `[tools]`
+
+Controls how devrig resolves the external CLIs its cluster features need
+(k3d, kubectl, helm). By default devrig fetches pinned, checksum-verified
+copies on demand into `~/.devrig/bin` (managed copies never touch your PATH).
+
+| Field     | Type   | Default      | Description                                              |
+|-----------|--------|--------------|----------------------------------------------------------|
+| `prefer`  | string | `"vendored"` | `"vendored"` (managed pinned copies) or `"system"` (PATH)|
+| `kubectl` | string | —            | Explicit path to a kubectl binary (overrides resolution) |
+| `helm`    | string | —            | Explicit path to a helm binary                           |
+| `k3d`     | string | —            | Explicit path to a k3d binary                            |
+
+`devrig deps list` shows the pinned versions and which copy will be used;
+`devrig deps install [tool...]` fetches them ahead of time. The `devrig
+kubectl`/`devrig k` passthrough always prefers your own PATH kubectl (for krew
+plugins) regardless of `prefer`.
+
+---
+
 ## Environment Variable Expansion
 
 Any env value can reference host or `.env` file variables with `$VAR` or `${VAR}`. Use `$$` for a literal `$`. Expansion runs before template interpolation (`{{ }}`), so both can be combined.

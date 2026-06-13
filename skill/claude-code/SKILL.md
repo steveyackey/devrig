@@ -115,3 +115,4 @@ version = "1.2.0"
 - `devrig logs -F` for live tailing, `devrig query logs` for OTel-collected logs
 - `devrig stop` always stops the whole project (one supervisor process — no per-service stop). To restart one service: `devrig stop`, then `devrig start <service>` (other services' template vars still resolve from config/state)
 - `devrig stop --all` / `devrig delete --all` act on every running devrig instance across all projects (no config file needed) — useful for clearing out stale instances
+- Cluster tools (k3d/kubectl/helm) don't need pre-installing: devrig fetches pinned, checksum-verified copies into `~/.devrig/bin` on demand. `devrig deps list` shows versions/status; `devrig deps install` pre-fetches; set `[tools] prefer = "system"` to use PATH copies instead. Only Docker is truly required.

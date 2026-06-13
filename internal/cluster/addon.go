@@ -14,12 +14,15 @@ import (
 
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/state"
+	"github.com/steveyackey/devrig/internal/tools"
 )
 
 // InstallAddons installs all configured addons in topological order,
 // then starts port-forwards. ctx cancellation stops the port-forwards.
+// r resolves the kubectl/helm binaries.
 func InstallAddons(
 	ctx context.Context,
+	r *tools.Resolver,
 	addons map[string]config.AddonConfig,
 	cs *state.ClusterState,
 	stateDir string,
@@ -31,7 +34,7 @@ func InstallAddons(
 
 	for _, name := range order {
 		addon := addons[name]
-		if err := installAddon(ctx, name, &addon, cs); err != nil {
+		if err := installAddon(ctx, r, name, &addon, cs); err != nil {
 			return fmt.Errorf("addon %s: %w", name, err)
 		}
 		ns := addon.Namespace
@@ -57,27 +60,27 @@ func InstallAddons(
 			if localPort == 0 {
 				continue
 			}
-			go maintainPortForward(ctx, cs.KubeconfigPath, ns, target, localPort)
+			go maintainPortForward(ctx, r, cs.KubeconfigPath, ns, target, localPort)
 		}
 		_ = name
 	}
 	return nil
 }
 
-func installAddon(ctx context.Context, name string, addon *config.AddonConfig, cs *state.ClusterState) error {
+func installAddon(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState) error {
 	switch addon.Type {
 	case "helm":
-		return installHelm(ctx, name, addon, cs)
+		return installHelm(ctx, r, name, addon, cs)
 	case "manifest":
-		return installManifest(ctx, addon, cs)
+		return installManifest(ctx, r, addon, cs)
 	case "kustomize":
-		return KubectlApplyDir(ctx, cs.KubeconfigPath, addon.Path, true)
+		return KubectlApplyDir(ctx, r, cs.KubeconfigPath, addon.Path, true)
 	default:
 		return fmt.Errorf("unknown addon type %q", addon.Type)
 	}
 }
 
-func installHelm(ctx context.Context, name string, addon *config.AddonConfig, cs *state.ClusterState) error {
+func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState) error {
 	ns := addon.Namespace
 	if ns == "" {
 		ns = "default"
@@ -87,8 +90,8 @@ func installHelm(ctx context.Context, name string, addon *config.AddonConfig, cs
 	if addon.Repo != nil && !strings.HasPrefix(addon.Chart, "oci://") {
 		repoName := strings.ReplaceAll(name, "/", "-") + "-repo"
 		repoArgs := []string{"repo", "add", repoName, *addon.Repo}
-		helm(ctx, cs.KubeconfigPath, repoArgs...)
-		helm(ctx, cs.KubeconfigPath, "repo", "update")
+		helm(ctx, r, cs.KubeconfigPath, repoArgs...)
+		helm(ctx, r, cs.KubeconfigPath, "repo", "update")
 	}
 
 	args := []string{"upgrade", "--install", name, addon.Chart,
@@ -100,8 +103,11 @@ func installHelm(ctx context.Context, name string, addon *config.AddonConfig, cs
 	if addon.Wait {
 		args = append(args, "--wait", "--timeout", addon.Timeout)
 	}
-	if !addon.SkipCRDs {
-		args = append(args, "--include-crds")
+	// helm install/upgrade installs CRDs from the chart's crds/ dir by default;
+	// --skip-crds opts out. (There is no --include-crds flag on install/upgrade
+	// — that one is helm-template-only.)
+	if addon.SkipCRDs {
+		args = append(args, "--skip-crds")
 	}
 
 	for _, vf := range addon.ValuesFiles {
@@ -121,29 +127,33 @@ func installHelm(ctx context.Context, name string, addon *config.AddonConfig, cs
 		}
 	}
 
-	if err := helm(ctx, cs.KubeconfigPath, args...); err != nil {
+	if err := helm(ctx, r, cs.KubeconfigPath, args...); err != nil {
 		// Retry once on CRD-mapping errors.
 		if strings.Contains(err.Error(), "resource mapping not found") {
 			time.Sleep(3 * time.Second)
-			return helm(ctx, cs.KubeconfigPath, args...)
+			return helm(ctx, r, cs.KubeconfigPath, args...)
 		}
 		return err
 	}
 	return nil
 }
 
-func installManifest(ctx context.Context, addon *config.AddonConfig, cs *state.ClusterState) error {
+func installManifest(ctx context.Context, r *tools.Resolver, addon *config.AddonConfig, cs *state.ClusterState) error {
 	if addon.Path == "" {
 		return nil
 	}
 	// Poll for up to 5 minutes on CRD-not-found errors.
 	return pollWithBackoff(ctx, 5*time.Minute, 3*time.Second, 30*time.Second, func() error {
-		return KubectlApplyDir(ctx, cs.KubeconfigPath, addon.Path, false)
+		return KubectlApplyDir(ctx, r, cs.KubeconfigPath, addon.Path, false)
 	})
 }
 
-func helm(ctx context.Context, kubeconfig string, args ...string) error {
-	cmd := exec.CommandContext(ctx, "helm", args...)
+func helm(ctx context.Context, r *tools.Resolver, kubeconfig string, args ...string) error {
+	bin, err := r.Path(ctx, tools.Helm)
+	if err != nil {
+		return err
+	}
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -154,7 +164,11 @@ func helm(ctx context.Context, kubeconfig string, args ...string) error {
 
 // maintainPortForward restarts a port-forward whenever it exits, with
 // exponential backoff. It stops when ctx is cancelled.
-func maintainPortForward(ctx context.Context, kubeconfig, namespace, target string, localPort uint16) {
+func maintainPortForward(ctx context.Context, r *tools.Resolver, kubeconfig, namespace, target string, localPort uint16) {
+	bin, err := r.Path(ctx, tools.Kubectl)
+	if err != nil {
+		return
+	}
 	// Split target: "service/name:port" or "pod/name:port"
 	colon := strings.LastIndex(target, ":")
 	resource := target
@@ -176,7 +190,7 @@ func maintainPortForward(ctx context.Context, kubeconfig, namespace, target stri
 		} else {
 			pfArgs = append(pfArgs, fmt.Sprintf("%d", localPort))
 		}
-		cmd := exec.CommandContext(ctx, "kubectl", pfArgs...)
+		cmd := exec.CommandContext(ctx, bin, pfArgs...)
 		cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
 		start := time.Now()
 		_ = cmd.Run()

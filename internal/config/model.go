@@ -60,6 +60,19 @@ type Config struct {
 	Env       map[string]string        `toml:"env"       yaml:"env"`
 	Network   *NetworkConfig           `toml:"network"   yaml:"network"`
 	Links     map[string]string        `toml:"links"     yaml:"links"`
+	Tools     *ToolsConfig             `toml:"tools"     yaml:"tools"`
+}
+
+// ToolsConfig controls how devrig resolves the external CLIs its cluster
+// features depend on (k3d, kubectl, helm). See docs/prd/managed-tool-deps.md.
+type ToolsConfig struct {
+	// Prefer is "vendored" (default — devrig-managed, pinned copies) or
+	// "system" (whatever is on the user's PATH).
+	Prefer string `toml:"prefer" yaml:"prefer"`
+	// Per-tool explicit executable path overrides.
+	Kubectl string `toml:"kubectl" yaml:"kubectl"`
+	Helm    string `toml:"helm"    yaml:"helm"`
+	K3d     string `toml:"k3d"     yaml:"k3d"`
 }
 
 type ProjectConfig struct {

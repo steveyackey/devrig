@@ -9,12 +9,15 @@ import (
 
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/state"
+	"github.com/steveyackey/devrig/internal/tools"
 )
 
 // BuildAndDeploy builds an image, pushes it to the registry, and applies
-// the service manifests. It updates cs with the new image tag.
+// the service manifests. It updates cs with the new image tag. r resolves the
+// kubectl binary.
 func BuildAndDeploy(
 	ctx context.Context,
+	r *tools.Resolver,
 	name string,
 	cfg *config.ClusterDeployConfig,
 	cs *state.ClusterState,
@@ -26,11 +29,11 @@ func BuildAndDeploy(
 	}
 
 	if cfg.Manifests != "" {
-		if err := KubectlApply(ctx, cs.KubeconfigPath, cfg.Manifests); err != nil {
+		if err := KubectlApply(ctx, r, cs.KubeconfigPath, cfg.Manifests); err != nil {
 			return fmt.Errorf("deploy %s: apply manifests: %w", name, err)
 		}
 		// Attempt a rollout restart to pick up the new image.
-		_ = KubectlRollout(ctx, cs.KubeconfigPath, "default", name)
+		_ = KubectlRollout(ctx, r, cs.KubeconfigPath, "default", name)
 	}
 
 	cs.DeployedServices[name] = state.ClusterDeployState{

@@ -30,6 +30,36 @@ jobs:
       - run: go test ./...
       - run: go vet ./...
 
+  tool-deps:
+    name: Managed tools (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Downloads the pinned k3d/kubectl/helm, verifies their checksums, and
+      # runs each binary to confirm the reported version matches the pin.
+      - run: go test -tags toolsintegration -v ./internal/tools/
+
+  tool-deps-smoke:
+    name: Managed tools smoke (k3d cluster)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      # Creates a throwaway k3d cluster with the managed tools, applies a
+      # manifest with kubectl, and installs a helm chart through devrig's addon
+      # code — validating the pinned versions actually work together.
+      - run: go test -tags toolssmoke -timeout 18m -v ./internal/cluster/
+
   typecheck-web:
     name: Frontend type check
     runs-on: ubuntu-latest
