@@ -8,17 +8,18 @@ interference between instances.
 
 ## Project identity derivation
 
-A project's identity is computed in `identity.rs` using two inputs:
+A project's identity is computed in `internal/identity/identity.go` using two
+inputs:
 
 1. **Project name** -- The `name` field from the `[project]` section of
-   `devrig.toml`.
-2. **Config path hash** -- The SHA-256 hash of the **canonical absolute path**
-   to the config file, truncated to the first 8 hex characters (4 bytes).
+   `devrig.toml`, lowercased and slugified (non-alphanumeric runs collapse to
+   `-`, trimmed, capped at 24 chars).
+2. **Config path hash** -- The SHA-256 hash of the **absolute path** to the
+   config file, truncated to the first 6 hex characters (3 bytes).
 
-The canonical path is obtained by calling `std::path::Path::canonicalize()`,
-which resolves symlinks, removes `.` and `..` components, and produces an
-absolute path. This ensures that different ways of referencing the same file
-(relative paths, symlinks, trailing slashes) produce the same hash.
+The absolute path is obtained by calling `filepath.Abs()`, which produces an
+absolute path so that relative references to the same file resolve to the same
+hash.
 
 ### Slug format
 
@@ -27,7 +28,7 @@ absolute path. This ensures that different ways of referencing the same file
 ```
 
 Example: if the project name is `myapp` and the config is at
-`/home/user/projects/myapp/devrig.toml`, the slug might be `myapp-a1b2c3d4`.
+`/home/user/projects/myapp/devrig.toml`, the slug might be `myapp-a1b2c3`.
 
 The hash provides collision resistance. Two projects named `myapp` in
 different directories get different slugs. The same project always gets the
@@ -52,7 +53,7 @@ The `state.json` file contains:
 
 ```json
 {
-  "slug": "myapp-a1b2c3d4",
+  "slug": "myapp-a1b2c3",
   "config_path": "/home/user/projects/myapp/devrig.toml",
   "services": {
     "api": { "pid": 12345, "port": 3000, "port_auto": false },

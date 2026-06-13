@@ -2,29 +2,33 @@
 
 ## Overview
 
-devrig uses the `petgraph` crate to model service dependencies as a directed
-acyclic graph (DAG). The graph determines the order in which services are
-started and validates that no circular dependencies exist.
+devrig models dependencies as a directed acyclic graph (DAG) using a small
+custom resolver (no external graph library). The graph spans not just services
+but also docker containers, compose services, and cluster resources, and it
+determines the order in which everything is started while validating that no
+circular dependencies exist.
 
-The implementation lives in `orchestrator/graph.rs` in the `DependencyResolver`
+The implementation lives in `internal/graph/graph.go` in the `Resolver`
 struct.
 
 ## Graph construction
 
-The graph is built in two passes from the `DevrigConfig`:
+The graph is built from the parsed `Config`:
 
 ### Pass 1: Add nodes
 
-Every service defined in `[services.*]` becomes a node in the graph. Nodes
-are stored in a `BTreeMap<String, NodeIndex>` for O(log n) lookup by name.
+Every service in `[services.*]`, every `[docker.*]` container, each compose
+service, and each cluster resource becomes a `Node` (tagged with a
+`ResourceKind`). Nodes are appended to a slice, with an `index` map from name to
+slice position for O(1) lookup.
 
 ### Pass 2: Add edges
 
-For each service, iterate over its `depends_on` list. For each dependency,
-look up the dependency's `NodeIndex` and add a directed edge.
+For each node, iterate over its `depends_on` list and record each dependency in
+the resolver's `deps` map (name → names it must come after).
 
-If a dependency references a service name that does not exist, graph
-construction fails with an error message naming both the referencing service
+If a dependency references a resource name that does not exist, graph
+construction fails with an error message naming both the referencing resource
 and the missing dependency.
 
 ## Edge direction convention
@@ -46,29 +50,28 @@ order: nodes with no incoming edges (leaf dependencies) come first.
 
 ## Topological sort for start order
 
-The `start_order()` method calls `petgraph::algo::toposort()` on the graph.
-This returns nodes in an order where every dependency appears before the
-services that depend on it.
+The `StartOrder()` method runs Kahn's algorithm over the graph: it computes the
+in-degree of every node, seeds a queue with the nodes that have no dependencies,
+and repeatedly pops a node and decrements the in-degree of its dependents. This
+returns nodes in an order where every dependency appears before the resources
+that depend on it.
 
 For the example above, the start order would be: `db`, `api`, `web`.
 
-When services have no dependencies on each other, they appear in alphabetical
-order due to the use of `BTreeMap` for node insertion.
-
 ## Cycle detection
 
-`petgraph::algo::toposort()` returns `Err(Cycle)` if the graph contains a
-cycle. The error includes the `NodeIndex` of one node involved in the cycle,
-which is used to produce an error message like:
+If Kahn's algorithm cannot emit every node (some nodes still have a non-zero
+in-degree once the queue drains), the graph contains a cycle. `StartOrder()`
+returns an error naming one of the nodes still involved in the cycle:
 
 ```
-dependency cycle detected involving service 'api'
+dependency cycle detected involving "api"
 ```
 
-Cycle detection also happens during validation (in `config/validate.rs`) using
-an independent iterative DFS with visited/in-stack tracking. This provides
-cycle errors alongside other validation errors (missing deps, duplicate ports)
-so users see all problems at once.
+Cycle detection also happens during validation (in
+`internal/config/validate.go`) so that cycle errors are reported alongside other
+validation errors (missing deps, duplicate ports) and users see all problems at
+once.
 
 ## Service filtering
 
@@ -95,7 +98,7 @@ command = "docker compose up postgres"
 command = "docker compose up redis"
 
 [services.api]
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 depends_on = ["db", "cache"]
 
 [services.web]
@@ -103,7 +106,7 @@ command = "npm run dev"
 depends_on = ["api"]
 
 [services.worker]
-command = "cargo run --bin worker"
+command = "go run ./cmd/worker"
 depends_on = ["db"]
 ```
 

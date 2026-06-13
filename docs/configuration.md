@@ -16,7 +16,7 @@ Local process services managed by devrig:
 ```toml
 [services.api]
 path = "./api"              # Working directory (relative to devrig.toml)
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000                 # Fixed port, or "auto" for ephemeral
 depends_on = ["postgres"]   # Wait for these before starting
 
@@ -169,7 +169,7 @@ expect = "PONG"
 
 [services.api]
 path = "./api"
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000
 depends_on = ["postgres", "redis"]
 [services.api.env]

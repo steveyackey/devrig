@@ -14,32 +14,36 @@ Optional (checked by `devrig doctor`):
 
 ## Install
 
-### Shell installer (recommended — Linux/macOS)
+### Prebuilt binary (recommended)
+
+Download the archive for your platform from the
+[latest release](https://github.com/steveyackey/devrig/releases/latest),
+extract it, and put `devrig` on your `PATH`. The release binaries ship with the
+embedded web dashboard.
+
+Once installed, `devrig update` self-updates the binary from the latest GitHub
+release.
+
+### go install (no embedded dashboard)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.sh | sh
+go install github.com/steveyackey/devrig/cmd/devrig@latest
 ```
 
-### PowerShell installer (Windows)
-
-```powershell
-powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/devrig-installer.ps1 | iex"
-```
-
-These installers include a built-in updater — run `devrig update` to get the
-latest version.
-
-### cargo binstall (prebuilt binary, no updater)
-
-```bash
-cargo binstall devrig
-```
+`go install` builds the CLI without the embedded dashboard assets (the dashboard
+served on the OTLP/dashboard port). If you need the dashboard, use a release
+binary or build from source (see below). Everything else works the same.
 
 ### From source
 
 ```bash
-cargo install devrig
+git clone https://github.com/steveyackey/devrig
+cd devrig/web && pnpm install && pnpm run build-only
+cd .. && cp -r web/dist/* internal/dashboard/dist/
+go build -tags embedspa ./cmd/devrig
 ```
+
+This produces a `devrig` binary in the repo root with the dashboard embedded.
 
 Verify the installation:
 
@@ -82,7 +86,7 @@ devrig init
 ```
 
 This creates a `devrig.toml` tailored to your project type. devrig detects
-whether the directory contains `Cargo.toml`, `package.json`, `go.mod`, or
+whether the directory contains `go.mod`, `package.json`, `Cargo.toml`, or
 Python files and generates an appropriate starter command.
 
 Example output:
@@ -91,7 +95,7 @@ Example output:
 Created devrig.toml in /home/user/my-project
 
   Project: my-project
-  Service: app -> cargo watch -x run
+  Service: server -> go run ./...
 
 Edit the file, then run `devrig start` to begin.
 ```
@@ -106,7 +110,7 @@ for a project with an API and a frontend:
 name = "my-project"
 
 [services.api]
-command = "cargo watch -x run"
+command = "go run ./cmd/api"
 port = 3000
 path = "./api"
 
@@ -126,10 +130,10 @@ devrig start
 ```
 
 devrig starts services in dependency order (in this example, `api` before
-`web`) and multiplexes their logs with color-coded prefixes:
+`web`) and prints a startup summary:
 
 ```
-  devrig  my-project (a1b2c3d4)
+  devrig  my-project (a1b2c3)
 
   Services:
 
@@ -137,12 +141,11 @@ devrig starts services in dependency order (in this example, `api` before
     web              http://localhost:5173            running
 
   Press Ctrl+C to stop all services
-
-api | Compiling my-project v0.1.0
-api | Listening on 0.0.0.0:3000
-web | VITE v5.0.0  ready in 200 ms
-web | Local: http://localhost:5173/
 ```
+
+Service stdout/stderr is captured to a JSONL log file and the in-memory OTel
+store rather than printed to the terminal. Use `devrig logs` to query it, or
+open the dashboard.
 
 You can also start specific services (and their dependencies):
 

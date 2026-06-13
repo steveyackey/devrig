@@ -137,7 +137,7 @@ directory for changes and triggers automatic rebuilds and redeploys.
 
 ### Example workflow
 
-1. Edit source code in `./services/api/src/main.rs`.
+1. Edit source code in `./services/api/main.go`.
 2. devrig detects the change after 500ms of no further edits.
 3. Docker image is rebuilt using the deploy context and Dockerfile.
 4. Image is pushed to the local registry.

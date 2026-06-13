@@ -47,7 +47,7 @@ file = "docker-compose.yml"
 services = ["redis"]
 
 [services.api]
-command = "cargo run"
+command = "go run ./cmd/api"
 port = 3000
 depends_on = ["redis"]
 ```
