@@ -72,3 +72,8 @@ changelog:
 
 release:
   draft: false
+  # Upload the installer scripts as fixed-name release assets so the
+  # /releases/latest/download/install.{sh,ps1} one-liners work.
+  extra_files:
+    - glob: ./scripts/install.sh
+    - glob: ./scripts/install.ps1

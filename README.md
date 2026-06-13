@@ -28,9 +28,25 @@ Explore metrics with sparkline cards and expandable time-series charts:
 
 ## Install
 
-**Prebuilt binaries** (Linux/macOS/Windows) — download the archive for your
-platform from the [latest release](https://github.com/steveyackey/devrig/releases/latest)
-and put `devrig` on your `PATH`.
+**Shell installer** (Linux/macOS) — downloads the latest release, verifies its
+SHA256, and installs to `~/.local/bin`:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/steveyackey/devrig/releases/latest/download/install.sh | sh
+```
+
+**PowerShell installer** (Windows):
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig/releases/latest/download/install.ps1 | iex"
+```
+
+Both installers include the embedded dashboard. Run `devrig update` to upgrade
+in place afterward.
+
+**Prebuilt binaries** — or download the archive for your platform from the
+[latest release](https://github.com/steveyackey/devrig/releases/latest) and put
+`devrig` on your `PATH`.
 
 **From source** (Go 1.26+):
 
@@ -38,11 +54,9 @@ and put `devrig` on your `PATH`.
 go install github.com/steveyackey/devrig/cmd/devrig@latest
 ```
 
-(Note: `go install` builds without the embedded dashboard UI — use a release
-binary for the full dashboard, or build with `-tags embedspa` after staging
-`web/dist` into `internal/dashboard/dist`.)
-
-Run `devrig update` to get the latest version.
+(Note: `go install` builds without the embedded dashboard UI — use an installer
+or release binary for the full dashboard, or build with `-tags embedspa` after
+staging `web/dist` into `internal/dashboard/dist`.)
 
 ## Quickstart
 
