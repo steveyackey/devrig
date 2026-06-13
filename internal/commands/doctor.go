@@ -8,40 +8,32 @@ import (
 	"github.com/steveyackey/devrig/internal/tools"
 )
 
-// NewDoctorCmd checks that required external tools are installed. The
-// cluster tools (k3d/kubectl/helm) are reported via the tools resolver, since
-// devrig can fetch managed copies of them on demand.
+// NewDoctorCmd reports the status of the external tools devrig can use. It is
+// informational and never fails: a process-only project (services + dashboard)
+// runs with no external tools at all, Docker is needed only for [docker]
+// services and clusters, and the cluster tools (k3d/kubectl/helm) are fetched
+// on demand. So doctor reports what's available rather than gating on it.
 func NewDoctorCmd(cfgFile *string) *cobra.Command {
 	return &cobra.Command{
-		Use:   "doctor",
-		Short: "Check required dependencies are installed",
+		Use:          "doctor",
+		Short:        "Report the status of devrig's external tools",
+		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ok := true
-
-			// Plain PATH checks for tools devrig does not manage.
-			for _, d := range []struct {
-				name     string
-				required bool
-			}{
-				{"docker", true},
-				{"docker-compose", false},
-			} {
-				if _, err := exec.LookPath(d.name); err != nil {
-					if d.required {
-						fmt.Printf("  ✗ %-20s  MISSING (required)\n", d.name)
-						ok = false
-					} else {
-						fmt.Printf("  - %-20s  not found (optional)\n", d.name)
-					}
-					continue
-				}
-				fmt.Printf("  ✓ %-20s  ok\n", d.name)
+			// Docker: not required for a basic (process-only) run.
+			if _, err := exec.LookPath("docker"); err != nil {
+				fmt.Println("  - docker                not found — needed for [docker] services and clusters; process-only services and the dashboard run without it")
+			} else {
+				fmt.Println("  ✓ docker                ok")
+			}
+			if _, err := exec.LookPath("docker-compose"); err != nil {
+				fmt.Println("  - docker-compose        not found (optional)")
+			} else {
+				fmt.Println("  ✓ docker-compose        ok")
 			}
 
-			// Managed cluster tools: show managed/system status. Absence is not
-			// a failure — devrig fetches a pinned copy on demand.
-			// Report the copy each tool will actually resolve to (honoring the
-			// [tools] prefer setting), and note when the other kind also exists.
+			// Managed cluster tools: report the copy each will actually resolve
+			// to (honoring the [tools] prefer setting), noting when the other
+			// kind also exists. Absence is fine — devrig fetches on demand.
 			r := depsResolver(cfgFile, false)
 			for _, t := range tools.All {
 				s := r.Status(t)
@@ -65,9 +57,6 @@ func NewDoctorCmd(cfgFile *string) *cobra.Command {
 				}
 			}
 
-			if !ok {
-				return fmt.Errorf("missing required dependencies")
-			}
 			return nil
 		},
 	}
