@@ -56,7 +56,7 @@ func TestUpdateServicePhaseCreatesEntry(t *testing.T) {
 	}
 
 	UpdateServicePhase(dir, "api", "running")
-	UpdateServicePID(dir, "api", 4321)
+	UpdateServiceProc(dir, "api", 4321, 1700000000000)
 	UpdateServiceExit(dir, "api", 0)
 
 	got := Load(dir)
@@ -69,6 +69,9 @@ func TestUpdateServicePhaseCreatesEntry(t *testing.T) {
 	}
 	if api.PID != 4321 {
 		t.Errorf("pid = %d", api.PID)
+	}
+	if api.StartTimeMs != 1700000000000 {
+		t.Errorf("start time = %d", api.StartTimeMs)
 	}
 	if api.ExitCode == nil || *api.ExitCode != 0 {
 		t.Errorf("exit code = %+v", api.ExitCode)

@@ -48,10 +48,10 @@ import (
 
 // Orchestrator manages the full lifecycle of a devrig project.
 type Orchestrator struct {
-	cfg        *config.Config
-	id         *identity.ProjectIdentity
-	cfgPath    string
-	stateDir   string
+	cfg            *config.Config
+	id             *identity.ProjectIdentity
+	cfgPath        string
+	stateDir       string
 	logBroadcast   *events.Broadcaster
 	eventBroadcast *events.Broadcaster
 }
@@ -139,6 +139,14 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		return fmt.Errorf("writing PID file: %w", err)
 	}
 	defer supervisor.RemovePIDFile(o.stateDir)
+
+	daemonStartMs, _ := supervisor.ProcStartTimeMs(os.Getpid())
+
+	// Reap any service processes orphaned by a previous run whose devrig
+	// process is no longer alive (crash, kill -9, power loss). Without this they
+	// linger and hold ports. PID+start-time identity guards against killing an
+	// unrelated process that reused a recorded PID.
+	reconcileOrphans(prevState)
 
 	printBanner(o.id.Slug, o.cfg, launchOrder)
 
@@ -379,7 +387,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 			net = *networkName
 		}
 		resolver := tools.ResolverFromConfig(o.cfg.Tools, true)
-		clusterMgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, net)
+		clusterMgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), net)
 		cs, err := clusterMgr.Ensure(ctx)
 		if err != nil {
 			return fmt.Errorf("cluster: %w", err)
@@ -390,17 +398,23 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 			}
 		}
 
-		// Build standalone images.
-		for imgName, imgCfg := range o.cfg.Cluster.Images {
-			ic := imgCfg
-			if _, err := cluster.BuildImage(ctx, imgName, &ic, cs); err != nil {
+		// Build standalone images in dependency order so that build_args
+		// referencing another image's tag resolve to an already-built image.
+		cfgDir := filepath.Dir(o.cfgPath)
+		imgOrder, err := cluster.ImageBuildOrder(o.cfg.Cluster.Images)
+		if err != nil {
+			return fmt.Errorf("cluster images: %w", err)
+		}
+		for _, imgName := range imgOrder {
+			ic := o.cfg.Cluster.Images[imgName]
+			if _, err := cluster.BuildImage(ctx, imgName, &ic, cs, cfgDir); err != nil {
 				return fmt.Errorf("cluster image %s: %w", imgName, err)
 			}
 		}
 
 		// Install addons.
 		if len(o.cfg.Cluster.Addons) > 0 {
-			if err := cluster.InstallAddons(ctx, resolver, o.cfg.Cluster.Addons, cs, o.stateDir); err != nil {
+			if err := cluster.InstallAddons(ctx, resolver, o.cfg.Cluster.Addons, cs, o.stateDir, cfgDir); err != nil {
 				return fmt.Errorf("cluster addons: %w", err)
 			}
 		}
@@ -420,7 +434,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		// Build and deploy cluster services.
 		for svcName, svcCfg := range o.cfg.Cluster.Deploy {
 			sc := svcCfg
-			if err := cluster.BuildAndDeploy(ctx, resolver, svcName, &sc, cs, o.stateDir); err != nil {
+			if err := cluster.BuildAndDeploy(ctx, resolver, svcName, &sc, cs, o.stateDir, cfgDir); err != nil {
 				return fmt.Errorf("cluster deploy %s: %w", svcName, err)
 			}
 		}
@@ -440,6 +454,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		Cluster:         clusterState,
 		Dashboard:       dashboardState,
 		PID:             os.Getpid(),
+		PIDStartTimeMs:  daemonStartMs,
 	}
 	if err := partial.Save(o.stateDir); err != nil {
 		return fmt.Errorf("saving partial state: %w", err)
@@ -551,6 +566,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		Cluster:         clusterState,
 		Dashboard:       dashboardState,
 		PID:             os.Getpid(),
+		PIDStartTimeMs:  daemonStartMs,
 	}
 	if err := projectState.Save(o.stateDir); err != nil {
 		return fmt.Errorf("saving project state: %w", err)
@@ -584,6 +600,9 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 	// Phase 5: Spawn service supervisors
 	// ================================================================
 	var supervisorWg sync.WaitGroup
+	// handles are kept in launch (dependency) order so shutdown can drain them
+	// in reverse — dependents stop before the dependencies they rely on.
+	var handles []svcHandle
 
 	if len(launchNames) > 0 {
 		logsDir := filepath.Join(o.stateDir, "logs")
@@ -629,10 +648,17 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 				o.stateDir,
 			)
 
+			// Per-service context so shutdown can stop services individually in
+			// reverse dependency order.
+			svcCtx, svcCancel := context.WithCancel(ctx)
+			done := make(chan struct{})
+			handles = append(handles, svcHandle{name: name, cancel: svcCancel, done: done})
+
 			supervisorWg.Add(1)
 			go func(s *supervisor.Supervisor) {
 				defer supervisorWg.Done()
-				if err := s.Run(ctx); err != nil && ctx.Err() == nil {
+				defer close(done)
+				if err := s.Run(svcCtx); err != nil && svcCtx.Err() == nil {
 					fmt.Fprintf(os.Stderr, "service %s: %v\n", s.Name, err)
 					state.UpdateServicePhase(o.stateDir, s.Name, "failed")
 				} else {
@@ -671,17 +697,34 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		fmt.Fprintln(os.Stderr, "\nShutting down...")
 	case <-allDone:
 		fmt.Fprintln(os.Stderr, "All services exited.")
+		cancel()
+		o.logBroadcast.Close()
+		o.eventBroadcast.Close()
+		return nil
 	}
 
-	// Cancel supervisors and wait up to 10s for clean exit.
-	cancel()
+	// Graceful drain in reverse dependency order: stop each service (and its
+	// process tree) and wait for it before stopping the ones it depends on. A
+	// per-service grace exceeds the supervisor's SIGTERM→SIGKILL window (5s).
 	shutdownDone := make(chan struct{})
 	go func() {
+		const perServiceGrace = 8 * time.Second
+		for i := len(handles) - 1; i >= 0; i-- {
+			h := handles[i]
+			h.cancel()
+			select {
+			case <-h.done:
+			case <-time.After(perServiceGrace):
+				fmt.Fprintf(os.Stderr, "service %s did not stop in time; continuing.\n", h.name)
+			}
+		}
+		cancel() // stop anything else hanging off the root context
 		supervisorWg.Wait()
 		close(shutdownDone)
 	}()
 
-	timer := time.NewTimer(10 * time.Second)
+	// Overall cap, plus a second signal forces an immediate exit.
+	timer := time.NewTimer(45 * time.Second)
 	defer timer.Stop()
 	select {
 	case <-shutdownDone:
@@ -689,6 +732,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		fmt.Fprintln(os.Stderr, "Shutdown timed out — some processes may still be running.")
 	case <-sigCh:
 		fmt.Fprintln(os.Stderr, "\nForce shutdown.")
+		cancel()
 		os.Exit(130)
 	}
 
@@ -699,7 +743,41 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 	return nil
 }
 
-// Stop sends SIGTERM to the running devrig process via the PID file.
+// svcHandle lets the shutdown path stop one supervised service at a time, in
+// reverse dependency order.
+type svcHandle struct {
+	name   string
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+// reconcileOrphans kills service processes left running by a previous devrig
+// run that is no longer alive. It is a no-op when there is no prior state or
+// when the prior devrig is still running (a concurrent instance — left alone).
+// PID+start-time identity ensures a recorded PID that has since been reused by
+// an unrelated process is never killed.
+func reconcileOrphans(prev *state.ProjectState) {
+	if prev == nil {
+		return
+	}
+	// If the previous devrig is still alive, its services aren't orphans.
+	if prev.PID != 0 && prev.PID != os.Getpid() && supervisor.SameProcess(prev.PID, prev.PIDStartTimeMs) {
+		fmt.Fprintf(os.Stderr, "warning: another devrig instance (pid %d) appears to be running for this project\n", prev.PID)
+		return
+	}
+	for name, svc := range prev.Services {
+		if svc.PID == 0 {
+			continue
+		}
+		if supervisor.SameProcess(int(svc.PID), svc.StartTimeMs) {
+			fmt.Fprintf(os.Stderr, "Reaping orphaned service %q (pid %d) from a previous run...\n", name, svc.PID)
+			supervisor.KillTree(int(svc.PID), 3*time.Second)
+		}
+	}
+}
+
+// Stop signals the running devrig process to shut down (SIGTERM on Unix; a
+// forceful tree kill on Windows), located via the PID file.
 func (o *Orchestrator) Stop() error {
 	st := state.Load(o.stateDir)
 	if st == nil {
@@ -715,6 +793,14 @@ func (o *Orchestrator) Stop() error {
 	var pid int
 	if _, err := fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &pid); err != nil {
 		return fmt.Errorf("invalid PID file: %w", err)
+	}
+
+	// Guard against PID reuse: only signal if the live process is still the
+	// devrig we recorded. Otherwise the PID now belongs to something unrelated.
+	if !supervisor.SameProcess(pid, st.PIDStartTimeMs) {
+		_ = os.Remove(pidPath)
+		fmt.Printf("devrig (pid %d) is not running; cleaned up stale PID file.\n", pid)
+		return nil
 	}
 
 	proc, err := os.FindProcess(pid)
@@ -746,7 +832,7 @@ func (o *Orchestrator) Delete() error {
 	// TODO Phase 3: stop docker containers
 	if o.cfg != nil && o.cfg.Cluster != nil {
 		resolver := tools.ResolverFromConfig(o.cfg.Tools, false)
-		mgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, "")
+		mgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), "")
 		_ = mgr.Delete(context.Background())
 	}
 
@@ -889,6 +975,18 @@ func buildTemplateVars(
 		if clusterState.RegistryPort != nil {
 			rh := fmt.Sprintf("localhost:%d", *clusterState.RegistryPort)
 			tv.ClusterRegistryHost = &rh
+		}
+		// cluster.image.<name>.tag — just the tag portion (e.g. "1234567890")
+		// of each built image. ImageTag is the full ref ("localhost:5000/n:tag"
+		// or "devrig-n:latest"); service env / addon values want only the tag.
+		// (build_args interpolation uses the full ref separately.)
+		tv.ClusterImageTags = make(map[string]string, len(clusterState.DeployedServices))
+		for name, ds := range clusterState.DeployedServices {
+			tag := ds.ImageTag
+			if i := strings.LastIndex(tag, ":"); i != -1 {
+				tag = tag[i+1:]
+			}
+			tv.ClusterImageTags[name] = tag
 		}
 	}
 

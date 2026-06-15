@@ -38,7 +38,7 @@ func TestClusterSmokeWithManagedTools(t *testing.T) {
 	}
 
 	clCfg := &config.ClusterConfig{Agents: 0, Registry: false}
-	mgr := cluster.NewManager(clCfg, resolver, "smoke", stateDir, "devrig-smoke-net")
+	mgr := cluster.NewManager(clCfg, resolver, "smoke", stateDir, stateDir, "devrig-smoke-net")
 
 	cs, err := mgr.Ensure(ctx)
 	if err != nil {
@@ -71,7 +71,7 @@ func TestClusterSmokeWithManagedTools(t *testing.T) {
 			Timeout:   "3m",
 		},
 	}
-	if err := cluster.InstallAddons(ctx, resolver, addons, cs, stateDir); err != nil {
+	if err := cluster.InstallAddons(ctx, resolver, addons, cs, stateDir, stateDir); err != nil {
 		t.Fatalf("helm addon install: %v", err)
 	}
 

@@ -61,7 +61,7 @@ redirect_uris = ["http://localhost:3000/callback"]
 [cluster]
 name = "compat"
 
-[cluster.images.worker]
+[cluster.image.worker]
 context = "./worker"
 
 [cluster.deploy.api-k8s]

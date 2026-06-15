@@ -26,6 +26,7 @@ func InstallAddons(
 	addons map[string]config.AddonConfig,
 	cs *state.ClusterState,
 	stateDir string,
+	configDir string,
 ) error {
 	order, err := addonTopoSort(addons)
 	if err != nil {
@@ -34,7 +35,7 @@ func InstallAddons(
 
 	for _, name := range order {
 		addon := addons[name]
-		if err := installAddon(ctx, r, name, &addon, cs); err != nil {
+		if err := installAddon(ctx, r, name, &addon, cs, configDir); err != nil {
 			return fmt.Errorf("addon %s: %w", name, err)
 		}
 		ns := addon.Namespace
@@ -67,20 +68,20 @@ func InstallAddons(
 	return nil
 }
 
-func installAddon(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState) error {
+func installAddon(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState, configDir string) error {
 	switch addon.Type {
 	case "helm":
-		return installHelm(ctx, r, name, addon, cs)
+		return installHelm(ctx, r, name, addon, cs, configDir)
 	case "manifest":
-		return installManifest(ctx, r, addon, cs)
+		return installManifest(ctx, r, addon, cs, configDir)
 	case "kustomize":
-		return KubectlApplyDir(ctx, r, cs.KubeconfigPath, addon.Path, true)
+		return KubectlApplyDir(ctx, r, cs.KubeconfigPath, addonManifestPath(addon.Path, configDir), true)
 	default:
 		return fmt.Errorf("unknown addon type %q", addon.Type)
 	}
 }
 
-func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState) error {
+func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState, configDir string) error {
 	ns := addon.Namespace
 	if ns == "" {
 		ns = "default"
@@ -94,7 +95,14 @@ func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *con
 		helm(ctx, r, cs.KubeconfigPath, "repo", "update")
 	}
 
-	args := []string{"upgrade", "--install", name, addon.Chart,
+	// Resolve a local chart path (no repo, not OCI) relative to the config dir.
+	chart := addon.Chart
+	if addon.Repo == nil && !strings.HasPrefix(chart, "oci://") &&
+		(strings.HasPrefix(chart, ".") || strings.ContainsAny(chart, `/\`)) {
+		chart = addonManifestPath(chart, configDir)
+	}
+
+	args := []string{"upgrade", "--install", name, chart,
 		"--namespace", ns, "--create-namespace",
 	}
 	if addon.Version != nil {
@@ -111,7 +119,7 @@ func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *con
 	}
 
 	for _, vf := range addon.ValuesFiles {
-		args = append(args, "--values", vf)
+		args = append(args, "--values", addonManifestPath(vf, configDir))
 	}
 
 	if len(addon.Values) > 0 {
@@ -138,13 +146,14 @@ func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *con
 	return nil
 }
 
-func installManifest(ctx context.Context, r *tools.Resolver, addon *config.AddonConfig, cs *state.ClusterState) error {
+func installManifest(ctx context.Context, r *tools.Resolver, addon *config.AddonConfig, cs *state.ClusterState, configDir string) error {
 	if addon.Path == "" {
 		return nil
 	}
+	path := addonManifestPath(addon.Path, configDir)
 	// Poll for up to 5 minutes on CRD-not-found errors.
 	return pollWithBackoff(ctx, 5*time.Minute, 3*time.Second, 30*time.Second, func() error {
-		return KubectlApplyDir(ctx, r, cs.KubeconfigPath, addon.Path, false)
+		return KubectlApplyDir(ctx, r, cs.KubeconfigPath, path, false)
 	})
 }
 

@@ -86,9 +86,9 @@ type Supervisor struct {
 	Env        map[string]string
 	Policy     RestartPolicy
 
-	logBroadcast *events.Broadcaster
+	logBroadcast   *events.Broadcaster
 	eventBroadcast *events.Broadcaster
-	stateDir     string
+	stateDir       string
 }
 
 // New creates a Supervisor.
@@ -139,9 +139,15 @@ func (s *Supervisor) Run(ctx context.Context) error {
 			return fmt.Errorf("spawn %s: %w", s.Name, err)
 		}
 
-		pid := uint32(cmd.Process.Pid)
+		pid := cmd.Process.Pid
+		// On Windows, place the process in the kill-on-close job so it (and its
+		// children) die with devrig even on an abrupt exit. No-op elsewhere.
+		_ = assignToJob(cmd.Process)
+		// Record PID + start time so a later run can reuse-proof identify and
+		// reap this process if devrig crashes before stopping it.
+		startMs, _ := ProcStartTimeMs(pid)
 		if s.stateDir != "" {
-			state.UpdateServicePID(s.stateDir, s.Name, pid)
+			state.UpdateServiceProc(s.stateDir, s.Name, uint32(pid), startMs)
 		}
 
 		// Start log stream readers.

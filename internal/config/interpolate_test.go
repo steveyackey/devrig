@@ -21,20 +21,20 @@ func testVars() *TemplateVars {
 		OTelHTTPPort:     &httpPort,
 		OIDCPort:         &oidcPort,
 		OIDCIssuer:       &issuer,
-		ClusterImageTags: map[string]string{"worker": "localhost:5000/worker:123"},
+		ClusterImageTags: map[string]string{"worker": "123"},
 	}
 }
 
 func TestInterpolateString(t *testing.T) {
 	cases := map[string]string{
-		"{{ project.name }}":                    "demo",
-		"{{ services.api.port }}":               "3000",
-		"{{ docker.postgres.port }}":            "5432",
-		"{{ docker.minio.ports.console }}":      "9001",
-		"{{ docker.minio.port_console }}":       "9001",
-		"{{ dashboard.port }}":                  "4000",
-		"{{ oidc.issuer }}":                     "http://localhost:9000",
-		"{{ cluster.image.worker.tag }}":        "localhost:5000/worker:123",
+		"{{ project.name }}":                                     "demo",
+		"{{ services.api.port }}":                                "3000",
+		"{{ docker.postgres.port }}":                             "5432",
+		"{{ docker.minio.ports.console }}":                       "9001",
+		"{{ docker.minio.port_console }}":                        "9001",
+		"{{ dashboard.port }}":                                   "4000",
+		"{{ oidc.issuer }}":                                      "http://localhost:9000",
+		"{{ cluster.image.worker.tag }}":                         "123",
 		"postgres://u:p@localhost:{{ docker.postgres.port }}/db": "postgres://u:p@localhost:5432/db",
 	}
 	vars := testVars()

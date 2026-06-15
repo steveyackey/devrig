@@ -78,11 +78,11 @@ func Validate(cfg *Config) error {
 	if cfg.Cluster != nil {
 		for name, img := range cfg.Cluster.Images {
 			if strings.TrimSpace(img.Context) == "" {
-				ve.add("cluster.images.%s: context must not be empty", name)
+				ve.add("cluster.image.%s: context must not be empty", name)
 			}
 			// cluster.image names must not conflict with cluster.deploy
 			if _, conflict := cfg.Cluster.Deploy[name]; conflict {
-				ve.add("cluster.images.%s: name conflicts with cluster.deploy.%s", name, name)
+				ve.add("cluster.image.%s: name conflicts with cluster.deploy.%s", name, name)
 			}
 		}
 		for name, dep := range cfg.Cluster.Deploy {

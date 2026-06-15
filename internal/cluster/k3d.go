@@ -2,6 +2,7 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -18,21 +19,24 @@ import (
 
 // Manager orchestrates the full cluster lifecycle.
 type Manager struct {
-	cfg      *config.ClusterConfig
-	slug     string
-	stateDir string
-	network  string
-	tools    *tools.Resolver
+	cfg       *config.ClusterConfig
+	slug      string
+	stateDir  string
+	configDir string
+	network   string
+	tools     *tools.Resolver
 }
 
 // NewManager creates a cluster manager. slug and network are the devrig
-// project slug and Docker network name. resolver locates the k3d/kubectl/helm
-// binaries; pass nil for defaults (managed, on-demand fetch disabled).
-func NewManager(cfg *config.ClusterConfig, resolver *tools.Resolver, slug, stateDir, network string) *Manager {
+// project slug and Docker network name. configDir is the directory containing
+// the devrig config file, used to resolve relative volume host paths. resolver
+// locates the k3d/kubectl/helm binaries; pass nil for defaults (managed,
+// on-demand fetch disabled).
+func NewManager(cfg *config.ClusterConfig, resolver *tools.Resolver, slug, stateDir, configDir, network string) *Manager {
 	if resolver == nil {
 		resolver = tools.NewResolver(tools.Options{})
 	}
-	return &Manager{cfg: cfg, slug: slug, stateDir: stateDir, network: network, tools: resolver}
+	return &Manager{cfg: cfg, slug: slug, stateDir: stateDir, configDir: configDir, network: network, tools: resolver}
 }
 
 // ClusterName returns the k3d cluster name (dev-friendly if not configured).
@@ -119,7 +123,7 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 		args = append(args, "--port", p)
 	}
 	for _, v := range m.cfg.Volumes {
-		args = append(args, "--volume", v)
+		args = append(args, "--volume", resolveClusterVolume(v, m.configDir))
 	}
 	for _, a := range m.cfg.K3SArgs {
 		args = append(args, "--k3s-arg", a)
@@ -142,16 +146,76 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 	return nil
 }
 
+// resolveClusterVolume resolves a relative host source path in a k3d volume
+// spec to an absolute path, anchored at configDir. k3d volume specs are
+// "SOURCE:DEST[@NODEFILTER]" (e.g. "../:/workspace@server:*"). Docker rejects a
+// relative SOURCE ("../" => "invalid characters for a local volume name"), so a
+// relative host path must be made absolute. Named volumes and already-absolute
+// paths (including Windows drive paths like "C:\...") are returned unchanged.
+func resolveClusterVolume(spec, configDir string) string {
+	// Split off the optional "@nodefilter" suffix; its own ":" (e.g.
+	// "server:*") must not be confused with the SOURCE:DEST separator.
+	volPart, suffix := spec, ""
+	if at := strings.Index(spec, "@"); at != -1 {
+		volPart, suffix = spec[:at], spec[at:]
+	}
+
+	src, dest, ok := splitVolumeSpec(volPart)
+	if !ok {
+		return spec // no DEST separator — leave untouched
+	}
+	// Only relative host paths need resolving. Absolute paths (incl. Windows
+	// "C:\...") and bare named volumes ("pgdata") are passed through.
+	if src == "" || filepath.IsAbs(src) {
+		return spec
+	}
+	if !strings.HasPrefix(src, ".") && !strings.ContainsAny(src, `/\`) {
+		return spec // named volume, not a host path
+	}
+
+	abs, err := filepath.Abs(filepath.Join(configDir, src))
+	if err != nil {
+		return spec
+	}
+	return abs + ":" + dest + suffix
+}
+
+// splitVolumeSpec splits "SOURCE:DEST" into its parts, tolerating a Windows
+// drive-letter colon in SOURCE (e.g. "C:\path:/dest").
+func splitVolumeSpec(s string) (src, dest string, ok bool) {
+	start := 0
+	if len(s) >= 2 && s[1] == ':' &&
+		((s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z')) {
+		start = 2 // skip the drive-letter colon
+	}
+	i := strings.Index(s[start:], ":")
+	if i == -1 {
+		return "", "", false
+	}
+	i += start
+	return s[:i], s[i+1:], true
+}
+
 // writeKubeconfig extracts the kubeconfig from k3d to the state dir.
 func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 	if err := os.MkdirAll(m.stateDir, 0o755); err != nil {
 		return fmt.Errorf("cluster: create state dir: %w", err)
 	}
-	out, err := m.k3d(ctx, "kubeconfig", "get", name)
+	// Capture stdout only: k3d logs non-fatal warnings (e.g. "error getting
+	// loadbalancer config" while the serverlb is still initializing) to stderr,
+	// and merging them into the file would corrupt the kubeconfig YAML.
+	bin, err := m.tools.Path(ctx, tools.K3d)
 	if err != nil {
-		return fmt.Errorf("cluster: get kubeconfig: %w\n%s", err, out)
+		return err
 	}
-	if err := os.WriteFile(m.KubeconfigPath(), []byte(out), 0o600); err != nil {
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, bin, "kubeconfig", "get", name)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("cluster: get kubeconfig: %w\n%s", err, strings.TrimSpace(stderr.String()))
+	}
+	if err := os.WriteFile(m.KubeconfigPath(), stdout.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("cluster: write kubeconfig: %w", err)
 	}
 	return nil

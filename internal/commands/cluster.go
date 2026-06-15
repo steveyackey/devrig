@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/steveyackey/devrig/internal/cluster"
@@ -38,7 +39,7 @@ func newClusterCreateCmd(cfgFile *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, true), id.Slug, id.StateDir, "bridge")
+			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, true), id.Slug, id.StateDir, filepath.Dir(id.ConfigPath), "bridge")
 			cs, err := mgr.Ensure(cmd.Context())
 			if err != nil {
 				return err
@@ -77,12 +78,17 @@ func newClusterRebuildCmd(cfgFile *string) *cobra.Command {
 				return false
 			}
 
-			for name, imgCfg := range cfg.Cluster.Images {
+			configDir := filepath.Dir(id.ConfigPath)
+			imgOrder, err := cluster.ImageBuildOrder(cfg.Cluster.Images)
+			if err != nil {
+				return err
+			}
+			for _, name := range imgOrder {
 				if !selected(name) {
 					continue
 				}
-				ic := imgCfg
-				tag, err := cluster.BuildImage(cmd.Context(), name, &ic, cs)
+				ic := cfg.Cluster.Images[name]
+				tag, err := cluster.BuildImage(cmd.Context(), name, &ic, cs, configDir)
 				if err != nil {
 					return fmt.Errorf("rebuild %s: %w", name, err)
 				}
@@ -96,7 +102,7 @@ func newClusterRebuildCmd(cfgFile *string) *cobra.Command {
 				if noApply {
 					dc.Manifests = ""
 				}
-				if err := cluster.BuildAndDeploy(cmd.Context(), tools.ResolverFromConfig(cfg.Tools, true), name, &dc, cs, id.StateDir); err != nil {
+				if err := cluster.BuildAndDeploy(cmd.Context(), tools.ResolverFromConfig(cfg.Tools, true), name, &dc, cs, id.StateDir, configDir); err != nil {
 					return fmt.Errorf("rebuild %s: %w", name, err)
 				}
 				fmt.Printf("rebuilt and deployed %s\n", name)
@@ -204,7 +210,7 @@ func newClusterDeleteCmd(cfgFile *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, false), id.Slug, id.StateDir, "")
+			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, false), id.Slug, id.StateDir, filepath.Dir(id.ConfigPath), "")
 			if err := mgr.Delete(cmd.Context()); err != nil {
 				return err
 			}

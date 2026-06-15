@@ -23,15 +23,23 @@ type ProjectState struct {
 	Dashboard       *DashboardState                `json:"dashboard,omitempty"`
 	// PID of the main devrig process (written so `devrig stop` can signal it).
 	PID int `json:"pid,omitempty"`
+	// PIDStartTimeMs is the devrig process's creation time (ms since epoch),
+	// stored so `devrig stop` can confirm the PID hasn't been reused before
+	// signalling it.
+	PIDStartTimeMs int64 `json:"pid_start_time_ms,omitempty"`
 }
 
 type ServiceState struct {
-	PID      uint32  `json:"pid"`
-	Port     *uint16 `json:"port,omitempty"`
-	PortAuto bool    `json:"port_auto"`
-	Protocol *string `json:"protocol,omitempty"`
-	Phase    *string `json:"phase,omitempty"`
-	ExitCode *int    `json:"exit_code,omitempty"`
+	PID uint32 `json:"pid"`
+	// StartTimeMs is the service process's creation time (ms since epoch),
+	// recorded alongside PID so a later run can reuse-proof identify and reap an
+	// orphan left by a crashed devrig.
+	StartTimeMs int64   `json:"start_time_ms,omitempty"`
+	Port        *uint16 `json:"port,omitempty"`
+	PortAuto    bool    `json:"port_auto"`
+	Protocol    *string `json:"protocol,omitempty"`
+	Phase       *string `json:"phase,omitempty"`
+	ExitCode    *int    `json:"exit_code,omitempty"`
 }
 
 type DockerState struct {
@@ -52,12 +60,12 @@ type ComposeServiceState struct {
 }
 
 type ClusterState struct {
-	ClusterName       string                       `json:"cluster_name"`
-	KubeconfigPath    string                       `json:"kubeconfig_path"`
-	RegistryName      *string                      `json:"registry_name,omitempty"`
-	RegistryPort      *uint16                      `json:"registry_port,omitempty"`
-	DeployedServices  map[string]ClusterDeployState `json:"deployed_services"`
-	InstalledAddons   map[string]AddonState        `json:"installed_addons"`
+	ClusterName      string                        `json:"cluster_name"`
+	KubeconfigPath   string                        `json:"kubeconfig_path"`
+	RegistryName     *string                       `json:"registry_name,omitempty"`
+	RegistryPort     *uint16                       `json:"registry_port,omitempty"`
+	DeployedServices map[string]ClusterDeployState `json:"deployed_services"`
+	InstalledAddons  map[string]AddonState         `json:"installed_addons"`
 }
 
 type ClusterDeployState struct {
@@ -125,15 +133,16 @@ func Remove(stateDir string) error {
 // mu protects atomic file-level updates below.
 var mu sync.Mutex
 
-// UpdateServicePID writes just the PID field for a service into state.json
-// using an exclusive file lock.
-func UpdateServicePID(stateDir, service string, pid uint32) {
+// UpdateServiceProc writes the PID and process start time for a service into
+// state.json using an exclusive file lock.
+func UpdateServiceProc(stateDir, service string, pid uint32, startTimeMs int64) {
 	withLock(stateDir, func(s *ProjectState) {
 		if s.Services == nil {
 			s.Services = make(map[string]ServiceState)
 		}
 		st := s.Services[service]
 		st.PID = pid
+		st.StartTimeMs = startTimeMs
 		s.Services[service] = st
 	})
 }

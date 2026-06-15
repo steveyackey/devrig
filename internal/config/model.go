@@ -212,9 +212,9 @@ type Port struct {
 func FixedPort(p uint16) Port { return Port{Value: p} }
 func AutoPort() Port          { return Port{Auto: true} }
 
-func (p Port) IsAuto() bool  { return p.Auto }
+func (p Port) IsAuto() bool    { return p.Auto }
 func (p Port) AsFixed() uint16 { return p.Value }
-func (p Port) IsZero() bool  { return !p.Auto && p.Value == 0 }
+func (p Port) IsZero() bool    { return !p.Auto && p.Value == 0 }
 
 func (p *Port) UnmarshalTOML(v any) error {
 	switch t := v.(type) {
@@ -374,7 +374,7 @@ type ClusterConfig struct {
 	Ports      []string                       `toml:"ports"      yaml:"ports"`
 	Volumes    []string                       `toml:"volumes"    yaml:"volumes"`
 	Registry   bool                           `toml:"registry"   yaml:"registry"`
-	Images     map[string]ClusterImageConfig  `toml:"images"     yaml:"images"`
+	Images     map[string]ClusterImageConfig  `toml:"image"      yaml:"image"`
 	Deploy     map[string]ClusterDeployConfig `toml:"deploy"     yaml:"deploy"`
 	Addons     map[string]AddonConfig         `toml:"addons"     yaml:"addons"`
 	Logs       *ClusterLogsConfig             `toml:"logs"       yaml:"logs"`
