@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.0](https://github.com/steveyackey/devrig/compare/v0.34.3...v0.35.0) (2026-06-15)
+
+
+### Features
+
+* stop containers on shutdown, complete delete cleanup, and polished cross-platform startup UI ([4137e3a](https://github.com/steveyackey/devrig/commit/4137e3ac21870fad6ef958dcc66f5a9d96562c00))
+
 ## [0.34.3](https://github.com/steveyackey/devrig/compare/v0.34.2...v0.34.3) (2026-06-15)
 
 
