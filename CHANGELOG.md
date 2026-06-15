@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.35.1](https://github.com/steveyackey/devrig/compare/v0.35.0...v0.35.1) (2026-06-15)
+
+
+### Bug Fixes
+
+* **oidc:** restore server-rendered browser login for the built-in provider ([f1e07f3](https://github.com/steveyackey/devrig/commit/f1e07f3d1fb268f97c6c2dc526b647e804a9aaa0))
+
 ## [0.35.0](https://github.com/steveyackey/devrig/compare/v0.34.3...v0.35.0) (2026-06-15)
 
 
