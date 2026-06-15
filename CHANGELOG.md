@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.34.3](https://github.com/steveyackey/devrig/compare/v0.34.2...v0.34.3) (2026-06-15)
+
+
+### Bug Fixes
+
+* cluster start regressions and resilient cross-platform process management ([1b5e80d](https://github.com/steveyackey/devrig/commit/1b5e80d2262defc4181393e25e9150845db9ab54))
+
 ## [0.34.2](https://github.com/steveyackey/devrig/compare/v0.34.1...v0.34.2) (2026-06-13)
 
 
