@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -42,6 +43,7 @@ import (
 	"github.com/steveyackey/devrig/internal/ports"
 	"github.com/steveyackey/devrig/internal/registry"
 	"github.com/steveyackey/devrig/internal/state"
+	"github.com/steveyackey/devrig/internal/style"
 	"github.com/steveyackey/devrig/internal/supervisor"
 	"github.com/steveyackey/devrig/internal/tools"
 )
@@ -697,7 +699,8 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		fmt.Fprintln(os.Stderr, "\nShutting down...")
 	case <-allDone:
 		fmt.Fprintln(os.Stderr, "All services exited.")
-		cancel()
+		cancel() // end log-follow streams holding the Docker client before stopping containers
+		stopDockerContainers(dockerMgr, dockerStates)
 		o.logBroadcast.Close()
 		o.eventBroadcast.Close()
 		return nil
@@ -718,7 +721,12 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 				fmt.Fprintf(os.Stderr, "service %s did not stop in time; continuing.\n", h.name)
 			}
 		}
-		cancel() // stop anything else hanging off the root context
+		// Cancel the root context first: this ends the per-container log-follow
+		// streams that hold a connection on the shared Docker client. Otherwise
+		// the StopService calls below can deadlock waiting for a free connection
+		// (the stream only releases on cancel). Then stop the containers.
+		cancel()
+		stopDockerContainers(dockerMgr, dockerStates)
 		supervisorWg.Wait()
 		close(shutdownDone)
 	}()
@@ -749,6 +757,31 @@ type svcHandle struct {
 	name   string
 	cancel context.CancelFunc
 	done   chan struct{}
+}
+
+// stopDockerContainers stops (but does not remove) the project's Docker service
+// containers on shutdown, so `docker ps` is clean afterward. They are stopped
+// rather than removed so the next start is quick and named volumes (e.g.
+// database data) persist; StartService recreates the container. Stops run
+// concurrently under a bounded context so one slow container can't stall the
+// shutdown. The k3d cluster is intentionally left running (use `devrig delete`).
+func stopDockerContainers(mgr *docker.Manager, states map[string]state.DockerState) {
+	if mgr == nil || len(states) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	var wg sync.WaitGroup
+	for name, ds := range states {
+		wg.Add(1)
+		go func(name string, ds state.DockerState) {
+			defer wg.Done()
+			if err := mgr.StopService(ctx, &ds); err != nil {
+				fmt.Fprintf(os.Stderr, "stopping container %s: %v\n", name, err)
+			}
+		}(name, ds)
+	}
+	wg.Wait()
 }
 
 // reconcileOrphans kills service processes left running by a previous devrig
@@ -829,11 +862,20 @@ func (o *Orchestrator) Stop() error {
 func (o *Orchestrator) Delete() error {
 	_ = o.Stop() // best-effort
 
-	// TODO Phase 3: stop docker containers
+	ctx := context.Background()
+
+	// Remove all Docker resources for this project — containers, volumes, and
+	// the network — found by the devrig.project label.
+	if dockerMgr, err := docker.New(o.id.Slug); err == nil {
+		if err := dockerMgr.CleanupAll(ctx); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: cleaning up Docker resources: %v\n", err)
+		}
+	}
+
 	if o.cfg != nil && o.cfg.Cluster != nil {
 		resolver := tools.ResolverFromConfig(o.cfg.Tools, false)
 		mgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), "")
-		_ = mgr.Delete(context.Background())
+		_ = mgr.Delete(ctx)
 	}
 
 	if err := state.Remove(o.stateDir); err != nil {
@@ -1089,52 +1131,111 @@ func runDev(ctx context.Context, webDir string) {
 }
 
 // printBanner outputs the startup banner to stdout.
+// kindBadge returns a short, colored tag for a resource kind.
+func kindBadge(kind graph.ResourceKind) string {
+	switch kind {
+	case graph.KindService:
+		return style.Cyan("service")
+	case graph.KindDocker:
+		return style.Blue("docker")
+	case graph.KindCompose:
+		return style.Blue("compose")
+	case graph.KindClusterImage:
+		return style.Magenta("image")
+	case graph.KindClusterDeploy:
+		return style.Magenta("cluster")
+	default:
+		return ""
+	}
+}
+
 func printBanner(slug string, cfg *config.Config, order []graph.Node) {
-	fmt.Printf("\n  devrig  ·  %s\n\n", slug)
+	gl := style.G()
+	fmt.Printf("\n  %s  %s  %s\n\n",
+		style.BoldCyan("devrig"), style.Gray(gl.MidDot), style.Bold(slug))
+
+	// Align the badge column.
+	badgeW := 0
 	for _, node := range order {
-		switch node.Kind {
-		case graph.KindService:
-			fmt.Printf("  ◦ %s\n", node.Name)
-		case graph.KindDocker:
-			fmt.Printf("  ◦ [docker] %s\n", node.Name)
-		case graph.KindCompose:
-			fmt.Printf("  ◦ [compose] %s\n", node.Name)
-		case graph.KindClusterImage:
-			fmt.Printf("  ◦ [image] %s\n", node.Name)
-		case graph.KindClusterDeploy:
-			fmt.Printf("  ◦ [cluster] %s\n", node.Name)
+		if w := style.Width(kindBadge(node.Kind)); w > badgeW {
+			badgeW = w
 		}
 	}
+	if cfg.Dashboard != nil && style.Width(style.Green("dashboard")) > badgeW {
+		badgeW = style.Width(style.Green("dashboard"))
+	}
+
+	line := func(badge, name string) {
+		fmt.Printf("  %s %s  %s\n", style.Gray(gl.Bullet), style.PadRight(badge, badgeW), name)
+	}
+	for _, node := range order {
+		line(kindBadge(node.Kind), node.Name)
+	}
 	if cfg.Dashboard != nil {
-		fmt.Printf("  ◦ [dashboard]\n")
+		line(style.Green("dashboard"), "")
 	}
 	fmt.Println()
 }
 
-// printStartupSummary outputs the post-startup summary table.
-func printStartupSummary(slug string, ps *state.ProjectState, cfg *config.Config, resolvedPorts map[string]uint16) {
-	fmt.Printf("\n  ╭─ %s\n", slug)
+// statusDot returns a colored status glyph + word for a service phase.
+func statusDot(phase string) (glyph, label string) {
+	gl := style.G()
+	switch phase {
+	case "running":
+		return style.Green(gl.Running), style.Green("running")
+	case "failed":
+		return style.Red(gl.Failed), style.Red("failed")
+	case "stopped":
+		return style.Gray(gl.Stopped), style.Gray("stopped")
+	default:
+		return style.Yellow(gl.Pending), style.Yellow("starting")
+	}
+}
 
-	for name, svc := range ps.Services {
-		port := ""
+// printStartupSummary outputs the post-startup summary box.
+func printStartupSummary(slug string, ps *state.ProjectState, cfg *config.Config, resolvedPorts map[string]uint16) {
+	// Deterministic order, names aligned.
+	names := make([]string, 0, len(ps.Services))
+	for name := range ps.Services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	nameW := len("dashboard")
+	for _, n := range names {
+		if len(n) > nameW {
+			nameW = len(n)
+		}
+	}
+
+	var rows []string
+	for _, name := range names {
+		svc := ps.Services[name]
+		phase := "starting"
+		if svc.Phase != nil {
+			phase = *svc.Phase
+		}
+		glyph, label := statusDot(phase)
+		url := ""
 		if p, ok := resolvedPorts[fmt.Sprintf("service:%s", name)]; ok {
 			proto := "http"
 			if svcCfg, ok2 := cfg.Services[name]; ok2 && svcCfg.Protocol != nil {
 				proto = *svcCfg.Protocol
 			}
-			port = fmt.Sprintf("  %s://localhost:%d", proto, p)
+			url = style.Link(fmt.Sprintf("%s://localhost:%d", proto, p))
 		}
-		phase := "starting"
-		if svc.Phase != nil {
-			phase = *svc.Phase
-		}
-		fmt.Printf("  │  %-20s  %s%s\n", name, phase, port)
+		rows = append(rows, fmt.Sprintf("%s  %s  %s  %s",
+			glyph, style.Bold(style.PadRight(name, nameW)), style.PadRight(label, 8), url))
 	}
 
 	if ps.Dashboard != nil {
-		fmt.Printf("  │  %-20s  http://localhost:%d\n", "[dashboard]", ps.Dashboard.DashboardPort)
+		glyph, label := statusDot("running")
+		url := style.Link(fmt.Sprintf("http://localhost:%d", ps.Dashboard.DashboardPort))
+		rows = append(rows, fmt.Sprintf("%s  %s  %s  %s",
+			glyph, style.Bold(style.PadRight("dashboard", nameW)), style.PadRight(label, 8), url))
 	}
 
-	fmt.Println("  ╰─")
+	fmt.Println()
+	fmt.Print(style.Box(slug, rows))
 	fmt.Println()
 }
