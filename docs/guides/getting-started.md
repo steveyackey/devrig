@@ -26,6 +26,17 @@ embedded web dashboard.
 Once installed, `devrig update` self-updates the binary from the latest GitHub
 release.
 
+> **Upgrading from the Rust version (≤ 0.30.x)?** `devrig update` on a Rust build
+> won't pull the Go release — the Rust binary delegates to the cargo-dist
+> `devrig-update` sidecar, which only recognizes cargo-dist release assets, while
+> Go releases are built by goreleaser. Re-run the installer
+> ([`install.sh`](https://github.com/steveyackey/devrig/releases/latest/download/install.sh)
+> /
+> [`install.ps1`](https://github.com/steveyackey/devrig/releases/latest/download/install.ps1))
+> once to switch to the Go build. After that, `devrig update` self-updates
+> normally and cleans up the leftover Rust install receipt and `devrig-update`
+> sidecar on its first run.
+
 ### go install (no embedded dashboard)
 
 ```bash

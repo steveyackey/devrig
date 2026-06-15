@@ -44,6 +44,13 @@ powershell -ExecutionPolicy Bypass -c "irm https://github.com/steveyackey/devrig
 Both installers include the embedded dashboard. Run `devrig update` to upgrade
 in place afterward.
 
+**Upgrading from the Rust version (≤ 0.30.x)** — `devrig update` on a Rust build
+won't pull the Go release: it delegates to the cargo-dist `devrig-update` sidecar,
+which only recognizes cargo-dist release assets, whereas Go releases are built by
+goreleaser. Re-run the shell/PowerShell installer above once to switch to the Go
+build. From then on `devrig update` self-updates normally and removes the leftover
+Rust install receipt and `devrig-update` sidecar on its first run.
+
 **Prebuilt binaries** — or download the archive for your platform from the
 [latest release](https://github.com/steveyackey/devrig/releases/latest) and put
 `devrig` on your `PATH`.
