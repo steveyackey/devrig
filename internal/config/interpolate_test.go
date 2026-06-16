@@ -73,3 +73,32 @@ func TestInterpolateMapCollectsErrors(t *testing.T) {
 		t.Errorf("good value not interpolated: %q", m["GOOD"])
 	}
 }
+
+func TestInterpolateConfigResolvesOIDCRedirectURIsAndEnv(t *testing.T) {
+	web := uint16(53255)
+	vars := &TemplateVars{ServicePorts: map[string]uint16{"web": web}}
+	cfg := &Config{
+		Env: map[string]string{"CALLBACK": "http://localhost:{{ services.web.port }}/cb"},
+		OIDC: &OIDCConfig{
+			Clients: map[string]OIDCClientConfig{
+				"web": {RedirectURIs: []string{
+					"http://localhost:{{ services.web.port }}/auth/callback",
+					"http://localhost:{{ services.web.port }}/",
+				}},
+			},
+		},
+	}
+	if err := InterpolateConfig(cfg, vars); err != nil {
+		t.Fatalf("InterpolateConfig: %v", err)
+	}
+	got := cfg.OIDC.Clients["web"].RedirectURIs
+	want := []string{"http://localhost:53255/auth/callback", "http://localhost:53255/"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("redirect_uris[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	if cfg.Env["CALLBACK"] != "http://localhost:53255/cb" {
+		t.Errorf("env CALLBACK = %q", cfg.Env["CALLBACK"])
+	}
+}

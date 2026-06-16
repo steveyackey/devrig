@@ -21,9 +21,9 @@ type TemplateVars struct {
 	// compose.NAME.port
 	ComposePorts map[string]uint16
 	// dashboard.*
-	DashboardPort     *uint16
-	OTelGRPCPort      *uint16
-	OTelHTTPPort      *uint16
+	DashboardPort *uint16
+	OTelGRPCPort  *uint16
+	OTelHTTPPort  *uint16
 	// oidc.*
 	OIDCPort   *uint16
 	OIDCIssuer *string
@@ -282,6 +282,22 @@ func InterpolateConfig(cfg *Config, vars *TemplateVars) error {
 		d.Image = interpStr(fmt.Sprintf("docker.%s.image", name), d.Image)
 		interpMap(fmt.Sprintf("docker.%s.env", name), d.Env)
 		cfg.Docker[name] = d
+	}
+
+	// Project-level [env].
+	interpMap("env", cfg.Env)
+
+	// OIDC client redirect URIs commonly reference a service's resolved port,
+	// e.g. "http://localhost:{{ services.web.port }}/auth/callback". They are
+	// seeded into the provider, so they must be resolved or the OAuth client's
+	// redirect_uri won't match ("redirect_uri is not registered").
+	if cfg.OIDC != nil {
+		for id, c := range cfg.OIDC.Clients {
+			for i, ru := range c.RedirectURIs {
+				c.RedirectURIs[i] = interpStr(fmt.Sprintf("oidc.clients.%s.redirect_uris[%d]", id, i), ru)
+			}
+			cfg.OIDC.Clients[id] = c
+		}
 	}
 
 	if len(errs) > 0 {
