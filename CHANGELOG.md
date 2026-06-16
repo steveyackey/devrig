@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.37.1](https://github.com/steveyackey/devrig/compare/v0.37.0...v0.37.1) (2026-06-16)
+
+
+### Bug Fixes
+
+* **cluster:** reuse an existing k3d cluster instead of failing to create it ([c069709](https://github.com/steveyackey/devrig/commit/c06970987b9b74e40496628fd5afec2696607cc8))
+* **identity:** persist project slug so upgrades don't orphan clusters ([d596bfe](https://github.com/steveyackey/devrig/commit/d596bfe62e1e92c205f85c93f9d5202647c88a85))
+
 ## [0.37.0](https://github.com/steveyackey/devrig/compare/v0.36.0...v0.37.0) (2026-06-16)
 
 
