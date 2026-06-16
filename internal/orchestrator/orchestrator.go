@@ -367,10 +367,14 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 					prevDocker = &ds
 				}
 			}
+			sp := style.NewSpinner("Starting " + node.Name)
+			sp.Start()
 			ds, err := dockerMgr.StartService(ctx, node.Name, &dockerCfg, prevDocker, allocated, cfgDir)
 			if err != nil {
+				sp.Fail("Starting " + node.Name + " failed")
 				return fmt.Errorf("starting docker service %s: %w", node.Name, err)
 			}
+			sp.Done("Started " + node.Name)
 			dockerStates[node.Name] = ds
 			// Start log stream in background.
 			go docker.StreamContainerLogs(ctx, dockerMgr.Client(), ds.ContainerID, node.Name, o.logBroadcast)
@@ -390,15 +394,20 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		}
 		resolver := tools.ResolverFromConfig(o.cfg.Tools, true)
 		clusterMgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), net)
+		sp := style.NewSpinner("Preparing cluster")
+		sp.Start()
 		cs, err := clusterMgr.Ensure(ctx)
 		if err != nil {
+			sp.Fail("Cluster setup failed")
 			return fmt.Errorf("cluster: %w", err)
 		}
 		if cs.RegistryPort != nil {
 			if err := cluster.WaitForRegistry(ctx, *cs.RegistryPort); err != nil {
+				sp.Fail("Cluster registry not ready")
 				return fmt.Errorf("cluster: wait for registry: %w", err)
 			}
 		}
+		sp.Done("Cluster ready")
 
 		// Build standalone images in dependency order so that build_args
 		// referencing another image's tag resolve to an already-built image.
@@ -409,16 +418,24 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		}
 		for _, imgName := range imgOrder {
 			ic := o.cfg.Cluster.Images[imgName]
+			sp := style.NewSpinner("Building image " + imgName)
+			sp.Start()
 			if _, err := cluster.BuildImage(ctx, imgName, &ic, cs, cfgDir); err != nil {
+				sp.Fail("Building image " + imgName + " failed")
 				return fmt.Errorf("cluster image %s: %w", imgName, err)
 			}
+			sp.Done("Built image " + imgName)
 		}
 
 		// Install addons.
 		if len(o.cfg.Cluster.Addons) > 0 {
+			sp := style.NewSpinner("Installing addons")
+			sp.Start()
 			if err := cluster.InstallAddons(ctx, resolver, o.cfg.Cluster.Addons, cs, o.stateDir, cfgDir); err != nil {
+				sp.Fail("Installing addons failed")
 				return fmt.Errorf("cluster addons: %w", err)
 			}
+			sp.Done("Addons installed")
 		}
 
 		// Inject Fluent Bit log collector if enabled.
@@ -436,9 +453,13 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		// Build and deploy cluster services.
 		for svcName, svcCfg := range o.cfg.Cluster.Deploy {
 			sc := svcCfg
+			sp := style.NewSpinner("Deploying " + svcName)
+			sp.Start()
 			if err := cluster.BuildAndDeploy(ctx, resolver, svcName, &sc, cs, o.stateDir, cfgDir); err != nil {
+				sp.Fail("Deploying " + svcName + " failed")
 				return fmt.Errorf("cluster deploy %s: %w", svcName, err)
 			}
+			sp.Done("Deployed " + svcName)
 		}
 
 		clusterState = cs

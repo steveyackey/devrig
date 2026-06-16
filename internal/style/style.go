@@ -105,19 +105,19 @@ func Link(url string) string {
 type Glyphs struct {
 	TopLeft, TopRight, BotLeft, BotRight, H, V string
 	Bullet, MidDot, Arrow                      string
-	Running, Pending, Failed, Stopped          string
+	Running, Pending, Failed, Stopped, Check   string
 }
 
 var unicodeGlyphs = Glyphs{
 	TopLeft: "╭", TopRight: "╮", BotLeft: "╰", BotRight: "╯", H: "─", V: "│",
 	Bullet: "◦", MidDot: "·", Arrow: "→",
-	Running: "●", Pending: "◐", Failed: "✗", Stopped: "○",
+	Running: "●", Pending: "◐", Failed: "✗", Stopped: "○", Check: "✓",
 }
 
 var asciiGlyphs = Glyphs{
 	TopLeft: "+", TopRight: "+", BotLeft: "+", BotRight: "+", H: "-", V: "|",
 	Bullet: "-", MidDot: "-", Arrow: "->",
-	Running: "*", Pending: "o", Failed: "x", Stopped: ".",
+	Running: "*", Pending: "o", Failed: "x", Stopped: ".", Check: "ok",
 }
 
 // G returns the active glyph set.
