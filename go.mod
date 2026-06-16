@@ -11,7 +11,7 @@ require (
 	github.com/mattn/go-isatty v0.0.21
 	github.com/shirou/gopsutil/v4 v4.26.3
 	github.com/spf13/cobra v1.10.2
-	github.com/yackey-labs/yauth v0.39.0
+	github.com/yackey-labs/yauth v0.39.1
 	go.opentelemetry.io/collector/pdata v1.60.0
 	go.opentelemetry.io/proto/otlp v1.10.0
 	golang.org/x/sys v0.46.0
@@ -106,3 +106,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260610212136-7ab31c22f7ad // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )
+
+tool github.com/yackey-labs/yauth/cmd/yauth

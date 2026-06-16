@@ -80,6 +80,22 @@ template vars.
 
 This replaces the need for a local Keycloak / dex container during development.
 
+### yauth (agent context)
+
+The `yauth` CLI is pinned as a Go tool (`tool` directive in `go.mod`), so its
+embedded docs and config schema always match the exact `yauth` version this
+module links — they can't drift from the binary.
+
+> When working with yauth, run `go tool yauth context` first — it prints the
+> version-exact commands, doc topics, and config schema for the installed
+> version. Use `go tool yauth schema config` to author/validate `yauth.yaml`,
+> `go tool yauth docs <topic>` for guides, and `go tool yauth docs typescript/setup`
+> for the TypeScript / Vue / SolidJS frontend.
+
+The built-in OIDC provider (`internal/oidc/`) builds on the `emailpassword`,
+`bearer`, `asymjwt`, `oauth2server`, and `oidc` plugins (`go tool yauth docs
+plugins/oidc-provider`).
+
 ## Conventions
 
 - Conventional commits (e.g. `feat:`, `fix:`, `chore:`, `docs:`)
