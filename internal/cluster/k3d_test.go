@@ -145,3 +145,37 @@ func TestSplitVolumeSpec(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterAlreadyExists(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{"k3d message", "FATA[0000] Failed to create cluster 'devrig-x' because a cluster with that name already exists", true},
+		{"case insensitive", "Cluster Already Exists", true},
+		{"unrelated error", "docker daemon not running", false},
+		{"empty", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := clusterAlreadyExists(c.out); got != c.want {
+				t.Errorf("clusterAlreadyExists(%q) = %v, want %v", c.out, got, c.want)
+			}
+		})
+	}
+}
+
+func TestExtractJSON(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{`[{"name":"x"}]`, `[{"name":"x"}]`},
+		{"WARN[0000] something\n[{\"name\":\"x\"}]", `[{"name":"x"}]`},
+		{"no json here", "no json here"},
+		{`{"a":1}`, `{"a":1}`},
+	}
+	for _, c := range cases {
+		if got := extractJSON(c.in); got != c.want {
+			t.Errorf("extractJSON(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

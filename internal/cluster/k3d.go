@@ -79,7 +79,7 @@ func (m *Manager) Ensure(ctx context.Context) (*state.ClusterState, error) {
 			return nil, err
 		}
 	} else {
-		if err := m.writeKubeconfig(ctx, name); err != nil {
+		if err := m.reuse(ctx, &cs); err != nil {
 			return nil, err
 		}
 	}
@@ -136,6 +136,14 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 	}
 
 	if out, err := m.k3d(ctx, args...); err != nil {
+		// The cluster may already exist — left over from a prior run, or the
+		// up-front existence check returned a false negative (e.g. a transient
+		// `k3d cluster list` failure). Either way, reuse it instead of failing
+		// with a confusing "already exists" error; that's the same outcome as
+		// the exists path in Ensure.
+		if clusterAlreadyExists(out) {
+			return m.reuse(ctx, cs)
+		}
 		return fmt.Errorf("cluster create: %w\n%s", err, out)
 	}
 
@@ -144,6 +152,24 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 	}
 
 	return nil
+}
+
+// reuse adopts an already-existing cluster: it makes sure the nodes are running
+// (k3d cluster start is idempotent — a no-op when they already are) and refreshes
+// the kubeconfig. Used both when Ensure detects an existing cluster and when
+// create races/falls back onto one.
+func (m *Manager) reuse(ctx context.Context, _ *state.ClusterState) error {
+	name := m.ClusterName()
+	if out, err := m.k3d(ctx, "cluster", "start", name); err != nil {
+		return fmt.Errorf("cluster start: %w\n%s", err, out)
+	}
+	return m.writeKubeconfig(ctx, name)
+}
+
+// clusterAlreadyExists reports whether k3d output indicates the cluster could not
+// be created because one with that name already exists.
+func clusterAlreadyExists(out string) bool {
+	return strings.Contains(strings.ToLower(out), "already exists")
 }
 
 // resolveClusterVolume resolves a relative host source path in a k3d volume
@@ -221,16 +247,21 @@ func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 	return nil
 }
 
-// clusterExists checks via `k3d cluster list -o json` whether the named cluster is running.
+// clusterExists checks via `k3d cluster list -o json` whether the named cluster
+// exists (running or stopped).
 func (m *Manager) clusterExists(ctx context.Context, name string) (bool, error) {
-	out, err := m.k3d(ctx, "cluster", "list", "-o", "json")
+	// Capture stdout only: k3d logs non-fatal warnings to stderr, and merged
+	// into the output they corrupt the JSON so the parse below silently fails —
+	// the cluster then looks absent and create() hits "already exists". (Same
+	// reason writeKubeconfig reads stdout only.)
+	out, err := m.k3dStdout(ctx, "cluster", "list", "-o", "json")
 	if err != nil {
 		return false, nil // treat error (k3d not found, etc.) as "doesn't exist"
 	}
 	var clusters []struct {
 		Name string `json:"name"`
 	}
-	if err := json.Unmarshal([]byte(out), &clusters); err != nil {
+	if err := json.Unmarshal([]byte(extractJSON(out)), &clusters); err != nil {
 		return false, nil
 	}
 	for _, c := range clusters {
@@ -239,6 +270,36 @@ func (m *Manager) clusterExists(ctx context.Context, name string) (bool, error) 
 		}
 	}
 	return false, nil
+}
+
+// extractJSON returns out starting at the first line that begins with a JSON
+// array/object delimiter, so a leading k3d log line (e.g. "WARN[0000] ...", which
+// itself contains a '[') doesn't break parsing if one reaches stdout.
+func extractJSON(out string) string {
+	lines := strings.Split(out, "\n")
+	for i, line := range lines {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, "[") || strings.HasPrefix(t, "{") {
+			return strings.Join(lines[i:], "\n")
+		}
+	}
+	return out
+}
+
+// k3dStdout runs k3d and returns trimmed stdout only (stderr is discarded), for
+// commands whose stdout must be parsed (e.g. JSON listings).
+func (m *Manager) k3dStdout(ctx context.Context, args ...string) (string, error) {
+	bin, err := m.tools.Path(ctx, tools.K3d)
+	if err != nil {
+		return "", err
+	}
+	var stdout, stderr bytes.Buffer
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("k3d %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	}
+	return strings.TrimSpace(stdout.String()), nil
 }
 
 // ApplyRegistriesConfig writes a registries.yaml to the k3d data dir if
