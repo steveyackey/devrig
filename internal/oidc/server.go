@@ -122,7 +122,11 @@ func (s *Server) Start(ctx context.Context) error {
 	os.Setenv(privEnv, string(privPEM))
 	os.Setenv(pubEnv, string(pubPEM))
 
-	y, err := yauth.NewFromConfig(ctx, yauthCfg, yauth.WithConfigLogger(s.logger))
+	// yauth is chatty at info/warn (per-request logs, the console-mailer
+	// warning); route its internal logger at error level only so it doesn't
+	// flood devrig's output. devrig's own oidc messages still use s.logger.
+	quiet := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+	y, err := yauth.NewFromConfig(ctx, yauthCfg, yauth.WithConfigLogger(quiet))
 	if err != nil {
 		return fmt.Errorf("oidc: build yauth: %w", err)
 	}
