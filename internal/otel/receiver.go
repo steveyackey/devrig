@@ -48,8 +48,10 @@ func (r *Receiver) StartHTTP(ctx context.Context, port uint16) error {
 	mux.HandleFunc("/v1/metrics", r.handleHTTPMetrics)
 
 	r.httpSrv = &http.Server{
-		Addr:    fmt.Sprintf("0.0.0.0:%d", port),
-		Handler: mux,
+		Addr: fmt.Sprintf("0.0.0.0:%d", port),
+		// Browser OTLP exporters (e.g. a web app's tracing) preflight with
+		// OPTIONS and require CORS headers; without them the POST is blocked.
+		Handler: withCORS(mux),
 	}
 	ln, err := net.Listen("tcp", r.httpSrv.Addr)
 	if err != nil {
@@ -65,6 +67,32 @@ func (r *Receiver) StartHTTP(ctx context.Context, port uint16) error {
 		_ = r.httpSrv.Shutdown(shutCtx)
 	}()
 	return nil
+}
+
+// withCORS allows browser-based OTLP exporters to post telemetry: it answers
+// CORS preflight (OPTIONS) and reflects the request's Origin and headers. This
+// is a local-dev collector, so any origin is permitted.
+func withCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if origin := req.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Add("Vary", "Origin")
+		} else {
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		reqHeaders := req.Header.Get("Access-Control-Request-Headers")
+		if reqHeaders == "" {
+			reqHeaders = "Content-Type"
+		}
+		w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, req)
+	})
 }
 
 // StartGRPC starts the OTLP gRPC receiver on the given port.
