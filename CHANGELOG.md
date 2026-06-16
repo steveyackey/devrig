@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.36.0](https://github.com/steveyackey/devrig/compare/v0.35.1...v0.36.0) (2026-06-16)
+
+
+### Features
+
+* show running status in ps and loading spinners during startup ([737e2bd](https://github.com/steveyackey/devrig/commit/737e2bd556e3fac2fadefcd31bd65f4c47162c2f))
+
+
+### Bug Fixes
+
+* **oidc:** quiet yauth's internal logging ([39c788a](https://github.com/steveyackey/devrig/commit/39c788ac009ac9f310f306a474eb9f0508bbcda6))
+* **otel:** allow browser OTLP exporters via CORS ([348bb66](https://github.com/steveyackey/devrig/commit/348bb66548b2e6cbc22d04dd9f5ad9c9157ed477))
+
 ## [0.35.1](https://github.com/steveyackey/devrig/compare/v0.35.0...v0.35.1) (2026-06-15)
 
 
