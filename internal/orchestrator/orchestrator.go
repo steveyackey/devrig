@@ -696,7 +696,7 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		}
 	}
 
-	printStartupSummary(o.id.Slug, projectState, o.cfg, resolvedPorts)
+	o.liveStartupSummary(projectState, resolvedPorts)
 
 	// ================================================================
 	// Wait for SIGINT/SIGTERM or all services to exit
@@ -1213,9 +1213,11 @@ func statusDot(phase string) (glyph, label string) {
 	}
 }
 
-// printStartupSummary outputs the post-startup summary box.
-func printStartupSummary(slug string, ps *state.ProjectState, cfg *config.Config, resolvedPorts map[string]uint16) {
-	// Deterministic order, names aligned.
+// liveStartupSummary prints the summary box and keeps it updated as services
+// transition from "starting" to "running" (or "failed"). On a color TTY it
+// redraws the box in place; when piped/CI it waits for services to settle, then
+// prints the final box once. Returns after all services settle or a timeout.
+func (o *Orchestrator) liveStartupSummary(ps *state.ProjectState, resolvedPorts map[string]uint16) {
 	names := make([]string, 0, len(ps.Services))
 	for name := range ps.Services {
 		names = append(names, name)
@@ -1229,34 +1231,90 @@ func printStartupSummary(slug string, ps *state.ProjectState, cfg *config.Config
 		}
 	}
 
-	var rows []string
-	for _, name := range names {
-		svc := ps.Services[name]
+	// Current phase per service; seeded from saved state, updated from events.
+	status := make(map[string]string, len(names))
+	for _, n := range names {
 		phase := "starting"
-		if svc.Phase != nil {
-			phase = *svc.Phase
+		if sv := ps.Services[n]; sv.Phase != nil {
+			phase = *sv.Phase
 		}
-		glyph, label := statusDot(phase)
-		url := ""
-		if p, ok := resolvedPorts[fmt.Sprintf("service:%s", name)]; ok {
-			proto := "http"
-			if svcCfg, ok2 := cfg.Services[name]; ok2 && svcCfg.Protocol != nil {
-				proto = *svcCfg.Protocol
-			}
-			url = style.Link(fmt.Sprintf("%s://localhost:%d", proto, p))
-		}
-		rows = append(rows, fmt.Sprintf("%s  %s  %s  %s",
-			glyph, style.Bold(style.PadRight(name, nameW)), style.PadRight(label, 8), url))
+		status[n] = phase
 	}
 
-	if ps.Dashboard != nil {
-		glyph, label := statusDot("running")
-		url := style.Link(fmt.Sprintf("http://localhost:%d", ps.Dashboard.DashboardPort))
-		rows = append(rows, fmt.Sprintf("%s  %s  %s  %s",
-			glyph, style.Bold(style.PadRight("dashboard", nameW)), style.PadRight(label, 8), url))
+	render := func() string {
+		rows := make([]string, 0, len(names)+1)
+		for _, name := range names {
+			glyph, label := statusDot(status[name])
+			url := ""
+			if p, ok := resolvedPorts[fmt.Sprintf("service:%s", name)]; ok {
+				proto := "http"
+				if svcCfg, ok2 := o.cfg.Services[name]; ok2 && svcCfg.Protocol != nil {
+					proto = *svcCfg.Protocol
+				}
+				url = style.Link(fmt.Sprintf("%s://localhost:%d", proto, p))
+			}
+			rows = append(rows, fmt.Sprintf("%s  %s  %s  %s",
+				glyph, style.Bold(style.PadRight(name, nameW)), style.PadRight(label, 8), url))
+		}
+		if ps.Dashboard != nil {
+			glyph, label := statusDot("running")
+			url := style.Link(fmt.Sprintf("http://localhost:%d", ps.Dashboard.DashboardPort))
+			rows = append(rows, fmt.Sprintf("%s  %s  %s  %s",
+				glyph, style.Bold(style.PadRight("dashboard", nameW)), style.PadRight(label, 8), url))
+		}
+		return style.Box(o.id.Slug, rows)
 	}
+
+	settled := func() bool {
+		for _, n := range names {
+			switch status[n] {
+			case "running", "failed", "stopped":
+			default:
+				return false
+			}
+		}
+		return true
+	}
+
+	box := render()
+	lines := strings.Count(box, "\n")
+	tty := style.ColorEnabled()
 
 	fmt.Println()
-	fmt.Print(style.Box(slug, rows))
+	if tty {
+		fmt.Print(box)
+	}
+
+	if len(names) > 0 && !settled() {
+		sub := o.eventBroadcast.Subscribe(64)
+		defer o.eventBroadcast.Unsubscribe(sub)
+		timeout := time.NewTimer(20 * time.Second)
+		defer timeout.Stop()
+	wait:
+		for !settled() {
+			select {
+			case ev, ok := <-sub:
+				if !ok {
+					break wait
+				}
+				if ev.Kind != events.KindServiceStatusChange {
+					continue
+				}
+				if _, tracked := status[ev.Service]; !tracked || status[ev.Service] == ev.Status {
+					continue
+				}
+				status[ev.Service] = ev.Status
+				if tty {
+					fmt.Printf("\x1b[%dA%s", lines, render()) // redraw box in place
+				}
+			case <-timeout.C:
+				break wait
+			}
+		}
+	}
+
+	if !tty {
+		fmt.Print(render())
+	}
 	fmt.Println()
 }
