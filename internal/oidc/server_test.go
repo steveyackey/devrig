@@ -40,12 +40,12 @@ func TestBrowserOIDCFlow(t *testing.T) {
 	const redirect = "http://localhost:9999/callback"
 
 	cfg := &config.OIDCConfig{
-		Realm: "theoven",
+		Realm: "dev", Audience: strp("dev-api"),
 		Users: []config.OIDCUserConfig{
-			{Email: "admin@theoven.dev", Password: "admin", Name: strp("Admin"), Role: strp("admin")},
+			{Email: "user@example.test", Password: "s3cret-pw", Name: strp("Test User"), Role: strp("admin")},
 		},
 		Clients: map[string]config.OIDCClientConfig{
-			"theoven-web": {Public: true, RedirectURIs: []string{redirect}, ClientName: strp("TheOven")},
+			"web-app": {Public: true, RedirectURIs: []string{redirect}, ClientName: strp("Demo App")},
 		},
 	}
 
@@ -94,7 +94,7 @@ func TestBrowserOIDCFlow(t *testing.T) {
 
 	// 1. Login (what the /login page POSTs).
 	login := postJSON(t, client, base+authBasePath+"/login",
-		map[string]string{"email": "admin@theoven.dev", "password": "admin"})
+		map[string]string{"email": "user@example.test", "password": "s3cret-pw"})
 	if login.StatusCode != 200 {
 		t.Fatalf("login status = %d, want 200", login.StatusCode)
 	}
@@ -105,10 +105,10 @@ func TestBrowserOIDCFlow(t *testing.T) {
 	sum := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
 	q := url.Values{
-		"client_id":             {"theoven-web"},
+		"client_id":             {"web-app"},
 		"redirect_uri":          {redirect},
 		"response_type":         {"code"},
-		"scope":                 {"openid profile email"},
+		"scope":                 {"openid profile email offline_access"},
 		"state":                 {"xyz"},
 		"nonce":                 {"n0nce"},
 		"code_challenge":        {challenge},
@@ -150,7 +150,7 @@ func TestBrowserOIDCFlow(t *testing.T) {
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
 		"redirect_uri":  {redirect},
-		"client_id":     {"theoven-web"},
+		"client_id":     {"web-app"},
 		"code_verifier": {verifier},
 	}
 	tokResp, err := client.PostForm(base+authBasePath+"/oauth/token", form)
@@ -173,6 +173,130 @@ func TestBrowserOIDCFlow(t *testing.T) {
 	// id_token must be RS256-signed (asymmetric) so the RP can verify it.
 	if alg := jwtAlg(t, idToken); alg != "RS256" {
 		t.Errorf("id_token alg = %q, want RS256", alg)
+	}
+
+	// 6. userinfo with the access token must succeed — OIDC clients load it
+	// after the code exchange (oidc-client-ts does by default), and a 401 here
+	// silently fails the whole sign-in.
+	at, _ := tok["access_token"].(string)
+	// Cookie-less client so this exercises the Bearer token path, not the
+	// session cookie (userinfo is cookie-OR-bearer).
+	bare := &http.Client{Timeout: 10 * time.Second}
+	req, _ := http.NewRequest("GET", base+authBasePath+"/userinfo", nil)
+	req.Header.Set("Authorization", "Bearer "+at)
+	ui, err := bare.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ui.Body.Close()
+	if ui.StatusCode != 200 {
+		t.Errorf("userinfo with Bearer access token = %d, want 200", ui.StatusCode)
+	}
+}
+
+// TestConcurrentCodeExchangeIsCoalesced verifies that two simultaneous
+// authorization_code exchanges of the SAME code both succeed, instead of the
+// second failing on single-use-code reuse. SPAs (oidc-client-ts) commonly fire
+// the callback exchange twice ~1ms apart; devrig coalesces them.
+func TestConcurrentCodeExchangeIsCoalesced(t *testing.T) {
+	port := freePort(t)
+	base := "http://localhost:" + itoa(port)
+	const redirect = "http://localhost:9999/callback"
+
+	cfg := &config.OIDCConfig{
+		Realm: "dev", Audience: strp("dev-api"),
+		Users: []config.OIDCUserConfig{
+			{Email: "user@example.test", Password: "s3cret-pw", Name: strp("Test User"), Role: strp("admin")},
+		},
+		Clients: map[string]config.OIDCClientConfig{
+			"web-app": {Public: true, RedirectURIs: []string{redirect}, ClientName: strp("Demo App")},
+		},
+	}
+
+	srv := New(cfg, port, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = srv.Start(ctx) }()
+	mustGetUp(t, base+"/.well-known/openid-configuration", 10*time.Second)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar, Timeout: 10 * time.Second}
+
+	login := postJSON(t, client, base+authBasePath+"/login",
+		map[string]string{"email": "user@example.test", "password": "s3cret-pw"})
+	if login.StatusCode != 200 {
+		t.Fatalf("login status = %d", login.StatusCode)
+	}
+	login.Body.Close()
+
+	verifier := "devrig-test-verifier-0123456789-0123456789-0123456789"
+	sum := sha256.Sum256([]byte(verifier))
+	challenge := base64.RawURLEncoding.EncodeToString(sum[:])
+	q := url.Values{
+		"client_id":             {"web-app"},
+		"redirect_uri":          {redirect},
+		"response_type":         {"code"},
+		"scope":                 {"openid profile email offline_access"},
+		"state":                 {"xyz"},
+		"nonce":                 {"n0nce"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
+	}
+	authzResp := getJSONClient(t, client, base+authBasePath+"/oauth/authorize?"+q.Encode())
+	redirectURL, _ := authzResp["redirect_url"].(string)
+	if redirectURL == "" {
+		reqID, _ := authzResp["request_id"].(string)
+		csrf, _ := authzResp["csrf_token"].(string)
+		consent := postJSON(t, client, base+authBasePath+"/oauth2/consent",
+			map[string]any{"request_id": reqID, "csrf_token": csrf, "approved": true})
+		var out map[string]any
+		json.NewDecoder(consent.Body).Decode(&out)
+		consent.Body.Close()
+		redirectURL, _ = out["redirect_url"].(string)
+	}
+	ru, err := url.Parse(redirectURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := ru.Query().Get("code")
+	if code == "" {
+		t.Fatalf("no code in redirect %q", redirectURL)
+	}
+
+	// Fire two exchanges of the same code at once (cookie-less, like the SPA).
+	form := url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {redirect},
+		"client_id":     {"web-app"},
+		"code_verifier": {verifier},
+	}.Encode()
+	exchange := func() int {
+		resp, err := http.Post(base+authBasePath+"/oauth/token",
+			"application/x-www-form-urlencoded", strings.NewReader(form))
+		if err != nil {
+			t.Error(err)
+			return 0
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode
+	}
+
+	results := make(chan int, 2)
+	start := make(chan struct{})
+	for i := 0; i < 2; i++ {
+		go func() { <-start; results <- exchange() }()
+	}
+	close(start)
+	a, b := <-results, <-results
+	if a != 200 || b != 200 {
+		t.Fatalf("concurrent same-code exchanges = %d and %d, want both 200 (coalesced)", a, b)
+	}
+
+	// A later wave of the same code (the SPA re-mounting its callback) must also
+	// succeed — the first 200 is replayed from cache within the window.
+	if reuse := exchange(); reuse != 200 {
+		t.Errorf("sequential same-code exchange = %d, want 200 (replayed within window)", reuse)
 	}
 }
 

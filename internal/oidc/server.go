@@ -20,17 +20,22 @@
 package oidc
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -39,6 +44,7 @@ import (
 	"github.com/yackey-labs/yauth/domain"
 	"github.com/yackey-labs/yauth/mcpauth"
 	"github.com/yackey-labs/yauth/yauthcfg"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/steveyackey/devrig/internal/config"
 )
@@ -51,7 +57,26 @@ type Server struct {
 	cfg    *config.OIDCConfig
 	port   uint16
 	logger *slog.Logger
+
+	// tokenExchange collapses concurrent authorization_code exchanges that
+	// present the same code into a single upstream call, and tokenCache replays
+	// the successful result to later repeats within a short window (see
+	// coalesceTokenExchange).
+	tokenExchange singleflight.Group
+	tokenCacheMu  sync.Mutex
+	tokenCache    map[string]tokenCacheEntry
 }
+
+type tokenCacheEntry struct {
+	resp      capturedResponse
+	expiresAt time.Time
+}
+
+// tokenReplayWindow is how long a successful authorization_code exchange is
+// replayable by the same code. Long enough to absorb an SPA's repeated callback
+// renders (double/triple mount, HMR), short enough that it's not a general code
+// cache. Dev-only provider.
+const tokenReplayWindow = 60 * time.Second
 
 // New creates an OIDC server from the given config and resolved port.
 func New(cfg *config.OIDCConfig, port uint16, logger *slog.Logger) *Server {
@@ -77,7 +102,16 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("oidc: generate signing key: %w", err)
 	}
-	const privEnv, pubEnv = "DEVRIG_OIDC_SIGNING_KEY", "DEVRIG_OIDC_SIGNING_PUB"
+	const privEnv, pubEnv, secretEnv = "DEVRIG_OIDC_SIGNING_KEY", "DEVRIG_OIDC_SIGNING_PUB", "DEVRIG_OIDC_JWT_SECRET"
+
+	// The bearer plugin requires a JWT secret (used for HS256 session tokens);
+	// OAuth2 access/id tokens are still RS256 via asym_jwt. Generate a random
+	// per-start secret.
+	secretBytes := make([]byte, 32)
+	if _, err := rand.Read(secretBytes); err != nil {
+		return fmt.Errorf("oidc: generate jwt secret: %w", err)
+	}
+	os.Setenv(secretEnv, hex.EncodeToString(secretBytes))
 
 	hibpDisabled := false
 	allowSignups := false
@@ -97,6 +131,15 @@ func (s *Server) Start(ctx context.Context) error {
 				Enabled:                  true,
 				RequireEmailVerification: false,
 				HIBPCheck:                &hibpDisabled,
+			},
+			// Validates incoming Bearer (JWT) access tokens — required for
+			// /userinfo and any token-protected endpoint. Without it, valid
+			// access tokens are rejected (401), which breaks OIDC clients that
+			// load userinfo after the code exchange.
+			Bearer: yauthcfg.BearerPluginConfig{
+				Enabled:      true,
+				Issuer:       issuer,
+				JWTSecretEnv: secretEnv,
 			},
 			AsymJWT: yauthcfg.AsymJWTPluginConfig{
 				Enabled:          true,
@@ -148,8 +191,11 @@ func (s *Server) Start(ctx context.Context) error {
 		PublicURL:    issuer,
 		ConsentPath:  "/authorize",
 	})
-	// The yauth JSON API.
-	mux.Handle(authBasePath+"/", http.StripPrefix(authBasePath, y.Router()))
+	// The yauth JSON API, with the token endpoint guarded so a relying party
+	// that double-fires the code exchange (a common SPA/oidc-client-ts quirk —
+	// the callback effect runs twice) still succeeds instead of getting a
+	// single-use-code 400 on the second, concurrent request.
+	mux.Handle(authBasePath+"/", s.coalesceTokenExchange(http.StripPrefix(authBasePath, y.Router())))
 	// Server-rendered browser pages.
 	mux.HandleFunc("/login", s.handleLoginPage)
 	mux.HandleFunc("/authorize", s.handleConsentPage)
@@ -159,7 +205,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("oidc: listen on port %d: %w", s.port, err)
 	}
 
-	srv := &http.Server{Handler: mux}
+	srv := &http.Server{Handler: withCORS(mux)}
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -167,7 +213,7 @@ func (s *Server) Start(ctx context.Context) error {
 		_ = srv.Shutdown(shutCtx)
 	}()
 
-	s.logger.Info("oidc provider started", "addr", ln.Addr().String(), "issuer", issuer)
+	s.logger.Debug("oidc provider started", "addr", ln.Addr().String(), "issuer", issuer)
 	if serveErr := srv.Serve(ln); serveErr != nil && serveErr != http.ErrServerClosed {
 		return fmt.Errorf("oidc: serve: %w", serveErr)
 	}
@@ -252,6 +298,178 @@ func (s *Server) seedClients(ctx context.Context, repo interface {
 		}
 	}
 	return nil
+}
+
+// withCORS lets a browser SPA on another origin (the relying party) fetch the
+// provider's discovery doc, JWKS, and token endpoint. It answers preflight and
+// reflects the request Origin + headers with credentials allowed — this is a
+// local dev provider, so any origin is permitted. Browser-navigation parts of
+// the flow (the /login and /authorize pages) are same-origin and unaffected.
+func withCORS(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if origin := req.Header.Get("Origin"); origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Add("Vary", "Origin")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		reqHeaders := req.Header.Get("Access-Control-Request-Headers")
+		if reqHeaders == "" {
+			reqHeaders = "Content-Type, Authorization"
+		}
+		w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+		w.Header().Set("Access-Control-Max-Age", "86400")
+		if req.Method == http.MethodOptions {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		h.ServeHTTP(w, req)
+	})
+}
+
+// tokenPath is the OAuth2 token endpoint on the public mux.
+var tokenPath = authBasePath + "/oauth/token"
+
+// coalesceTokenExchange makes the authorization_code grant tolerant of a relying
+// party that exchanges the same code more than once. SPAs using oidc-client-ts
+// frequently invoke signinRedirectCallback() repeatedly for one login — the
+// callback effect re-runs across a dev double/triple-mount or HMR, firing
+// several POSTs with the same code in waves milliseconds to tens of
+// milliseconds apart. OAuth requires single-use codes, so the upstream
+// correctly 400s every repeat after the first — but the client then treats
+// sign-in as failed and bounces back to /login.
+//
+// We make the first successful exchange the source of truth: singleflight
+// collapses a simultaneous burst into one upstream call, and the 200 result is
+// cached by code for tokenReplayWindow so later waves replay the same tokens
+// instead of getting a single-use 400. Only 200s are cached, so a genuinely
+// invalid code still fails. This intentionally relaxes single-use enforcement
+// within a short window — acceptable for this local dev provider only.
+func (s *Server) coalesceTokenExchange(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodPost || req.URL.Path != tokenPath {
+			next.ServeHTTP(w, req)
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(req.Body, 1<<20))
+		_ = req.Body.Close()
+		if err != nil {
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			next.ServeHTTP(w, req)
+			return
+		}
+		// Restore the body for the (possibly skipped) downstream handler.
+		req.Body = io.NopCloser(bytes.NewReader(body))
+
+		form, _ := url.ParseQuery(string(body))
+		code := form.Get("code")
+		if form.Get("grant_type") != "authorization_code" || code == "" {
+			next.ServeHTTP(w, req)
+			return
+		}
+
+		if cached, ok := s.cachedToken(code); ok {
+			cached.writeTo(w)
+			return
+		}
+
+		res, _, _ := s.tokenExchange.Do(code, func() (any, error) {
+			if cached, ok := s.cachedToken(code); ok {
+				return cached, nil
+			}
+			rec := &captureWriter{header: http.Header{}}
+			req.Body = io.NopCloser(bytes.NewReader(body))
+			next.ServeHTTP(rec, req)
+			snap := rec.snapshot()
+			if snap.status == http.StatusOK {
+				s.storeToken(code, snap)
+			}
+			return snap, nil
+		})
+		s.tokenExchange.Forget(code)
+
+		resp, ok := res.(capturedResponse)
+		if !ok {
+			next.ServeHTTP(w, req)
+			return
+		}
+		resp.writeTo(w)
+	})
+}
+
+func (s *Server) cachedToken(code string) (capturedResponse, bool) {
+	s.tokenCacheMu.Lock()
+	defer s.tokenCacheMu.Unlock()
+	e, ok := s.tokenCache[code]
+	if !ok {
+		return capturedResponse{}, false
+	}
+	if time.Now().After(e.expiresAt) {
+		delete(s.tokenCache, code)
+		return capturedResponse{}, false
+	}
+	return e.resp, true
+}
+
+func (s *Server) storeToken(code string, resp capturedResponse) {
+	now := time.Now()
+	s.tokenCacheMu.Lock()
+	defer s.tokenCacheMu.Unlock()
+	if s.tokenCache == nil {
+		s.tokenCache = make(map[string]tokenCacheEntry)
+	}
+	// Opportunistically drop expired entries so the map can't grow unbounded.
+	for k, e := range s.tokenCache {
+		if now.After(e.expiresAt) {
+			delete(s.tokenCache, k)
+		}
+	}
+	s.tokenCache[code] = tokenCacheEntry{resp: resp, expiresAt: now.Add(tokenReplayWindow)}
+}
+
+// captureWriter buffers a handler's response so it can be replayed to multiple
+// coalesced callers.
+type captureWriter struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (c *captureWriter) Header() http.Header { return c.header }
+func (c *captureWriter) WriteHeader(status int) {
+	if c.status == 0 {
+		c.status = status
+	}
+}
+func (c *captureWriter) Write(b []byte) (int, error) {
+	if c.status == 0 {
+		c.status = http.StatusOK
+	}
+	return c.body.Write(b)
+}
+
+func (c *captureWriter) snapshot() capturedResponse {
+	status := c.status
+	if status == 0 {
+		status = http.StatusOK
+	}
+	return capturedResponse{status: status, header: c.header.Clone(), body: c.body.Bytes()}
+}
+
+type capturedResponse struct {
+	status int
+	header http.Header
+	body   []byte
+}
+
+func (r capturedResponse) writeTo(w http.ResponseWriter) {
+	for k, vs := range r.header {
+		for _, v := range vs {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(r.status)
+	_, _ = w.Write(r.body)
 }
 
 // handleLoginPage serves the email/password sign-in page. The form posts to
