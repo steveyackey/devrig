@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.37.0](https://github.com/steveyackey/devrig/compare/v0.36.0...v0.37.0) (2026-06-16)
+
+
+### Features
+
+* **oidc:** tolerate duplicate authorization-code exchanges ([842045f](https://github.com/steveyackey/devrig/commit/842045f8e9180e58bd76c4e0b9a4269a930bd9a1))
+* **startup:** live event-driven startup summary ([f7141bb](https://github.com/steveyackey/devrig/commit/f7141bb3d36fe4f8f36a6391231d5b80365a0994))
+
+
+### Bug Fixes
+
+* **config:** interpolate OIDC client redirect_uris and project env ([10f10ab](https://github.com/steveyackey/devrig/commit/10f10ab87f255db4fb9c0a9f939e034ce2125b45))
+
 ## [0.36.0](https://github.com/steveyackey/devrig/compare/v0.35.1...v0.36.0) (2026-06-16)
 
 
