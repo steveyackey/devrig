@@ -179,3 +179,43 @@ func TestExtractJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestKubeconfigNeedsServerFix(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{"unresolved port", "    server: https://127.0.0.1:0\n", true},
+		{"zero host and port", "    server: https://0.0.0.0:0\n", true},
+		{"zero host real port", "    server: https://0.0.0.0:54321\n", true},
+		{"already loopback", "    server: https://127.0.0.1:54321\n", false},
+		{"no server line", "clusters: []\n", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := kubeconfigNeedsServerFix(tc.content); got != tc.want {
+				t.Errorf("kubeconfigNeedsServerFix() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRewriteKubeconfigServer(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    string
+	}{
+		{"unresolved port", "server: https://127.0.0.1:0", "server: https://127.0.0.1:54321"},
+		{"zero host and port", "server: https://0.0.0.0:0", "server: https://127.0.0.1:54321"},
+		{"zero host real port", "server: https://0.0.0.0:54321", "server: https://127.0.0.1:54321"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := rewriteKubeconfigServer(tc.content, "54321"); got != tc.want {
+				t.Errorf("rewriteKubeconfigServer() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

@@ -117,6 +117,16 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 	args := []string{"cluster", "create", name,
 		"--network", m.network,
 		"--agents", fmt.Sprintf("%d", m.cfg.Agents),
+		// Bind the API server to loopback with a random free port. Without this
+		// k3d binds the serverlb on 0.0.0.0, and the kubeconfig it emits then
+		// carries a server address the host can't reliably dial — notably on
+		// Windows/Docker Desktop, where kubectl hangs trying to reach 0.0.0.0.
+		// ":0" picks a free port; writeKubeconfig resolves it back to 127.0.0.1.
+		"--api-port", "127.0.0.1:0",
+		// Leave the user's ~/.kube/config and current context untouched; devrig
+		// drives the cluster through its own kubeconfig in the state dir.
+		"--kubeconfig-update-default=false",
+		"--kubeconfig-switch-context=false",
 	}
 
 	for _, p := range m.cfg.Ports {
@@ -126,13 +136,23 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 		args = append(args, "--volume", resolveClusterVolume(v, m.configDir))
 	}
 	for _, a := range m.cfg.K3SArgs {
-		args = append(args, "--k3s-arg", a)
+		// Modern k3d requires a node filter on --k3s-arg; scope each to the
+		// server nodes (omitting the filter makes `cluster create` error out).
+		args = append(args, "--k3s-arg", a+"@server:*")
 	}
 
 	if m.cfg.Registry {
 		regName := m.RegistryName()
 		args = append(args, "--registry-create", regName+":0.0.0.0:0")
 		cs.RegistryName = &regName
+	}
+
+	// External registry mirrors/auth: write registries.yaml and point k3d at it.
+	if len(m.cfg.Registries) > 0 {
+		if err := m.ApplyRegistriesConfig(ctx, m.stateDir); err != nil {
+			return fmt.Errorf("cluster: registries config: %w", err)
+		}
+		args = append(args, "--registry-config", filepath.Join(m.stateDir, "registries.yaml"))
 	}
 
 	if out, err := m.k3d(ctx, args...); err != nil {
@@ -244,7 +264,72 @@ func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 	if err := os.WriteFile(m.KubeconfigPath(), stdout.Bytes(), 0o600); err != nil {
 		return fmt.Errorf("cluster: write kubeconfig: %w", err)
 	}
+	return m.fixKubeconfigServer(ctx, name)
+}
+
+// fixKubeconfigServer normalizes the API server address in the written
+// kubeconfig so the host can reach it. With `--api-port 127.0.0.1:0`, k3d
+// sometimes leaves the server URL with an unresolved ":0" port (and may emit a
+// 0.0.0.0 host); both are unreachable from the host — especially on Windows.
+// We discover the serverlb's published 6443 port from Docker and rewrite the
+// server to https://127.0.0.1:<port>.
+func (m *Manager) fixKubeconfigServer(ctx context.Context, name string) error {
+	content, err := os.ReadFile(m.KubeconfigPath())
+	if err != nil {
+		return fmt.Errorf("cluster: read kubeconfig for fix: %w", err)
+	}
+	if !kubeconfigNeedsServerFix(string(content)) {
+		return nil
+	}
+
+	port, err := serverlbAPIPort(ctx, name)
+	if err != nil {
+		return err
+	}
+	fixed := rewriteKubeconfigServer(string(content), port)
+	if err := os.WriteFile(m.KubeconfigPath(), []byte(fixed), 0o600); err != nil {
+		return fmt.Errorf("cluster: write fixed kubeconfig: %w", err)
+	}
 	return nil
+}
+
+// kubeconfigNeedsServerFix reports whether the kubeconfig has a server line with
+// an unresolved ":0" port or a non-dialable 0.0.0.0 host that must be rewritten.
+func kubeconfigNeedsServerFix(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "server:") && (strings.HasSuffix(t, ":0") || strings.Contains(t, "0.0.0.0")) {
+			return true
+		}
+	}
+	return false
+}
+
+// rewriteKubeconfigServer points the API server at https://127.0.0.1:<port>,
+// replacing both unresolved ":0" forms and a 0.0.0.0 host on the real port.
+func rewriteKubeconfigServer(content, port string) string {
+	server := "https://127.0.0.1:" + port
+	for _, old := range []string{"https://127.0.0.1:0", "https://0.0.0.0:0", "https://0.0.0.0:" + port} {
+		content = strings.ReplaceAll(content, old, server)
+	}
+	return content
+}
+
+// serverlbAPIPort returns the host port the k3d serverlb publishes for the
+// API server (container port 6443/tcp).
+func serverlbAPIPort(ctx context.Context, clusterName string) (string, error) {
+	container := fmt.Sprintf("k3d-%s-serverlb", clusterName)
+	cmd := exec.CommandContext(ctx, "docker", "inspect", container,
+		"--format", `{{(index .NetworkSettings.Ports "6443/tcp" 0).HostPort}}`)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("cluster: inspect %s for API port: %w\n%s", container, err, strings.TrimSpace(string(out)))
+	}
+	port := strings.TrimSpace(string(out))
+	if port == "" || port == "0" {
+		return "", fmt.Errorf("cluster: could not resolve API server port from %s (got %q)", container, port)
+	}
+	return port, nil
 }
 
 // clusterExists checks via `k3d cluster list -o json` whether the named cluster
