@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.37.2](https://github.com/steveyackey/devrig/compare/v0.37.1...v0.37.2) (2026-06-17)
+
+
+### Bug Fixes
+
+* **cluster:** pin k3d API server to 127.0.0.1 so the host can reach it ([04f4aa8](https://github.com/steveyackey/devrig/commit/04f4aa84adfefc7de25c951502cfe08bc7e6dc7a))
+
 ## [0.37.1](https://github.com/steveyackey/devrig/compare/v0.37.0...v0.37.1) (2026-06-16)
 
 
