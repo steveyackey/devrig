@@ -52,7 +52,13 @@ func TestImageBuildOrderCycle(t *testing.T) {
 }
 
 func TestResolveClusterVolume(t *testing.T) {
-	configDir := filepath.Join(string(filepath.Separator), "home", "user", "proj")
+	// Use an absolute base so the want values (which don't call filepath.Abs)
+	// match resolveClusterVolume's output on Windows too — a drive-less path
+	// like "\home\user\proj" isn't absolute there, so Abs would add a drive.
+	configDir, err := filepath.Abs(filepath.Join(string(filepath.Separator), "home", "user", "proj"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tests := []struct {
 		name string
