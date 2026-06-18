@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.2](https://github.com/steveyackey/devrig/compare/v0.38.1...v0.38.2) (2026-06-18)
+
+
+### Bug Fixes
+
+* **cluster:** stabilize Windows slug + reap orphaned k3d clusters ([#83](https://github.com/steveyackey/devrig/issues/83)) ([7882abd](https://github.com/steveyackey/devrig/commit/7882abdb7db46c476f904ea012f60d7336f72f31))
+
 ## [0.38.1](https://github.com/steveyackey/devrig/compare/v0.38.0...v0.38.1) (2026-06-18)
 
 
