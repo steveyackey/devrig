@@ -348,12 +348,17 @@ func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 	// Capture stdout only: k3d logs non-fatal warnings (e.g. "error getting
 	// loadbalancer config" while the serverlb is still initializing) to stderr,
 	// and merging them into the file would corrupt the kubeconfig YAML.
+	//
+	// Deliberately omit k3d's --verbose flag here: k3d writes its debug log to
+	// stdout (not stderr), which is the same stream the kubeconfig is printed
+	// on, so --verbose would interleave control-character log lines into the
+	// kubeconfig YAML. The stdout/stderr split RunSplit relies on can't protect
+	// against output that k3d itself puts on stdout.
 	bin, err := m.tools.Path(ctx, tools.K3d)
 	if err != nil {
 		return err
 	}
-	args := append([]string{"kubeconfig", "get", name}, tools.VerboseFlags(tools.K3d)...)
-	stdout, stderr, err := verbose.RunSplit(exec.CommandContext(ctx, bin, args...))
+	stdout, stderr, err := verbose.RunSplit(exec.CommandContext(ctx, bin, "kubeconfig", "get", name))
 	if err != nil {
 		return fmt.Errorf("cluster: get kubeconfig: %w\n%s", err, stderr)
 	}
@@ -473,7 +478,9 @@ func (m *Manager) k3dStdout(ctx context.Context, args ...string) (string, error)
 	if err != nil {
 		return "", err
 	}
-	args = append(args, tools.VerboseFlags(tools.K3d)...)
+	// Deliberately omit k3d's --verbose flag: k3d writes its debug log to stdout,
+	// so --verbose would interleave control-character log lines into the JSON we
+	// parse here (see writeKubeconfig for the same reason).
 	stdout, stderr, err := verbose.RunSplit(exec.CommandContext(ctx, bin, args...))
 	if err != nil {
 		return "", fmt.Errorf("k3d %s: %w\n%s", strings.Join(args, " "), err, stderr)
