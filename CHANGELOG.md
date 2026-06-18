@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.0](https://github.com/steveyackey/devrig/compare/v0.37.2...v0.38.0) (2026-06-18)
+
+
+### Features
+
+* **cluster:** auto-recover stale clusters and add verbose mode ([145aea3](https://github.com/steveyackey/devrig/commit/145aea3f645fb6579f481c8b23b86f5a972895ec))
+
 ## [0.37.2](https://github.com/steveyackey/devrig/compare/v0.37.1...v0.37.2) (2026-06-17)
 
 
