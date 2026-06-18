@@ -404,6 +404,28 @@ Volume mounts use k3d format: `"/host/path:/container/path@server:*"`. The
 `@server:*` suffix mounts on all server nodes; use `@agent:*` for agent nodes
 or `@all` for both.
 
+### Cluster reuse and recovery
+
+On startup devrig reuses an existing cluster instead of recreating it. It
+records the k3d version that created the cluster; if a later run resolves a
+**different** k3d version (for example after switching `[tools] prefer` between
+`vendored` and `system`, or upgrading the pinned version), the cluster is
+deleted and recreated automatically — a stale load balancer from one k3d
+version can't be started by another (`/etc/confd/values.yaml ... not found`).
+devrig also recovers automatically if `cluster start` fails because the load
+balancer node won't become ready (e.g. after a Docker restart). In both cases
+the cluster's in-cluster state is discarded and rebuilt; addons and deploys are
+reapplied. Run with `--verbose` (see below) to watch the teardown/recreate.
+
+### Verbose diagnostics
+
+Pass the global `--verbose` / `-v` flag (or set `DEVRIG_VERBOSE=1`) to stream
+every tool and subprocess (k3d, helm, kubectl, docker, docker compose) live to
+the terminal, and to raise each tool's own log level (k3d `--verbose`, helm
+`--debug`, kubectl `-v=6`). Use it when cluster create, an addon install, or an
+image build hangs or fails and you need to see what the underlying tool is
+doing in real time.
+
 ## `[cluster.deploy.*]` section
 
 Each `[cluster.deploy.<name>]` block defines a containerized service to

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 // Service represents a running compose service from `docker compose ps --format json`.
@@ -32,8 +34,7 @@ func Up(composeFile, projectName string, services []string, envFile string) erro
 		args = append(args, "--env-file", envFile)
 	}
 	args = append(args, services...)
-	out, err := exec.Command("docker", args...).CombinedOutput()
-	if err != nil {
+	if out, err := verbose.Run(exec.Command("docker", args...)); err != nil {
 		return fmt.Errorf("docker compose up: %w\n%s", err, out)
 	}
 	return nil
@@ -41,8 +42,8 @@ func Up(composeFile, projectName string, services []string, envFile string) erro
 
 // Down runs `docker compose down --remove-orphans`.
 func Down(composeFile, projectName string) error {
-	out, err := exec.Command("docker", "compose", "-f", composeFile, "-p", projectName, "down", "--remove-orphans").CombinedOutput()
-	if err != nil {
+	cmd := exec.Command("docker", "compose", "-f", composeFile, "-p", projectName, "down", "--remove-orphans")
+	if out, err := verbose.Run(cmd); err != nil {
 		return fmt.Errorf("docker compose down: %w\n%s", err, out)
 	}
 	return nil
@@ -50,12 +51,12 @@ func Down(composeFile, projectName string) error {
 
 // PS runs `docker compose ps --format json` and parses the output.
 func PS(composeFile, projectName string) ([]Service, error) {
-	out, err := exec.Command("docker", "compose", "-f", composeFile, "-p", projectName, "ps", "--format", "json").Output()
+	cmd := exec.Command("docker", "compose", "-f", composeFile, "-p", projectName, "ps", "--format", "json")
+	trimmed, stderr, err := verbose.RunSplit(cmd)
 	if err != nil {
-		return nil, fmt.Errorf("docker compose ps: %w", err)
+		return nil, fmt.Errorf("docker compose ps: %w\n%s", err, stderr)
 	}
 
-	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {
 		return nil, nil
 	}

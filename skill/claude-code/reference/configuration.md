@@ -188,6 +188,13 @@ Built-in OpenID Connect / OAuth2 provider. Replaces the need for a local Keycloa
 | `registry` | bool    | `true`          | Create local container registry|
 | `k3s_args` | list    | `[]`            | Extra args passed to k3s via `--k3s-arg` |
 
+devrig reuses an existing cluster across runs and stamps the creating k3d
+version on its state. If a later run resolves a different k3d version (e.g.
+switching `[tools] prefer` or upgrading the pin), or if `cluster start` fails
+because the load balancer node won't become ready (a stale serverlb, common
+after a Docker restart), devrig deletes and recreates the cluster
+automatically. Use `--verbose` to watch it happen.
+
 ### `[[cluster.registries]]`
 
 Private registry auth for cluster image pulls. Each entry generates k3d `registries.yaml`.

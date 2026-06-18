@@ -12,6 +12,7 @@ import (
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/state"
 	"github.com/steveyackey/devrig/internal/tools"
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 // BuildAndDeploy builds an image, pushes it to the registry, and applies
@@ -87,19 +88,19 @@ func BuildImage(
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = filepath.Join(configDir, cfg.Context)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := verbose.Run(cmd); err != nil {
 		return "", fmt.Errorf("docker build: %w\n%s", err, out)
 	}
 
 	if cs.RegistryPort != nil {
 		latest := fmt.Sprintf("localhost:%d/%s:latest", *cs.RegistryPort, name)
-		if out, err := exec.CommandContext(ctx, "docker", "tag", tag, latest).CombinedOutput(); err != nil {
+		if out, err := verbose.Run(exec.CommandContext(ctx, "docker", "tag", tag, latest)); err != nil {
 			return "", fmt.Errorf("docker tag: %w\n%s", err, out)
 		}
-		if out, err := exec.CommandContext(ctx, "docker", "push", tag).CombinedOutput(); err != nil {
+		if out, err := verbose.Run(exec.CommandContext(ctx, "docker", "push", tag)); err != nil {
 			return "", fmt.Errorf("docker push: %w\n%s", err, out)
 		}
-		if out, err := exec.CommandContext(ctx, "docker", "push", latest).CombinedOutput(); err != nil {
+		if out, err := verbose.Run(exec.CommandContext(ctx, "docker", "push", latest)); err != nil {
 			return "", fmt.Errorf("docker push latest: %w\n%s", err, out)
 		}
 	}
@@ -208,19 +209,19 @@ func buildImage(ctx context.Context, name string, cfg *config.ClusterDeployConfi
 
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Dir = filepath.Join(configDir, cfg.Context)
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("docker build: %w\n%s", err, strings.TrimSpace(string(out)))
+	if out, err := verbose.Run(cmd); err != nil {
+		return "", fmt.Errorf("docker build: %w\n%s", err, out)
 	}
 
 	if cs.RegistryPort != nil {
 		latest := fmt.Sprintf("localhost:%d/%s:latest", *cs.RegistryPort, name)
-		if out, err := exec.CommandContext(ctx, "docker", "tag", tag, latest).CombinedOutput(); err != nil {
+		if out, err := verbose.Run(exec.CommandContext(ctx, "docker", "tag", tag, latest)); err != nil {
 			return "", fmt.Errorf("docker tag: %w\n%s", err, out)
 		}
-		if out, err := exec.CommandContext(ctx, "docker", "push", tag).CombinedOutput(); err != nil {
+		if out, err := verbose.Run(exec.CommandContext(ctx, "docker", "push", tag)); err != nil {
 			return "", fmt.Errorf("docker push: %w\n%s", err, out)
 		}
-		if out, err := exec.CommandContext(ctx, "docker", "push", latest).CombinedOutput(); err != nil {
+		if out, err := verbose.Run(exec.CommandContext(ctx, "docker", "push", latest)); err != nil {
 			return "", fmt.Errorf("docker push latest: %w\n%s", err, out)
 		}
 	}

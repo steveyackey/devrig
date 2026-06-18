@@ -66,6 +66,9 @@ type ClusterState struct {
 	RegistryPort     *uint16                       `json:"registry_port,omitempty"`
 	DeployedServices map[string]ClusterDeployState `json:"deployed_services"`
 	InstalledAddons  map[string]AddonState         `json:"installed_addons"`
+	// K3dVersion is the version of the k3d binary that created/last started the
+	// cluster, used to detect version skew on reuse (see cluster.Manager.Ensure).
+	K3dVersion string `json:"k3d_version,omitempty"`
 }
 
 type ClusterDeployState struct {

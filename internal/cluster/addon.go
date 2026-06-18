@@ -15,6 +15,7 @@ import (
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/state"
 	"github.com/steveyackey/devrig/internal/tools"
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 // InstallAddons installs all configured addons in topological order,
@@ -162,11 +163,12 @@ func helm(ctx context.Context, r *tools.Resolver, kubeconfig string, args ...str
 	if err != nil {
 		return err
 	}
+	subcmd := args[0]
+	args = append(args, tools.VerboseFlags(tools.Helm)...)
 	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("helm %s: %w\n%s", args[0], err, strings.TrimSpace(string(out)))
+	if out, err := verbose.Run(cmd); err != nil {
+		return fmt.Errorf("helm %s: %w\n%s", subcmd, err, out)
 	}
 	return nil
 }

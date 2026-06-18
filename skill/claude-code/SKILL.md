@@ -114,5 +114,7 @@ version = "1.2.0"
 - Output formats: `--format table` (human), `--format json` (pretty), `--format jsonl` (pipe to jq)
 - `devrig logs -F` for live tailing, `devrig query logs` for OTel-collected logs
 - `devrig stop` always stops the whole project (one supervisor process — no per-service stop). To restart one service: `devrig stop`, then `devrig start <service>` (other services' template vars still resolve from config/state)
-- `devrig stop --all` / `devrig delete --all` act on every running devrig instance across all projects (no config file needed) — useful for clearing out stale instances
+- `devrig stop --all` / `devrig delete --all` act on every running devrig instance across all projects (no config file needed) — useful for clearing out stale instances. `devrig delete` (with or without `--all`) tears down the k3d cluster and its registry too; `devrig stop` leaves the cluster running.
 - Cluster tools (k3d/kubectl/helm) don't need pre-installing: devrig fetches pinned, checksum-verified copies into `~/.devrig/bin` on demand. `devrig deps list` shows versions/status; `devrig deps install` pre-fetches; set `[tools] prefer = "system"` to use PATH copies instead. Only Docker is truly required.
+- `devrig -v <command>` (or `DEVRIG_VERBOSE=1`) streams all tool/subprocess output (k3d, helm, kubectl, docker) live and raises each tool's log level — use it when cluster create, an addon install, or an image build hangs or fails.
+- devrig reuses an existing cluster across runs but auto-recreates it on k3d version skew (e.g. switching between vendored and system k3d) or when a stale load balancer node won't start — so a wedged cluster self-heals on the next `devrig start` rather than erroring out.

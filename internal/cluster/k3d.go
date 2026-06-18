@@ -2,7 +2,6 @@
 package cluster
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +14,7 @@ import (
 	"github.com/steveyackey/devrig/internal/config"
 	"github.com/steveyackey/devrig/internal/state"
 	"github.com/steveyackey/devrig/internal/tools"
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 // Manager orchestrates the full cluster lifecycle.
@@ -74,14 +74,34 @@ func (m *Manager) Ensure(ctx context.Context) (*state.ClusterState, error) {
 	cs.DeployedServices = make(map[string]state.ClusterDeployState)
 	cs.InstalledAddons = make(map[string]state.AddonState)
 
-	if !exists {
+	curVer := m.k3dVersion(ctx)
+
+	switch {
+	case !exists:
 		if err := m.create(ctx, &cs); err != nil {
 			return nil, err
 		}
-	} else {
+	case m.k3dVersionSkewed(curVer):
+		// The k3d that created this cluster differs from the one reusing it now
+		// (e.g. a switch between system and vendored k3d). The serverlb's config
+		// layout can be incompatible across versions, so `cluster start` would
+		// fail with an opaque "/etc/confd/values.yaml not found". Recreate up
+		// front instead of waiting for that failure.
+		if err := m.recreate(ctx, &cs); err != nil {
+			return nil, err
+		}
+	default:
 		if err := m.reuse(ctx, &cs); err != nil {
 			return nil, err
 		}
+	}
+
+	// Stamp the k3d version that now owns the cluster so the next run can detect
+	// skew. Preserve any prior stamp if we couldn't read the current version.
+	if curVer != "" {
+		cs.K3dVersion = curVer
+	} else {
+		cs.K3dVersion = recordedK3dVersion(m.stateDir)
 	}
 
 	if m.cfg.Registry {
@@ -178,12 +198,90 @@ func (m *Manager) create(ctx context.Context, cs *state.ClusterState) error {
 // (k3d cluster start is idempotent — a no-op when they already are) and refreshes
 // the kubeconfig. Used both when Ensure detects an existing cluster and when
 // create races/falls back onto one.
-func (m *Manager) reuse(ctx context.Context, _ *state.ClusterState) error {
+func (m *Manager) reuse(ctx context.Context, cs *state.ClusterState) error {
 	name := m.ClusterName()
-	if out, err := m.k3d(ctx, "cluster", "start", name); err != nil {
-		return fmt.Errorf("cluster start: %w\n%s", err, out)
+	out, err := m.k3d(ctx, "cluster", "start", name)
+	if err == nil {
+		return m.writeKubeconfig(ctx, name)
 	}
-	return m.writeKubeconfig(ctx, name)
+	// A leftover cluster whose serverlb (load balancer) won't come ready. The
+	// usual cause is k3d version skew — the cluster was created by a different
+	// k3d than the one reusing it now (e.g. a system k3d created it before a
+	// switch to vendored deps), so the serverlb's confd config isn't where this
+	// k3d expects it ("/etc/confd/values.yaml ... file not found"). A Docker
+	// restart or an interrupted create produce the same symptom. `cluster start`
+	// can't regenerate that config — only a fresh create can — so tear the
+	// cluster down and recreate it instead of surfacing an opaque k3d failure.
+	if serverlbStartBroken(out) {
+		return m.recreate(ctx, cs)
+	}
+	return fmt.Errorf("cluster start: %w\n%s", err, out)
+}
+
+// recreate tears a broken cluster down and creates it fresh. The cluster's data
+// is discarded — acceptable for devrig's ephemeral dev clusters, and the same
+// thing a user would do by hand to clear a wedged serverlb.
+func (m *Manager) recreate(ctx context.Context, cs *state.ClusterState) error {
+	name := m.ClusterName()
+	if out, err := m.k3d(ctx, "cluster", "delete", name); err != nil {
+		return fmt.Errorf("cluster recreate: delete %s: %w\n%s", name, err, out)
+	}
+	if m.cfg.Registry {
+		// The registry is created alongside the cluster; drop it so create can
+		// re-add it cleanly (best-effort — it may already be gone).
+		_, _ = m.k3d(ctx, "registry", "delete", m.RegistryName())
+	}
+	return m.create(ctx, cs)
+}
+
+// k3dVersion returns the version of the resolved k3d binary (e.g. "v5.9.0"),
+// or "" if it can't be determined.
+func (m *Manager) k3dVersion(ctx context.Context) string {
+	bin, err := m.tools.Path(ctx, tools.K3d)
+	if err != nil {
+		return ""
+	}
+	out, _ := verbose.Run(exec.CommandContext(ctx, bin, "version"))
+	return parseK3dVersion(out)
+}
+
+// parseK3dVersion extracts the version token from `k3d version` output, whose
+// first line reads e.g. "k3d version v5.9.0" (a second line reports k3s).
+func parseK3dVersion(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 3 && f[0] == "k3d" && f[1] == "version" {
+			return f[2]
+		}
+	}
+	return ""
+}
+
+// recordedK3dVersion reads the k3d version stamped on the persisted cluster
+// state, or "" if there is none.
+func recordedK3dVersion(stateDir string) string {
+	if prev := state.Load(stateDir); prev != nil && prev.Cluster != nil {
+		return prev.Cluster.K3dVersion
+	}
+	return ""
+}
+
+// k3dVersionSkewed reports whether the current k3d version differs from the one
+// recorded as having created the cluster. A missing record or unknown current
+// version is treated as "not skewed" — reuse (and its own recovery) handles it.
+func (m *Manager) k3dVersionSkewed(curVer string) bool {
+	prev := recordedK3dVersion(m.stateDir)
+	return prev != "" && curVer != "" && prev != curVer
+}
+
+// serverlbStartBroken reports whether `k3d cluster start` failed because the
+// serverlb (load balancer) helper node could not become ready — the signature
+// of a stale serverlb container that only a fresh create can fix.
+func serverlbStartBroken(out string) bool {
+	l := strings.ToLower(out)
+	return strings.Contains(l, "failed to get ready") ||
+		strings.Contains(l, "failed to add one or more helper nodes") ||
+		(strings.Contains(l, "loadbalancer config") && strings.Contains(l, "values.yaml"))
 }
 
 // clusterAlreadyExists reports whether k3d output indicates the cluster could not
@@ -254,14 +352,12 @@ func (m *Manager) writeKubeconfig(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, bin, "kubeconfig", "get", name)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("cluster: get kubeconfig: %w\n%s", err, strings.TrimSpace(stderr.String()))
+	args := append([]string{"kubeconfig", "get", name}, tools.VerboseFlags(tools.K3d)...)
+	stdout, stderr, err := verbose.RunSplit(exec.CommandContext(ctx, bin, args...))
+	if err != nil {
+		return fmt.Errorf("cluster: get kubeconfig: %w\n%s", err, stderr)
 	}
-	if err := os.WriteFile(m.KubeconfigPath(), stdout.Bytes(), 0o600); err != nil {
+	if err := os.WriteFile(m.KubeconfigPath(), []byte(stdout+"\n"), 0o600); err != nil {
 		return fmt.Errorf("cluster: write kubeconfig: %w", err)
 	}
 	return m.fixKubeconfigServer(ctx, name)
@@ -321,11 +417,10 @@ func serverlbAPIPort(ctx context.Context, clusterName string) (string, error) {
 	container := fmt.Sprintf("k3d-%s-serverlb", clusterName)
 	cmd := exec.CommandContext(ctx, "docker", "inspect", container,
 		"--format", `{{(index .NetworkSettings.Ports "6443/tcp" 0).HostPort}}`)
-	out, err := cmd.CombinedOutput()
+	port, stderr, err := verbose.RunSplit(cmd)
 	if err != nil {
-		return "", fmt.Errorf("cluster: inspect %s for API port: %w\n%s", container, err, strings.TrimSpace(string(out)))
+		return "", fmt.Errorf("cluster: inspect %s for API port: %w\n%s", container, err, stderr)
 	}
-	port := strings.TrimSpace(string(out))
 	if port == "" || port == "0" {
 		return "", fmt.Errorf("cluster: could not resolve API server port from %s (got %q)", container, port)
 	}
@@ -370,21 +465,20 @@ func extractJSON(out string) string {
 	return out
 }
 
-// k3dStdout runs k3d and returns trimmed stdout only (stderr is discarded), for
-// commands whose stdout must be parsed (e.g. JSON listings).
+// k3dStdout runs k3d and returns trimmed stdout only (stderr is captured for
+// errors, and streamed live in verbose mode), for commands whose stdout must be
+// parsed (e.g. JSON listings).
 func (m *Manager) k3dStdout(ctx context.Context, args ...string) (string, error) {
 	bin, err := m.tools.Path(ctx, tools.K3d)
 	if err != nil {
 		return "", err
 	}
-	var stdout, stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, bin, args...)
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("k3d %s: %w\n%s", strings.Join(args, " "), err, strings.TrimSpace(stderr.String()))
+	args = append(args, tools.VerboseFlags(tools.K3d)...)
+	stdout, stderr, err := verbose.RunSplit(exec.CommandContext(ctx, bin, args...))
+	if err != nil {
+		return "", fmt.Errorf("k3d %s: %w\n%s", strings.Join(args, " "), err, stderr)
 	}
-	return strings.TrimSpace(stdout.String()), nil
+	return stdout, nil
 }
 
 // ApplyRegistriesConfig writes a registries.yaml to the k3d data dir if
@@ -406,11 +500,9 @@ func (m *Manager) ApplyRegistriesConfig(ctx context.Context, stateDir string) er
 	return os.WriteFile(path, []byte(sb.String()), 0o600)
 }
 
-// runCmd runs a command and returns combined output.
+// runCmd runs a command and returns combined output (streamed live in verbose mode).
 func runCmd(ctx context.Context, name string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	out, err := cmd.CombinedOutput()
-	return strings.TrimSpace(string(out)), err
+	return verbose.Run(exec.CommandContext(ctx, name, args...))
 }
 
 // k3d resolves the k3d binary (managed or system) and runs it.
@@ -419,6 +511,7 @@ func (m *Manager) k3d(ctx context.Context, args ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	args = append(args, tools.VerboseFlags(tools.K3d)...)
 	return runCmd(ctx, bin, args...)
 }
 
@@ -437,10 +530,10 @@ func KubectlApplyDir(ctx context.Context, r *tools.Resolver, kubeconfig, path st
 	if kustomize {
 		flag = "-k"
 	}
-	cmd := exec.CommandContext(ctx, bin, "apply", flag, path)
+	args := append([]string{"apply", flag, path}, tools.VerboseFlags(tools.Kubectl)...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if out, err := verbose.Run(cmd); err != nil {
 		return fmt.Errorf("kubectl apply: %w\n%s", err, out)
 	}
 	return nil
@@ -452,11 +545,11 @@ func KubectlRollout(ctx context.Context, r *tools.Resolver, kubeconfig, namespac
 	if err != nil {
 		return err
 	}
-	cmd := exec.CommandContext(ctx, bin, "rollout", "restart",
-		fmt.Sprintf("deployment/%s", name), "-n", namespace)
+	args := append([]string{"rollout", "restart",
+		fmt.Sprintf("deployment/%s", name), "-n", namespace}, tools.VerboseFlags(tools.Kubectl)...)
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
+	if out, err := verbose.Run(cmd); err != nil {
 		return fmt.Errorf("kubectl rollout restart: %w\n%s", err, out)
 	}
 	return nil

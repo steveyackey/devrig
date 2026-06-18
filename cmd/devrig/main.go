@@ -22,6 +22,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/steveyackey/devrig/internal/commands"
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 var version = "dev"
@@ -30,14 +31,23 @@ func main() {
 	startStartupProfiling()
 
 	var cfgFile string
+	var verboseFlag bool
 
 	root := &cobra.Command{
 		Use:     "devrig",
 		Short:   "Local development orchestrator",
 		Version: version,
+		// Honor --verbose before any subcommand runs. (DEVRIG_VERBOSE=1 in the
+		// environment enables it too, without the flag.)
+		PersistentPreRun: func(_ *cobra.Command, _ []string) {
+			if verboseFlag {
+				verbose.Enable()
+			}
+		},
 	}
 
 	root.PersistentFlags().StringVarP(&cfgFile, "file", "f", "", "Config file (default: walk up for devrig.toml)")
+	root.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream all tool/subprocess output live (also via DEVRIG_VERBOSE=1)")
 
 	root.AddCommand(
 		commands.NewValidateCmd(&cfgFile),

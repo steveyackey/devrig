@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 // Spinner shows an animated "working…" indicator for a long step. It animates
@@ -27,9 +29,11 @@ func NewSpinner(label string) *Spinner {
 	return &Spinner{label: label, frames: frames}
 }
 
-// Start begins the animation (or prints a static line when not on a TTY).
+// Start begins the animation (or prints a static line when not on a TTY, or
+// when verbose mode is streaming subprocess output that an in-place animation
+// would otherwise scramble).
 func (s *Spinner) Start() {
-	if !colorOn {
+	if !colorOn || verbose.Enabled() {
 		fmt.Fprintf(os.Stderr, "  %s…\n", s.label)
 		return
 	}
@@ -55,6 +59,14 @@ func (s *Spinner) Start() {
 }
 
 func (s *Spinner) finish(glyph, msg string) {
+	// Verbose mode never animated, so just print the final glyph + message on
+	// its own line (color codes are stripped automatically when color is off).
+	if verbose.Enabled() {
+		if msg != "" {
+			fmt.Fprintf(os.Stderr, "  %s %s\n", glyph, msg)
+		}
+		return
+	}
 	if !colorOn {
 		if msg != "" {
 			fmt.Fprintf(os.Stderr, "  %s\n", msg)

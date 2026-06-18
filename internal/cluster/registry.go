@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"net/http"
 	"os/exec"
-	"strings"
 	"time"
+
+	"github.com/steveyackey/devrig/internal/verbose"
 )
 
 // RegistryHostPort discovers the host-side port for the k3d registry container
@@ -15,9 +16,9 @@ import (
 func RegistryHostPort(containerName string) (uint16, error) {
 	cmd := exec.Command("docker", "inspect", containerName,
 		"--format", `{{json .NetworkSettings.Ports}}`)
-	out, err := cmd.CombinedOutput()
+	out, stderr, err := verbose.RunSplit(cmd)
 	if err != nil {
-		return 0, fmt.Errorf("docker inspect %s: %w\n%s", containerName, err, out)
+		return 0, fmt.Errorf("docker inspect %s: %w\n%s", containerName, err, stderr)
 	}
 
 	// Ports map: "5000/tcp": [{"HostIp":"0.0.0.0","HostPort":"XXXXX"}]
@@ -25,7 +26,7 @@ func RegistryHostPort(containerName string) (uint16, error) {
 		HostIP   string `json:"HostIp"`
 		HostPort string `json:"HostPort"`
 	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(string(out))), &ports); err != nil {
+	if err := json.Unmarshal([]byte(out), &ports); err != nil {
 		return 0, fmt.Errorf("parse docker port bindings: %w", err)
 	}
 

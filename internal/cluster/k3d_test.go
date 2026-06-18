@@ -172,6 +172,52 @@ func TestClusterAlreadyExists(t *testing.T) {
 	}
 }
 
+func TestServerlbStartBroken(t *testing.T) {
+	cases := []struct {
+		name string
+		out  string
+		want bool
+	}{
+		{
+			"helper node not ready",
+			"FATA[0005] Failed to add one or more helper nodes: Node k3d-devrig-x-serverlb failed to get ready: error waiting for log line `start worker processes`",
+			true,
+		},
+		{
+			"missing loadbalancer config",
+			"ERRO[0000] error getting loadbalancer config from k3d-devrig-x-serverlb: runtime failed to read loadbalancer config '/etc/confd/values.yaml': file not found",
+			true,
+		},
+		{"unrelated start error", "docker daemon not running", false},
+		{"already exists is not this", "a cluster with that name already exists", false},
+		{"empty", "", false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := serverlbStartBroken(c.out); got != c.want {
+				t.Errorf("serverlbStartBroken(%q) = %v, want %v", c.out, got, c.want)
+			}
+		})
+	}
+}
+
+func TestParseK3dVersion(t *testing.T) {
+	cases := []struct{ name, in, want string }{
+		{"standard two-line", "k3d version v5.9.0\nk3s version v1.33.6-k3s1 (default)", "v5.9.0"},
+		{"single line", "k3d version v5.8.3", "v5.8.3"},
+		{"with leading log line", "WARN[0000] something\nk3d version v5.9.0", "v5.9.0"},
+		{"unparseable", "totally unrelated output", ""},
+		{"empty", "", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := parseK3dVersion(c.in); got != c.want {
+				t.Errorf("parseK3dVersion(%q) = %q, want %q", c.in, got, c.want)
+			}
+		})
+	}
+}
+
 func TestExtractJSON(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{`[{"name":"x"}]`, `[{"name":"x"}]`},
