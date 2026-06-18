@@ -271,3 +271,38 @@ func TestRewriteKubeconfigServer(t *testing.T) {
 		})
 	}
 }
+
+func TestParseDevrigClusterNames(t *testing.T) {
+	// Mix of devrig-managed and unrelated clusters, with a leading k3d warning
+	// line on stdout that extractJSON must skip.
+	out := `WARN[0000] something
+[
+  {"name": "devrig-theoven-b2a225"},
+  {"name": "devrig-theoven-8c4177"},
+  {"name": "some-other-cluster"},
+  {"name": "k3s-default"}
+]`
+	got, err := parseDevrigClusterNames(out)
+	if err != nil {
+		t.Fatalf("parseDevrigClusterNames() error: %v", err)
+	}
+	want := []string{"devrig-theoven-b2a225", "devrig-theoven-8c4177"}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("got[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestParseDevrigClusterNamesEmpty(t *testing.T) {
+	got, err := parseDevrigClusterNames("[]")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected no names, got %v", got)
+	}
+}

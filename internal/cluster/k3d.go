@@ -432,6 +432,62 @@ func serverlbAPIPort(ctx context.Context, clusterName string) (string, error) {
 	return port, nil
 }
 
+// ListDevrigClusters returns the names of all k3d clusters devrig manages
+// (those named "devrig-*"), discovered via `k3d cluster list` regardless of any
+// local state or registry entry. It exists so `devrig delete --all` can reap a
+// cluster orphaned by a `devrig start` that was interrupted (e.g. Ctrl-C'd while
+// hanging in cluster creation) before it ever recorded the instance — the
+// registry-driven cleanup path can't see such a cluster, but k3d still can.
+func ListDevrigClusters(ctx context.Context, r *tools.Resolver) ([]string, error) {
+	bin, err := r.Path(ctx, tools.K3d)
+	if err != nil {
+		return nil, err
+	}
+	// Capture stdout only — k3d logs warnings to stderr that would corrupt the
+	// JSON (same reason as clusterExists/writeKubeconfig).
+	stdout, stderr, err := verbose.RunSplit(exec.CommandContext(ctx, bin, "cluster", "list", "-o", "json"))
+	if err != nil {
+		return nil, fmt.Errorf("k3d cluster list: %w\n%s", err, stderr)
+	}
+	return parseDevrigClusterNames(stdout)
+}
+
+// parseDevrigClusterNames extracts the names of devrig-managed clusters from
+// `k3d cluster list -o json` output.
+func parseDevrigClusterNames(out string) ([]string, error) {
+	var clusters []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal([]byte(extractJSON(out)), &clusters); err != nil {
+		return nil, fmt.Errorf("parse k3d cluster list: %w", err)
+	}
+	var names []string
+	for _, c := range clusters {
+		if strings.HasPrefix(c.Name, "devrig-") {
+			names = append(names, c.Name)
+		}
+	}
+	return names, nil
+}
+
+// DeleteClusterByName deletes a k3d cluster and its paired registry by cluster
+// name alone (the registry deletion is best-effort). Unlike Manager.Delete it
+// needs no config or slug, so it can tear down an orphaned cluster discovered
+// via ListDevrigClusters. The registry created alongside a "devrig-<slug>"
+// cluster is named "k3d-devrig-<slug>-reg" — i.e. "k3d-<clustername>-reg".
+func DeleteClusterByName(ctx context.Context, r *tools.Resolver, name string) error {
+	bin, err := r.Path(ctx, tools.K3d)
+	if err != nil {
+		return err
+	}
+	delArgs := append([]string{"cluster", "delete", name}, tools.VerboseFlags(tools.K3d)...)
+	if out, err := runCmd(ctx, bin, delArgs...); err != nil {
+		return fmt.Errorf("cluster delete %s: %w\n%s", name, err, out)
+	}
+	_, _ = runCmd(ctx, bin, "registry", "delete", "k3d-"+name+"-reg") // best-effort
+	return nil
+}
+
 // clusterExists checks via `k3d cluster list -o json` whether the named cluster
 // exists (running or stopped).
 func (m *Manager) clusterExists(ctx context.Context, name string) (bool, error) {

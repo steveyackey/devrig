@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -44,7 +45,12 @@ func New(projectName, configPath string) (*ProjectIdentity, error) {
 		return nil, fmt.Errorf("get home dir: %w", err)
 	}
 
-	slug := persistentSlug(homeDir, abs, computeSlug(projectName, abs))
+	// Derive the slug from a normalized key so the same project resolves to one
+	// slug regardless of how the path was cased/spelled on disk (see
+	// normalizeConfigPath). The returned ConfigPath/ProjectDir keep the original
+	// casing for display and file operations.
+	key := normalizeConfigPath(abs)
+	slug := persistentSlug(homeDir, key, computeSlug(projectName, key))
 	stateDir := filepath.Join(homeDir, ".devrig", slug)
 
 	return &ProjectIdentity{
@@ -53,6 +59,21 @@ func New(projectName, configPath string) (*ProjectIdentity, error) {
 		ProjectDir: filepath.Dir(abs),
 		StateDir:   stateDir,
 	}, nil
+}
+
+// normalizeConfigPath canonicalizes an absolute config path so the same project
+// always produces the same slug and index key. filepath.Abs already cleans
+// separators, but on Windows it preserves whatever case the caller passed —
+// drive letter and path components included. Because Windows filesystems are
+// case-insensitive, launching devrig from a differently-cased working directory
+// (e.g. `c:\code\theoven` vs `C:\code\theoven`) would otherwise hash to a
+// different slug and spawn a brand-new k3d cluster every run. Lower-case the
+// whole path on Windows; leave it untouched on case-sensitive Unix filesystems.
+func normalizeConfigPath(abs string) string {
+	if runtime.GOOS == "windows" {
+		return strings.ToLower(abs)
+	}
+	return abs
 }
 
 // computeSlug derives the canonical slug "<name>-<6-char-hash>" from the project
@@ -92,8 +113,17 @@ func persistentSlug(homeDir, absConfigPath, candidate string) string {
 	if data, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(data, &index)
 	}
+	// absConfigPath is already normalized by the caller. Exact match first.
 	if existing, ok := index[absConfigPath]; ok && existing != "" {
 		return existing
+	}
+	// Fall back to a normalized comparison so an entry written before path
+	// normalization (e.g. a differently-cased Windows key) still matches and the
+	// project keeps its original slug instead of being silently re-slugged.
+	for k, v := range index {
+		if v != "" && normalizeConfigPath(k) == absConfigPath {
+			return v
+		}
 	}
 
 	index[absConfigPath] = candidate
