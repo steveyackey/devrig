@@ -3,6 +3,7 @@ package identity
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -49,6 +50,55 @@ func TestPersistentSlugKeepsFirstAssignment(t *testing.T) {
 	// The index file should have been written.
 	if _, err := os.Stat(filepath.Join(home, ".devrig", "slugs.json")); err != nil {
 		t.Errorf("slug index not written: %v", err)
+	}
+}
+
+func TestNormalizeConfigPathStableOnWindows(t *testing.T) {
+	// On Windows the same project reached via differently-cased paths must
+	// normalize to one key (case-insensitive FS); on Unix the paths are
+	// distinct and must be preserved.
+	a := normalizeConfigPath(`C:\Code\TheOven\devrig.toml`)
+	b := normalizeConfigPath(`c:\code\theoven\devrig.toml`)
+	if runtime.GOOS == "windows" {
+		if a != b {
+			t.Errorf("windows: case-only path difference not normalized: %q vs %q", a, b)
+		}
+	} else {
+		if a == b {
+			t.Errorf("unix: case-sensitive paths wrongly collapsed: %q", a)
+		}
+	}
+}
+
+func TestComputeSlugStableAcrossCasingOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("path casing only collapses on Windows")
+	}
+	// The whole point of the fix: differently-cased invocations of the same
+	// project yield one slug (and therefore one k3d cluster), not several.
+	a := computeSlug("TheOven", normalizeConfigPath(`C:\Code\TheOven\devrig.toml`))
+	b := computeSlug("TheOven", normalizeConfigPath(`c:\code\theoven\devrig.toml`))
+	if a != b {
+		t.Errorf("same project, different path casing produced distinct slugs: %q vs %q", a, b)
+	}
+}
+
+func TestPersistentSlugMatchesPreNormalizationEntry(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("pre-normalization key drift only occurs on Windows")
+	}
+	home := t.TempDir()
+	// Simulate an index entry written before path normalization, under a
+	// non-normalized (upper-cased) key.
+	raw := `C:\Code\TheOven\devrig.toml`
+	if first := persistentSlug(home, raw, "theoven-aaaaaa"); first != "theoven-aaaaaa" {
+		t.Fatalf("seed assignment = %q, want theoven-aaaaaa", first)
+	}
+	// A later run resolves via the normalized key; it must reuse the original
+	// slug rather than mint a new one.
+	got := persistentSlug(home, normalizeConfigPath(raw), "theoven-bbbbbb")
+	if got != "theoven-aaaaaa" {
+		t.Errorf("normalized lookup = %q, want the original theoven-aaaaaa", got)
 	}
 }
 
