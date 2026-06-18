@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.1](https://github.com/steveyackey/devrig/compare/v0.38.0...v0.38.1) (2026-06-18)
+
+
+### Bug Fixes
+
+* **cluster:** stop k3d --verbose from corrupting kubeconfig and JSON output ([4926338](https://github.com/steveyackey/devrig/commit/4926338ee9a80d15f9c439639b29a4912a219682))
+
 ## [0.38.0](https://github.com/steveyackey/devrig/compare/v0.37.2...v0.38.0) (2026-06-18)
 
 
