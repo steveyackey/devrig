@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.38.4](https://github.com/steveyackey/devrig/compare/v0.38.3...v0.38.4) (2026-06-19)
+
+
+### Bug Fixes
+
+* **delete:** clean up the Docker network on devrig delete ([d0bd77b](https://github.com/steveyackey/devrig/commit/d0bd77bb9239cebd5637176a42ee02460a909efa))
+* **delete:** reap orphaned devrig containers, volumes, and networks on --all ([5448c37](https://github.com/steveyackey/devrig/commit/5448c376f634b0eb655855f31b1df1f5f55e5228))
+
 ## [0.38.3](https://github.com/steveyackey/devrig/compare/v0.38.2...v0.38.3) (2026-06-19)
 
 
