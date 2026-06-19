@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.38.3](https://github.com/steveyackey/devrig/compare/v0.38.2...v0.38.3) (2026-06-19)
+
+
+### Bug Fixes
+
+* **cluster:** use the dedicated network for cluster create + isolate worktrees ([#85](https://github.com/steveyackey/devrig/issues/85)) ([acbb5bf](https://github.com/steveyackey/devrig/commit/acbb5bf5a8f6544db584accdf81f8b7c9157b728))
+
 ## [0.38.2](https://github.com/steveyackey/devrig/compare/v0.38.1...v0.38.2) (2026-06-18)
 
 
