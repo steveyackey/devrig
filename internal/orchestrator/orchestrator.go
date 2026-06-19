@@ -885,18 +885,20 @@ func (o *Orchestrator) Delete() error {
 
 	ctx := context.Background()
 
+	// Delete the k3d cluster first: its nodes attach to the devrig network, so
+	// they must be gone before we can remove the network in CleanupAll.
+	if o.cfg != nil && o.cfg.Cluster != nil {
+		resolver := tools.ResolverFromConfig(o.cfg.Tools, false)
+		mgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), "")
+		_ = mgr.Delete(ctx)
+	}
+
 	// Remove all Docker resources for this project — containers, volumes, and
 	// the network — found by the devrig.project label.
 	if dockerMgr, err := docker.New(o.id.Slug); err == nil {
 		if err := dockerMgr.CleanupAll(ctx); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: cleaning up Docker resources: %v\n", err)
 		}
-	}
-
-	if o.cfg != nil && o.cfg.Cluster != nil {
-		resolver := tools.ResolverFromConfig(o.cfg.Tools, false)
-		mgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), "")
-		_ = mgr.Delete(ctx)
 	}
 
 	if err := state.Remove(o.stateDir); err != nil {

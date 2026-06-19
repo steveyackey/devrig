@@ -75,9 +75,22 @@ func (m *Manager) EnsureNetwork(ctx context.Context) error {
 	return err
 }
 
-// RemoveNetwork removes the project network (ignores not-found).
+// RemoveNetwork removes the project network (ignores not-found). Any containers
+// still attached (e.g. k3d cluster nodes) are force-disconnected first so the
+// removal isn't blocked by an "active endpoints" error.
 func (m *Manager) RemoveNetwork(ctx context.Context) error {
-	err := m.client.NetworkRemove(ctx, m.NetworkName())
+	name := m.NetworkName()
+	inspect, err := m.client.NetworkInspect(ctx, name, network.InspectOptions{})
+	if dockerclient.IsErrNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect network %s: %w", name, err)
+	}
+	for id := range inspect.Containers {
+		_ = m.client.NetworkDisconnect(ctx, name, id, true)
+	}
+	err = m.client.NetworkRemove(ctx, name)
 	if dockerclient.IsErrNotFound(err) {
 		return nil
 	}
@@ -303,7 +316,9 @@ func (m *Manager) CleanupAll(ctx context.Context) error {
 		}
 	}
 
-	_ = m.RemoveNetwork(ctx)
+	if err := m.RemoveNetwork(ctx); err != nil {
+		return fmt.Errorf("removing network: %w", err)
+	}
 	return nil
 }
 
