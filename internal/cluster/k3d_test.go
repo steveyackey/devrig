@@ -152,6 +152,39 @@ func TestSplitVolumeSpec(t *testing.T) {
 	}
 }
 
+func TestClusterNameWorktreeIsolation(t *testing.T) {
+	name := "nstest"
+	// Same configured cluster.name from two worktrees (distinct config paths →
+	// distinct slugs) must yield distinct k3d cluster names so they don't collide
+	// on a shared Docker host.
+	m1 := &Manager{cfg: &config.ClusterConfig{Name: &name}, slug: "nstest-aaaaaa"}
+	m2 := &Manager{cfg: &config.ClusterConfig{Name: &name}, slug: "nstest-bbbbbb"}
+	if got1, got2 := m1.ClusterName(), m2.ClusterName(); got1 == got2 {
+		t.Fatalf("worktrees collided on cluster name: both %q", got1)
+	}
+	if got := m1.ClusterName(); got != "nstest-aaaaaa" {
+		t.Errorf("ClusterName = %q, want nstest-aaaaaa", got)
+	}
+	// No configured name → the already-unique slug-derived name.
+	m3 := &Manager{cfg: &config.ClusterConfig{}, slug: "proj-cccccc"}
+	if got := m3.ClusterName(); got != "devrig-proj-cccccc" {
+		t.Errorf("ClusterName = %q, want devrig-proj-cccccc", got)
+	}
+}
+
+func TestSlugSuffix(t *testing.T) {
+	for _, c := range []struct{ in, want string }{
+		{"nstest-a1b2c3", "a1b2c3"},
+		{"my-project-deadbe", "deadbe"},
+		{"noseparator", "noseparator"},
+		{"trailing-", "trailing-"},
+	} {
+		if got := slugSuffix(c.in); got != c.want {
+			t.Errorf("slugSuffix(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestClusterAlreadyExists(t *testing.T) {
 	cases := []struct {
 		name string
