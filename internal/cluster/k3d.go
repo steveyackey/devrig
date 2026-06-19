@@ -40,11 +40,26 @@ func NewManager(cfg *config.ClusterConfig, resolver *tools.Resolver, slug, state
 }
 
 // ClusterName returns the k3d cluster name (dev-friendly if not configured).
+//
+// A configured cluster.name is qualified with the slug's unique suffix so that
+// two worktrees/checkouts of the same project (which share the same
+// cluster.name) don't collide on the k3d cluster and container names on a shared
+// Docker host. The slug already encodes the config path, so its suffix differs
+// per checkout; the network and registry names are slug-derived for the same
+// reason.
 func (m *Manager) ClusterName() string {
 	if m.cfg.Name != nil && *m.cfg.Name != "" {
-		return *m.cfg.Name
+		return *m.cfg.Name + "-" + slugSuffix(m.slug)
 	}
 	return "devrig-" + m.slug
+}
+
+// slugSuffix returns the unique hash segment of a "<name>-<hash>" slug.
+func slugSuffix(slug string) string {
+	if i := strings.LastIndex(slug, "-"); i >= 0 && i < len(slug)-1 {
+		return slug[i+1:]
+	}
+	return slug
 }
 
 // KubeconfigPath returns the path where the kubeconfig is written.

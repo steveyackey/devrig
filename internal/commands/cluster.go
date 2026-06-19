@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,10 +10,39 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/steveyackey/devrig/internal/cluster"
 	"github.com/steveyackey/devrig/internal/config"
+	"github.com/steveyackey/devrig/internal/docker"
 	"github.com/steveyackey/devrig/internal/identity"
 	"github.com/steveyackey/devrig/internal/state"
 	"github.com/steveyackey/devrig/internal/tools"
 )
+
+// ensureClusterNetwork ensures the project's dedicated Docker network exists and
+// returns its name. The standalone `cluster create` command uses this so k3d's
+// serverlb runs on a user-defined network (which provides DNS between containers)
+// rather than the default "bridge" network (which does not). On the default
+// bridge the serverlb can't resolve the server node and crash-loops; with an
+// agent, k3d then retries the agent→server validation forever, hanging
+// `cluster create`. This mirrors what `devrig start` already does.
+func ensureClusterNetwork(ctx context.Context, slug string) (string, error) {
+	dm, err := docker.New(slug)
+	if err != nil {
+		return "", fmt.Errorf("connecting to Docker: %w", err)
+	}
+	if err := dm.EnsureNetwork(ctx); err != nil {
+		return "", fmt.Errorf("ensuring Docker network: %w", err)
+	}
+	return dm.NetworkName(), nil
+}
+
+// removeClusterNetwork best-effort removes the project's dedicated network so it
+// doesn't leak across delete/recreate cycles (k3d treats it as external and
+// leaves it behind, which otherwise accumulates until Docker's address pool is
+// exhausted).
+func removeClusterNetwork(ctx context.Context, slug string) {
+	if dm, err := docker.New(slug); err == nil {
+		_ = dm.RemoveNetwork(ctx)
+	}
+}
 
 // NewClusterCmd returns the cluster subcommand tree.
 func NewClusterCmd(cfgFile *string) *cobra.Command {
@@ -39,7 +69,11 @@ func newClusterCreateCmd(cfgFile *string) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, true), id.Slug, id.StateDir, filepath.Dir(id.ConfigPath), "bridge")
+			net, err := ensureClusterNetwork(cmd.Context(), id.Slug)
+			if err != nil {
+				return err
+			}
+			mgr := cluster.NewManager(cfg.Cluster, tools.ResolverFromConfig(cfg.Tools, true), id.Slug, id.StateDir, filepath.Dir(id.ConfigPath), net)
 			cs, err := mgr.Ensure(cmd.Context())
 			if err != nil {
 				return err
@@ -214,6 +248,8 @@ func newClusterDeleteCmd(cfgFile *string) *cobra.Command {
 			if err := mgr.Delete(cmd.Context()); err != nil {
 				return err
 			}
+			// Also tear down the project's dedicated network so it doesn't leak.
+			removeClusterNetwork(cmd.Context(), id.Slug)
 			fmt.Println("cluster deleted")
 			return nil
 		},
