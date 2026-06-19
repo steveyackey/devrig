@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/steveyackey/devrig/internal/cluster"
+	"github.com/steveyackey/devrig/internal/docker"
 	"github.com/steveyackey/devrig/internal/orchestrator"
 	"github.com/steveyackey/devrig/internal/registry"
 	"github.com/steveyackey/devrig/internal/tools"
@@ -54,10 +55,11 @@ func NewDeleteCmd(globalCfgFile *string) *cobra.Command {
 				}
 				// The per-instance pass above only covers projects recorded in the
 				// registry. A `devrig start` interrupted before it registered (e.g.
-				// Ctrl-C'd while hanging in cluster creation) can leave a k3d cluster
-				// with no registry entry, which the loop never sees. Reap any such
-				// devrig-managed clusters directly from k3d.
+				// Ctrl-C'd while hanging in cluster creation) can leave resources with
+				// no registry entry, which the loop never sees. Reap any such
+				// devrig-managed clusters, containers, volumes, and networks directly.
 				reapOrphanClusters(cmd.Context())
+				reapOrphanDockerResources(cmd.Context())
 				return nil
 			}
 			cfgPath, err := resolveConfig(globalCfgFile)
@@ -133,5 +135,27 @@ func reapOrphanClusters(ctx context.Context) {
 			continue
 		}
 		fmt.Fprintln(os.Stderr, "done")
+	}
+}
+
+// reapOrphanDockerResources removes any devrig-managed Docker containers,
+// volumes, and networks that survived the registry-driven delete pass — e.g. a
+// postgres container and its data volume, or a network, left behind by a start
+// that never registered its instance. Best-effort: a Docker connection failure
+// is reported and ignored rather than failing the whole command.
+func reapOrphanDockerResources(ctx context.Context) {
+	res, err := docker.ReapOrphans(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: could not reap orphaned Docker resources: %v\n", err)
+		return
+	}
+	for _, name := range res.Containers {
+		fmt.Fprintf(os.Stderr, "  Removed orphaned container %s\n", name)
+	}
+	for _, name := range res.Volumes {
+		fmt.Fprintf(os.Stderr, "  Removed orphaned volume %s\n", name)
+	}
+	for _, name := range res.Networks {
+		fmt.Fprintf(os.Stderr, "  Removed orphaned network %s\n", name)
 	}
 }

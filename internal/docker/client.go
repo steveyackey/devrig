@@ -30,6 +30,15 @@ type Manager struct {
 
 // New creates a Manager and verifies Docker daemon connectivity.
 func New(slug string) (*Manager, error) {
+	cli, err := newClient()
+	if err != nil {
+		return nil, err
+	}
+	return &Manager{client: cli, slug: slug}, nil
+}
+
+// newClient builds a Docker API client and verifies daemon connectivity.
+func newClient() (*dockerclient.Client, error) {
 	cli, err := dockerclient.NewClientWithOpts(
 		dockerclient.FromEnv,
 		dockerclient.WithAPIVersionNegotiation(),
@@ -42,7 +51,7 @@ func New(slug string) (*Manager, error) {
 	if _, err := cli.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("cannot connect to Docker daemon: %w", err)
 	}
-	return &Manager{client: cli, slug: slug}, nil
+	return cli, nil
 }
 
 func (m *Manager) Client() *dockerclient.Client { return m.client }
@@ -79,8 +88,13 @@ func (m *Manager) EnsureNetwork(ctx context.Context) error {
 // still attached (e.g. k3d cluster nodes) are force-disconnected first so the
 // removal isn't blocked by an "active endpoints" error.
 func (m *Manager) RemoveNetwork(ctx context.Context) error {
-	name := m.NetworkName()
-	inspect, err := m.client.NetworkInspect(ctx, name, network.InspectOptions{})
+	return removeNetwork(ctx, m.client, m.NetworkName())
+}
+
+// removeNetwork force-disconnects any attached containers, then removes the
+// named network. Not-found is treated as success.
+func removeNetwork(ctx context.Context, cli *dockerclient.Client, name string) error {
+	inspect, err := cli.NetworkInspect(ctx, name, network.InspectOptions{})
 	if dockerclient.IsErrNotFound(err) {
 		return nil
 	}
@@ -88,9 +102,9 @@ func (m *Manager) RemoveNetwork(ctx context.Context) error {
 		return fmt.Errorf("inspect network %s: %w", name, err)
 	}
 	for id := range inspect.Containers {
-		_ = m.client.NetworkDisconnect(ctx, name, id, true)
+		_ = cli.NetworkDisconnect(ctx, name, id, true)
 	}
-	err = m.client.NetworkRemove(ctx, name)
+	err = cli.NetworkRemove(ctx, name)
 	if dockerclient.IsErrNotFound(err) {
 		return nil
 	}
@@ -320,6 +334,67 @@ func (m *Manager) CleanupAll(ctx context.Context) error {
 		return fmt.Errorf("removing network: %w", err)
 	}
 	return nil
+}
+
+// ReapResult lists the devrig-managed Docker resources removed by ReapOrphans.
+type ReapResult struct {
+	Containers []string
+	Volumes    []string
+	Networks   []string
+}
+
+// ReapOrphans removes every devrig-managed Docker resource across all projects —
+// containers, volumes, and networks identified by the devrig.managed-by label —
+// regardless of slug. It backstops `devrig delete --all`, cleaning up resources
+// left behind by an instance that was never registered (e.g. a start Ctrl-C'd
+// mid-bringup) or whose state was already removed. Best-effort: individual
+// removal failures are skipped rather than failing the whole sweep.
+func ReapOrphans(ctx context.Context) (ReapResult, error) {
+	cli, err := newClient()
+	if err != nil {
+		return ReapResult{}, err
+	}
+	defer cli.Close()
+
+	f := filters.NewArgs(filters.Arg("label", "devrig.managed-by=devrig"))
+	var res ReapResult
+
+	// Containers (running or stopped) first, so volumes and networks are free.
+	containers, err := cli.ContainerList(ctx, container.ListOptions{All: true, Filters: f})
+	if err != nil {
+		return res, fmt.Errorf("listing containers: %w", err)
+	}
+	for _, c := range containers {
+		_ = stopContainer(ctx, cli, c.ID, 5)
+		if err := removeContainer(ctx, cli, c.ID, true); err != nil {
+			continue
+		}
+		name := c.ID
+		if len(c.Names) > 0 {
+			name = strings.TrimPrefix(c.Names[0], "/")
+		}
+		res.Containers = append(res.Containers, name)
+	}
+
+	// Volumes (e.g. postgres data).
+	if vols, err := cli.VolumeList(ctx, volume.ListOptions{Filters: f}); err == nil {
+		for _, v := range vols.Volumes {
+			if err := cli.VolumeRemove(ctx, v.Name, false); err == nil {
+				res.Volumes = append(res.Volumes, v.Name)
+			}
+		}
+	}
+
+	// Networks last — nothing devrig-managed is attached anymore.
+	if nets, err := cli.NetworkList(ctx, network.ListOptions{Filters: f}); err == nil {
+		for _, n := range nets {
+			if err := removeNetwork(ctx, cli, n.Name); err == nil {
+				res.Networks = append(res.Networks, n.Name)
+			}
+		}
+	}
+
+	return res, nil
 }
 
 // --- low-level helpers ---
