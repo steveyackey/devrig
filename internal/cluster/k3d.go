@@ -75,6 +75,10 @@ func (m *Manager) RegistryName() string {
 // Ensure creates the cluster if it doesn't exist, then returns the
 // cluster state (kubeconfig path, registry info).
 func (m *Manager) Ensure(ctx context.Context) (*state.ClusterState, error) {
+	if err := checkCgroupV2(ctx); err != nil {
+		return nil, err
+	}
+
 	name := m.ClusterName()
 
 	// Check if cluster already exists.
@@ -429,6 +433,29 @@ func rewriteKubeconfigServer(content, port string) string {
 		content = strings.ReplaceAll(content, old, server)
 	}
 	return content
+}
+
+// checkCgroupV2 fails fast if the Docker host runs cgroup v1. Modern
+// k3s/Kubernetes no longer run there — the kubelet exits with "kubelet is
+// configured to not run on a host using cgroup v1" and the k3s server node
+// crash-loops opaquely for minutes. Surfacing it as a clear, actionable error
+// up front beats letting the cluster wedge. If `docker info` can't be read (or
+// doesn't report the version), we say nothing and let cluster creation proceed.
+func checkCgroupV2(ctx context.Context) error {
+	out, _, err := verbose.RunSplit(exec.CommandContext(ctx, "docker", "info", "--format", "{{.CgroupVersion}}"))
+	if err != nil {
+		return nil
+	}
+	if strings.TrimSpace(out) != "1" {
+		return nil
+	}
+	return fmt.Errorf("cluster: Docker host is using cgroup v1, which k3s no longer supports.\n" +
+		"Switch your Docker host to cgroup v2 and retry:\n" +
+		"  - Docker Desktop (Windows/WSL2): add to %%USERPROFILE%%\\.wslconfig\n" +
+		"        [wsl2]\n" +
+		"        kernelCommandLine = cgroup_no_v1=all systemd.unified_cgroup_hierarchy=1\n" +
+		"    then run `wsl --shutdown` and restart Docker Desktop.\n" +
+		"  - Linux: boot with `systemd.unified_cgroup_hierarchy=1` (cgroup v2).")
 }
 
 // serverlbAPIPort returns the host port the k3d serverlb publishes for the
