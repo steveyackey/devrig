@@ -102,3 +102,49 @@ func TestInterpolateConfigResolvesOIDCRedirectURIsAndEnv(t *testing.T) {
 		t.Errorf("env CALLBACK = %q", cfg.Env["CALLBACK"])
 	}
 }
+
+func TestInterpolateAddonValues(t *testing.T) {
+	reg := "k3d-reg:5000"
+	vars := &TemplateVars{
+		ClusterRegistry:  &reg,
+		ClusterImageTags: map[string]string{"theoven": "1782150496"},
+	}
+	addons := map[string]AddonConfig{
+		"app": {
+			Values: map[string]any{
+				"image.repository": "{{ cluster.registry }}/theoven",
+				"image.tag":        "{{ cluster.image.theoven.tag }}",
+				"nested":           map[string]any{"url": "http://{{ cluster.registry }}/x"},
+				"replicaCount":     int64(2),
+				"redis.enabled":    true,
+			},
+		},
+	}
+	if err := InterpolateAddonValues(addons, vars); err != nil {
+		t.Fatalf("InterpolateAddonValues: %v", err)
+	}
+	v := addons["app"].Values
+	if v["image.repository"] != "k3d-reg:5000/theoven" {
+		t.Errorf("image.repository = %v", v["image.repository"])
+	}
+	if v["image.tag"] != "1782150496" {
+		t.Errorf("image.tag = %v", v["image.tag"])
+	}
+	if nested := v["nested"].(map[string]any); nested["url"] != "http://k3d-reg:5000/x" {
+		t.Errorf("nested.url = %v", nested["url"])
+	}
+	// Non-string scalars pass through unchanged.
+	if v["replicaCount"] != int64(2) || v["redis.enabled"] != true {
+		t.Errorf("scalars changed: %v %v", v["replicaCount"], v["redis.enabled"])
+	}
+}
+
+func TestInterpolateAddonValuesReportsUnresolved(t *testing.T) {
+	addons := map[string]AddonConfig{
+		"app": {Values: map[string]any{"image.tag": "{{ cluster.image.nope.tag }}"}},
+	}
+	err := InterpolateAddonValues(addons, &TemplateVars{})
+	if err == nil || !strings.Contains(err.Error(), "cluster.addons.app.values.image.tag") {
+		t.Fatalf("expected unresolved-var error mentioning the addon value, got: %v", err)
+	}
+}

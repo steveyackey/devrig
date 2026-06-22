@@ -82,6 +82,35 @@ func installAddon(ctx context.Context, r *tools.Resolver, name string, addon *co
 	}
 }
 
+// expandDottedKeys turns flat dotted keys (e.g. "image.tag") into nested maps
+// so they apply when written to a helm --values file. Helm only splits dotted
+// keys for --set, not --values, so without this an addon value like
+// `"image.tag" = "..."` would land as a literal key the chart ignores.
+func expandDottedKeys(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if !strings.Contains(k, ".") {
+			out[k] = v
+			continue
+		}
+		parts := strings.Split(k, ".")
+		cur := out
+		for i, p := range parts {
+			if i == len(parts)-1 {
+				cur[p] = v
+				break
+			}
+			next, ok := cur[p].(map[string]any)
+			if !ok {
+				next = make(map[string]any)
+				cur[p] = next
+			}
+			cur = next
+		}
+	}
+	return out
+}
+
 func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *config.AddonConfig, cs *state.ClusterState, configDir string) error {
 	ns := addon.Namespace
 	if ns == "" {
@@ -124,7 +153,7 @@ func installHelm(ctx context.Context, r *tools.Resolver, name string, addon *con
 	}
 
 	if len(addon.Values) > 0 {
-		valData, err := yaml.Marshal(addon.Values)
+		valData, err := yaml.Marshal(expandDottedKeys(addon.Values))
 		if err == nil {
 			tmp, err := os.CreateTemp("", "devrig-values-*.yaml")
 			if err == nil {
