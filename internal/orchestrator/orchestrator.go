@@ -427,8 +427,15 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 			sp.Done("Built image " + imgName)
 		}
 
-		// Install addons.
+		// Install addons. Addon `values` may reference cluster vars (e.g.
+		// {{ cluster.registry }}, {{ cluster.image.NAME.tag }}). The main config
+		// interpolation pass runs later (Phase 4), so resolve addon values here
+		// using the cluster state that's now available (registry + image tags).
 		if len(o.cfg.Cluster.Addons) > 0 {
+			if err := config.InterpolateAddonValues(o.cfg.Cluster.Addons, addonTemplateVars(cs)); err != nil {
+				return fmt.Errorf("cluster addon values:\n%w", err)
+			}
+
 			sp := style.NewSpinner("Installing addons")
 			sp.Start()
 			if err := cluster.InstallAddons(ctx, resolver, o.cfg.Cluster.Addons, cs, o.stateDir, cfgDir); err != nil {
@@ -1029,32 +1036,50 @@ func buildTemplateVars(
 	}
 
 	if clusterState != nil {
-		name := clusterState.ClusterName
-		tv.ClusterName = &name
-		kc := clusterState.KubeconfigPath
-		tv.ClusterKubeconfig = &kc
-		if clusterState.RegistryName != nil {
-			reg := fmt.Sprintf("%s:5000", *clusterState.RegistryName)
-			tv.ClusterRegistry = &reg
-		}
-		if clusterState.RegistryPort != nil {
-			rh := fmt.Sprintf("localhost:%d", *clusterState.RegistryPort)
-			tv.ClusterRegistryHost = &rh
-		}
-		// cluster.image.<name>.tag — just the tag portion (e.g. "1234567890")
-		// of each built image. ImageTag is the full ref ("localhost:5000/n:tag"
-		// or "devrig-n:latest"); service env / addon values want only the tag.
-		// (build_args interpolation uses the full ref separately.)
-		tv.ClusterImageTags = make(map[string]string, len(clusterState.DeployedServices))
-		for name, ds := range clusterState.DeployedServices {
-			tag := ds.ImageTag
-			if i := strings.LastIndex(tag, ":"); i != -1 {
-				tag = tag[i+1:]
-			}
-			tv.ClusterImageTags[name] = tag
-		}
+		cv := addonTemplateVars(clusterState)
+		tv.ClusterName = cv.ClusterName
+		tv.ClusterKubeconfig = cv.ClusterKubeconfig
+		tv.ClusterRegistry = cv.ClusterRegistry
+		tv.ClusterRegistryHost = cv.ClusterRegistryHost
+		tv.ClusterImageTags = cv.ClusterImageTags
 	}
 
+	return tv
+}
+
+// addonTemplateVars builds a TemplateVars with just the cluster-level variables
+// (name, kubeconfig, registry, per-image tags) available from the cluster
+// state. Used to interpolate helm addon `values` during the cluster phase,
+// before the full Phase 4 template-vars pass runs.
+func addonTemplateVars(clusterState *state.ClusterState) *config.TemplateVars {
+	tv := &config.TemplateVars{}
+	if clusterState == nil {
+		return tv
+	}
+	name := clusterState.ClusterName
+	tv.ClusterName = &name
+	kc := clusterState.KubeconfigPath
+	tv.ClusterKubeconfig = &kc
+	if clusterState.RegistryName != nil {
+		reg := fmt.Sprintf("%s:5000", *clusterState.RegistryName)
+		tv.ClusterRegistry = &reg
+	}
+	if clusterState.RegistryPort != nil {
+		rh := fmt.Sprintf("localhost:%d", *clusterState.RegistryPort)
+		tv.ClusterRegistryHost = &rh
+	}
+	// cluster.image.<name>.tag — just the tag portion (e.g. "1234567890") of
+	// each built image. ImageTag is the full ref ("localhost:5000/n:tag" or
+	// "devrig-n:latest"); service env / addon values want only the tag.
+	// (build_args interpolation uses the full ref separately.)
+	tv.ClusterImageTags = make(map[string]string, len(clusterState.DeployedServices))
+	for n, ds := range clusterState.DeployedServices {
+		tag := ds.ImageTag
+		if i := strings.LastIndex(tag, ":"); i != -1 {
+			tag = tag[i+1:]
+		}
+		tv.ClusterImageTags[n] = tag
+	}
 	return tv
 }
 

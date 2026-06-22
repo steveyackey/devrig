@@ -99,6 +99,46 @@ func InterpolateSlice(s []string, vars *TemplateVars) ([]string, error) {
 	return out, nil
 }
 
+// interpolateAny recursively interpolates {{ }} templates in a value taken from
+// an addon's `values` map. The value may be a string, a nested map, or a slice
+// (BurntSushi decodes TOML tables to map[string]any and table arrays to
+// []map[string]any). Non-string scalars (bool/int/float) pass through.
+func interpolateAny(v any, vars *TemplateVars) (any, error) {
+	switch t := v.(type) {
+	case string:
+		return InterpolateString(t, vars)
+	case map[string]any:
+		for k, val := range t {
+			r, err := interpolateAny(val, vars)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", k, err)
+			}
+			t[k] = r
+		}
+		return t, nil
+	case []any:
+		for i, val := range t {
+			r, err := interpolateAny(val, vars)
+			if err != nil {
+				return nil, fmt.Errorf("[%d]: %w", i, err)
+			}
+			t[i] = r
+		}
+		return t, nil
+	case []map[string]any:
+		for i, val := range t {
+			r, err := interpolateAny(val, vars)
+			if err != nil {
+				return nil, fmt.Errorf("[%d]: %w", i, err)
+			}
+			t[i] = r.(map[string]any)
+		}
+		return t, nil
+	default:
+		return v, nil
+	}
+}
+
 func resolveVar(key string, vars *TemplateVars) (string, bool) {
 	parts := strings.Split(key, ".")
 	switch parts[0] {
@@ -300,6 +340,31 @@ func InterpolateConfig(cfg *Config, vars *TemplateVars) error {
 		}
 	}
 
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "\n"))
+	}
+	return nil
+}
+
+// InterpolateAddonValues resolves {{ }} templates in every helm addon's
+// `values`. Addons commonly reference cluster vars (e.g. "image.tag" =
+// "{{ cluster.image.NAME.tag }}"). Addons install during the cluster phase,
+// before the main InterpolateConfig pass runs, so the orchestrator calls this
+// separately at that point — once the cluster registry and image tags are
+// known. Values is map[string]any, so string leaves are interpolated
+// recursively (through nested maps/slices); the map is mutated in place.
+func InterpolateAddonValues(addons map[string]AddonConfig, vars *TemplateVars) error {
+	var errs []string
+	for name, addon := range addons {
+		for k, v := range addon.Values {
+			r, err := interpolateAny(v, vars)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("  cluster.addons.%s.values.%s: %v", name, k, err))
+				continue
+			}
+			addon.Values[k] = r
+		}
+	}
 	if len(errs) > 0 {
 		return fmt.Errorf("%s", strings.Join(errs, "\n"))
 	}
