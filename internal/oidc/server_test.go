@@ -300,6 +300,71 @@ func TestConcurrentCodeExchangeIsCoalesced(t *testing.T) {
 	}
 }
 
+// TestDiscoveryRewritesEndpointHostKeepsIssuer verifies the host-aware discovery
+// doc: when fetched via a different Host than the issuer (as an in-cluster RP
+// does via host.k3d.internal), the endpoint URLs — crucially jwks_uri — are
+// rewritten to that host so keys are reachable, while `issuer` stays fixed so
+// the token's iss still matches for both the browser and the in-cluster API.
+func TestDiscoveryRewritesEndpointHostKeepsIssuer(t *testing.T) {
+	port := freePort(t)
+	base := "http://localhost:" + itoa(port)
+
+	cfg := &config.OIDCConfig{
+		Realm: "dev", Audience: strp("dev-api"),
+		Clients: map[string]config.OIDCClientConfig{
+			"web-app": {Public: true, RedirectURIs: []string{"http://localhost:9999/callback"}},
+		},
+	}
+	srv := New(cfg, port, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = srv.Start(ctx) }()
+	mustGetUp(t, base+"/.well-known/openid-configuration", 10*time.Second)
+
+	// Fetch the doc as an in-cluster RP would: reach the listener on localhost
+	// but present host.k3d.internal:<port> as the Host header.
+	const podHost = "host.k3d.internal"
+	podAuthority := podHost + ":" + itoa(port)
+	req, _ := http.NewRequest("GET", base+"/.well-known/openid-configuration", nil)
+	req.Host = podAuthority
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	json.NewDecoder(resp.Body).Decode(&doc)
+	resp.Body.Close()
+
+	// issuer is NOT rewritten — it stays the fixed localhost value so the token
+	// iss matches for both parties.
+	if doc["issuer"] != base {
+		t.Errorf("issuer = %v, want %s (must stay fixed)", doc["issuer"], base)
+	}
+	// Endpoints ARE rewritten to the request host so a pod can reach them.
+	jwks, _ := doc["jwks_uri"].(string)
+	if !strings.Contains(jwks, podHost) {
+		t.Errorf("jwks_uri = %q, want host %q", jwks, podHost)
+	}
+	if u, err := url.Parse(jwks); err != nil || u.Host != podAuthority {
+		t.Errorf("jwks_uri host = %v, want %s", jwks, podAuthority)
+	}
+	for _, k := range []string{"authorization_endpoint", "token_endpoint", "userinfo_endpoint"} {
+		if v, _ := doc[k].(string); v != "" && !strings.Contains(v, podHost) {
+			t.Errorf("%s = %q, want host %q", k, v, podHost)
+		}
+	}
+
+	// Same-host fetch (the browser via localhost) is unchanged: endpoints stay
+	// on localhost and issuer matches.
+	same := getJSON(t, base+"/.well-known/openid-configuration")
+	if same["issuer"] != base {
+		t.Errorf("same-host issuer = %v, want %s", same["issuer"], base)
+	}
+	if jwks, _ := same["jwks_uri"].(string); !strings.HasPrefix(jwks, base) {
+		t.Errorf("same-host jwks_uri = %q, want prefix %s", jwks, base)
+	}
+}
+
 // --- helpers ---
 
 func itoa(p uint16) string {

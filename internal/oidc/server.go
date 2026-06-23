@@ -35,6 +35,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -205,7 +206,7 @@ func (s *Server) Start(ctx context.Context) error {
 		return fmt.Errorf("oidc: listen on port %d: %w", s.port, err)
 	}
 
-	srv := &http.Server{Handler: withCORS(mux)}
+	srv := &http.Server{Handler: withCORS(withDiscoveryHostRewrite(mux))}
 	go func() {
 		<-ctx.Done()
 		shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -325,6 +326,102 @@ func withCORS(h http.Handler) http.Handler {
 		}
 		h.ServeHTTP(w, req)
 	})
+}
+
+// withDiscoveryHostRewrite makes the OIDC discovery document host-aware: it
+// rewrites the *endpoint* URLs (authorization_endpoint, token_endpoint,
+// jwks_uri, userinfo_endpoint, …) to the host the request came in on, while
+// leaving `issuer` fixed at the configured value.
+//
+// This is what lets one provider serve both a host-side browser and an
+// in-cluster relying party. The provider listens on all interfaces, so a pod
+// reaches it via host.k3d.internal while the browser uses localhost. Without
+// the rewrite, the doc bakes a single host (localhost) into jwks_uri, and a pod
+// told to fetch keys from localhost hits its own loopback → "signature key not
+// found". With it, the doc fetched via host.k3d.internal advertises jwks_uri on
+// host.k3d.internal (pod-reachable), while issuer stays localhost so the token's
+// iss still matches for both parties (the RP can point MetadataAddress at
+// host.k3d.internal yet keep Authority/issuer = localhost).
+func withDiscoveryHostRewrite(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet || !isDiscoveryPath(req.URL.Path) {
+			h.ServeHTTP(w, req)
+			return
+		}
+		rec := &captureWriter{header: http.Header{}}
+		h.ServeHTTP(rec, req)
+		snap := rec.snapshot()
+
+		rewritten, ok := rewriteDiscoveryHost(snap.body, requestOrigin(req))
+		if !ok {
+			// Not rewritable (non-200, non-JSON, no issuer) — pass through verbatim.
+			snap.writeTo(w)
+			return
+		}
+		for k, vs := range snap.header {
+			if k == "Content-Length" {
+				continue // length changed; let the writer set it
+			}
+			for _, v := range vs {
+				w.Header().Add(k, v)
+			}
+		}
+		w.WriteHeader(snap.status)
+		_, _ = w.Write(rewritten)
+	})
+}
+
+// isDiscoveryPath reports whether p is an OAuth/OIDC metadata document — the
+// only responses whose endpoint hosts we rewrite.
+func isDiscoveryPath(p string) bool {
+	return strings.HasSuffix(p, "/.well-known/openid-configuration") ||
+		strings.HasSuffix(p, "/.well-known/oauth-authorization-server")
+}
+
+// requestOrigin returns scheme://host for the request (the host the caller
+// actually reached us on). Dev is plain http unless TLS is terminated here.
+func requestOrigin(req *http.Request) string {
+	scheme := "http"
+	if req.TLS != nil {
+		scheme = "https"
+	}
+	return scheme + "://" + req.Host
+}
+
+// rewriteDiscoveryHost rewrites every top-level URL string in a discovery
+// document whose origin matches `issuer` so it instead points at newOrigin,
+// leaving the `issuer` field itself untouched. Returns (body, false) unchanged
+// if the body isn't a JSON object with a usable issuer.
+func rewriteDiscoveryHost(body []byte, newOrigin string) ([]byte, bool) {
+	var doc map[string]any
+	if err := json.Unmarshal(body, &doc); err != nil {
+		return body, false
+	}
+	issuer, _ := doc["issuer"].(string)
+	if issuer == "" {
+		return body, false
+	}
+	iss, err := url.Parse(issuer)
+	if err != nil {
+		return body, false
+	}
+	oldOrigin := iss.Scheme + "://" + iss.Host
+	if newOrigin == oldOrigin {
+		return body, false // same host — nothing to do, emit original bytes
+	}
+	for k, v := range doc {
+		if k == "issuer" {
+			continue
+		}
+		if s, ok := v.(string); ok && strings.HasPrefix(s, oldOrigin) {
+			doc[k] = newOrigin + strings.TrimPrefix(s, oldOrigin)
+		}
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return body, false
+	}
+	return out, true
 }
 
 // tokenPath is the OAuth2 token endpoint on the public mux.
