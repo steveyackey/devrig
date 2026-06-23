@@ -16,6 +16,19 @@ const addons = computed(() =>
 );
 const pods = computed(() => cluster.value?.pods ?? []);
 
+// Extract app/instance label from a pod for grouping
+function getAppLabel(pod: { labels?: Record<string, string> }): string {
+  if (!pod.labels) return "";
+  // Check common labels used by Helm and k8s apps
+  return (
+    pod.labels["app.kubernetes.io/instance"] ||
+    pod.labels["app.kubernetes.io/name"] ||
+    pod.labels["app"] ||
+    pod.labels["helm.sh/chart"]?.split("-")[0] ||
+    ""
+  );
+}
+
 onMounted(async () => {
   try {
     cluster.value = await fetchCluster();
@@ -151,6 +164,7 @@ onMounted(async () => {
                 class="border-b border-border text-[9px] font-label text-text-muted uppercase tracking-[0.1em]"
               >
                 <th class="px-6 py-2 text-left font-normal">Name</th>
+                <th class="px-4 py-2 text-left font-normal">App</th>
                 <th class="px-4 py-2 text-left font-normal">Namespace</th>
                 <th class="px-4 py-2 text-left font-normal">Status</th>
                 <th class="px-4 py-2 text-left font-normal">Ready</th>
@@ -166,6 +180,9 @@ onMounted(async () => {
               >
                 <td class="px-6 py-2.5 font-mono text-sm text-text-primary">
                   {{ pod.name }}
+                </td>
+                <td class="px-4 py-2.5 font-mono text-text-muted">
+                  {{ getAppLabel(pod) || "-" }}
                 </td>
                 <td class="px-4 py-2.5 font-mono text-text-muted">{{ pod.namespace }}</td>
                 <td class="px-4 py-2.5 text-text-muted">
