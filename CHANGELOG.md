@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.41.0](https://github.com/steveyackey/devrig/compare/v0.40.0...v0.41.0) (2026-06-23)
+
+
+### Features
+
+* **cluster:** add app/instance label column to pods view ([#95](https://github.com/steveyackey/devrig/issues/95)) ([272e2ff](https://github.com/steveyackey/devrig/commit/272e2ff235112cc606ea5b9023c49124426161ba))
+
 ## [0.40.0](https://github.com/steveyackey/devrig/compare/v0.39.1...v0.40.0) (2026-06-23)
 
 
