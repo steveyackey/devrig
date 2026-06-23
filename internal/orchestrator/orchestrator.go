@@ -463,7 +463,11 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		if o.cfg.Cluster.Logs != nil && o.cfg.Cluster.Logs.Enabled && o.cfg.Cluster.Logs.Collector {
 			// Use host.k3d.internal so pods can reach the host's OTEL collector.
 			// k3d automatically creates this DNS entry pointing to the Docker host gateway.
-			otlpEndpoint := fmt.Sprintf("host.k3d.internal:%d", o.cfg.Dashboard.OTel.HTTPPort.AsFixed())
+			otelCfg := o.cfg.Dashboard.OTel
+			if otelCfg == nil {
+				otelCfg = config.DefaultOTelConfig()
+			}
+			otlpEndpoint := fmt.Sprintf("host.k3d.internal:%d", otelCfg.HTTPPort.AsFixed())
 			manifestPath, err := cluster.WriteLogCollectorManifest(otlpEndpoint, o.cfg.Cluster.Logs, o.stateDir)
 			if err != nil {
 				return fmt.Errorf("cluster log collector: %w", err)
