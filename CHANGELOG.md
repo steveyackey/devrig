@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.39.0](https://github.com/steveyackey/devrig/compare/v0.38.4...v0.39.0) (2026-06-23)
+
+
+### Features
+
+* **oidc:** serve a host-aware discovery document ([#90](https://github.com/steveyackey/devrig/issues/90)) ([8641683](https://github.com/steveyackey/devrig/commit/8641683b1f97db6960ec7a6e7e410c19f3d85f62))
+
+
+### Bug Fixes
+
+* **cluster:** fail fast with guidance when the Docker host is on cgroup v1 ([2110995](https://github.com/steveyackey/devrig/commit/2110995b62c4bfb7fb67c5ed8129099730b3162c))
+* **cluster:** interpolate helm addon values and nest dotted keys ([#89](https://github.com/steveyackey/devrig/issues/89)) ([090afc4](https://github.com/steveyackey/devrig/commit/090afc41111dc8d7f71d47bc47130c9292a3a02b))
+
 ## [0.38.4](https://github.com/steveyackey/devrig/compare/v0.38.3...v0.38.4) (2026-06-19)
 
 
