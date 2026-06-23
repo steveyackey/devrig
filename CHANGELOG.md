@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.40.0](https://github.com/steveyackey/devrig/compare/v0.39.1...v0.40.0) (2026-06-23)
+
+
+### Features
+
+* **cluster:** display all pods and expose OTEL endpoints for in-cluster services ([#93](https://github.com/steveyackey/devrig/issues/93)) ([6073aab](https://github.com/steveyackey/devrig/commit/6073aab731d901bf7bf7810016e6568bb68cf2cb))
+
 ## [0.39.1](https://github.com/steveyackey/devrig/compare/v0.39.0...v0.39.1) (2026-06-23)
 
 
