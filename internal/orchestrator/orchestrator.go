@@ -154,6 +154,18 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 	printBanner(o.id.Slug, o.cfg, launchOrder)
 
 	// ================================================================
+	// Phase 0.4: Create cluster manager (if cluster config exists)
+	// ================================================================
+	// Create the cluster manager early so the dashboard can use it to query pods.
+	// The network field will be empty at this point, but that's OK - ListPods()
+	// doesn't need it. The manager will be recreated with the proper network in
+	// Phase 3.5 when we actually set up the cluster.
+	if o.cfg.Cluster != nil {
+		resolver := tools.ResolverFromConfig(o.cfg.Tools, true)
+		o.clusterMgr = cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), "")
+	}
+
+	// ================================================================
 	// Phase 0.5: Dashboard + OTel receiver
 	// ================================================================
 	allocated := make(map[uint16]bool)
