@@ -115,6 +115,15 @@ export interface ServiceInfo {
   url?: string;
 }
 
+export interface PodInfo {
+  name: string;
+  namespace: string;
+  phase: string;
+  ready: string;
+  restarts: number;
+  age: string;
+}
+
 export interface ClusterResponse {
   cluster_name: string;
   kubeconfig_path: string;
@@ -127,6 +136,7 @@ export interface ClusterResponse {
     { addon_type: string; namespace: string; installed_at: string }
   > | null;
   k3d_version?: string;
+  pods?: PodInfo[];
 }
 
 export interface ConfigResponse {

@@ -56,6 +56,7 @@ type Orchestrator struct {
 	stateDir       string
 	logBroadcast   *events.Broadcaster
 	eventBroadcast *events.Broadcaster
+	clusterMgr     *cluster.Manager
 }
 
 // New loads and validates a config file, computes the project identity, and
@@ -233,11 +234,12 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		}
 
 		dashSrv := dashboard.NewServer(dashboard.ServerConfig{
-			Port:       dashPort,
-			ConfigPath: o.cfgPath,
-			StateDir:   o.stateDir,
-			Store:      otelStore,
-			Events:     eventsCh,
+			Port:           dashPort,
+			ConfigPath:     o.cfgPath,
+			StateDir:       o.stateDir,
+			Store:          otelStore,
+			Events:         eventsCh,
+			ClusterManager: o.clusterMgr,
 		})
 		go func() {
 			if err := dashSrv.Start(ctx); err != nil && ctx.Err() == nil {
@@ -393,10 +395,10 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 			net = *networkName
 		}
 		resolver := tools.ResolverFromConfig(o.cfg.Tools, true)
-		clusterMgr := cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), net)
+		o.clusterMgr = cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), net)
 		sp := style.NewSpinner("Preparing cluster")
 		sp.Start()
-		cs, err := clusterMgr.Ensure(ctx)
+		cs, err := o.clusterMgr.Ensure(ctx)
 		if err != nil {
 			sp.Fail("Cluster setup failed")
 			return fmt.Errorf("cluster: %w", err)
@@ -447,7 +449,9 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 
 		// Inject Fluent Bit log collector if enabled.
 		if o.cfg.Cluster.Logs != nil && o.cfg.Cluster.Logs.Enabled && o.cfg.Cluster.Logs.Collector {
-			otlpEndpoint := fmt.Sprintf("localhost:%d", o.cfg.Dashboard.OTel.HTTPPort.AsFixed())
+			// Use host.k3d.internal so pods can reach the host's OTEL collector.
+			// k3d automatically creates this DNS entry pointing to the Docker host gateway.
+			otlpEndpoint := fmt.Sprintf("host.k3d.internal:%d", o.cfg.Dashboard.OTel.HTTPPort.AsFixed())
 			manifestPath, err := cluster.WriteLogCollectorManifest(otlpEndpoint, o.cfg.Cluster.Logs, o.stateDir)
 			if err != nil {
 				return fmt.Errorf("cluster log collector: %w", err)
@@ -997,10 +1001,16 @@ func buildTemplateVars(
 	if p, ok := resolvedPorts["otel-grpc"]; ok {
 		cp := p
 		tv.OTelGRPCPort = &cp
+		// For in-cluster services to reach the host OTEL collector
+		endpoint := fmt.Sprintf("host.k3d.internal:%d", cp)
+		tv.OTelEndpointGRPC = &endpoint
 	}
 	if p, ok := resolvedPorts["otel-http"]; ok {
 		cp := p
 		tv.OTelHTTPPort = &cp
+		// For in-cluster services to reach the host OTEL collector
+		endpoint := fmt.Sprintf("host.k3d.internal:%d", cp)
+		tv.OTelEndpointHTTP = &endpoint
 	}
 
 	if oidcPort != 0 {

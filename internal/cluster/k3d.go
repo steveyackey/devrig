@@ -678,6 +678,100 @@ func KubectlPortForward(ctx context.Context, r *tools.Resolver, kubeconfig, name
 	}()
 }
 
+// PodInfo represents a Kubernetes pod in the cluster.
+type PodInfo struct {
+	Name      string `json:"name"`
+	Namespace string `json:"namespace"`
+	Phase     string `json:"phase"`
+	Ready     string `json:"ready"`
+	Restarts  int    `json:"restarts"`
+	Age       string `json:"age"`
+}
+
+// ListPods returns all pods across all namespaces in the cluster.
+func (m *Manager) ListPods(ctx context.Context, kubeconfig string) ([]PodInfo, error) {
+	bin, err := m.tools.Path(ctx, tools.Kubectl)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd := exec.CommandContext(ctx, bin, "get", "pods", "--all-namespaces", "-o", "json")
+	cmd.Env = append(os.Environ(), "KUBECONFIG="+kubeconfig)
+
+	out, stderr, err := verbose.RunSplit(cmd)
+	if err != nil {
+		return nil, fmt.Errorf("kubectl get pods: %w\n%s", err, stderr)
+	}
+
+	return parsePods(out)
+}
+
+// parsePods extracts pod info from `kubectl get pods -o json` output.
+func parsePods(jsonOutput string) ([]PodInfo, error) {
+	var result struct {
+		Items []struct {
+			Metadata struct {
+				Name              string    `json:"name"`
+				Namespace         string    `json:"namespace"`
+				CreationTimestamp time.Time `json:"creationTimestamp"`
+			} `json:"metadata"`
+			Status struct {
+				Phase             string `json:"phase"`
+				ContainerStatuses []struct {
+					Ready        bool `json:"ready"`
+					RestartCount int  `json:"restartCount"`
+				} `json:"containerStatuses"`
+			} `json:"status"`
+		} `json:"items"`
+	}
+
+	if err := json.Unmarshal([]byte(jsonOutput), &result); err != nil {
+		return nil, fmt.Errorf("parse pods JSON: %w", err)
+	}
+
+	pods := make([]PodInfo, 0, len(result.Items))
+	for _, item := range result.Items {
+		readyCount := 0
+		totalCount := len(item.Status.ContainerStatuses)
+		restarts := 0
+
+		for _, cs := range item.Status.ContainerStatuses {
+			if cs.Ready {
+				readyCount++
+			}
+			restarts += cs.RestartCount
+		}
+
+		readyStr := fmt.Sprintf("%d/%d", readyCount, totalCount)
+		age := formatAge(time.Since(item.Metadata.CreationTimestamp))
+
+		pods = append(pods, PodInfo{
+			Name:      item.Metadata.Name,
+			Namespace: item.Metadata.Namespace,
+			Phase:     item.Status.Phase,
+			Ready:     readyStr,
+			Restarts:  restarts,
+			Age:       age,
+		})
+	}
+
+	return pods, nil
+}
+
+// formatAge formats a duration as a human-readable age string (e.g. "5m", "2h", "3d").
+func formatAge(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	}
+	return fmt.Sprintf("%dd", int(d.Hours()/24))
+}
+
 // pollWithBackoff retries fn until it succeeds or ctx expires, using exponential
 // backoff starting at minDelay, capped at maxDelay, for at most timeout.
 func pollWithBackoff(ctx context.Context, timeout, minDelay, maxDelay time.Duration, fn func() error) error {

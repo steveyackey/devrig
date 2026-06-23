@@ -24,6 +24,9 @@ type TemplateVars struct {
 	DashboardPort *uint16
 	OTelGRPCPort  *uint16
 	OTelHTTPPort  *uint16
+	// otel.* (for in-cluster services to reach the host OTEL collector)
+	OTelEndpointHTTP *string // host.k3d.internal:4318
+	OTelEndpointGRPC *string // host.k3d.internal:4317
 	// oidc.*
 	OIDCPort   *uint16
 	OIDCIssuer *string
@@ -205,6 +208,19 @@ func resolveVar(key string, vars *TemplateVars) (string, bool) {
 			case "http_port":
 				if vars.OTelHTTPPort != nil {
 					return fmt.Sprint(*vars.OTelHTTPPort), true
+				}
+			}
+		}
+	case "otel":
+		if len(parts) == 2 {
+			switch parts[1] {
+			case "endpoint_http":
+				if vars.OTelEndpointHTTP != nil {
+					return *vars.OTelEndpointHTTP, true
+				}
+			case "endpoint_grpc":
+				if vars.OTelEndpointGRPC != nil {
+					return *vars.OTelEndpointGRPC, true
 				}
 			}
 		}

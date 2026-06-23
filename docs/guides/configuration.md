@@ -1135,6 +1135,8 @@ Helm addon `values` also support templates for cluster image tags (see
 | `dashboard.port`                     | `4000`        | All                        |
 | `dashboard.otel.grpc_port`           | `4317`        | All                        |
 | `dashboard.otel.http_port`           | `4318`        | All                        |
+| `otel.endpoint_http`                 | `host.k3d.internal:4318` | All (for in-cluster use) |
+| `otel.endpoint_grpc`                 | `host.k3d.internal:4317` | All (for in-cluster use) |
 | `oidc.port`                          | `4565`        | All (when `[oidc]` defined) |
 | `oidc.issuer`                        | `http://localhost:4565` | All (when `[oidc]` defined) |
 
@@ -1149,6 +1151,16 @@ image: k3d-{{ cluster.name }}-reg:5000/api:latest
 The `cluster.image.<name>.tag` variables are populated after cluster images
 are built (Phase 3.5). They are available in addon helm values and in
 service env vars.
+
+The `otel.endpoint_http` and `otel.endpoint_grpc` variables resolve to
+`host.k3d.internal:<port>`, allowing in-cluster services to send telemetry
+to the host OTLP collector. Use these in Kubernetes manifests:
+
+```yaml
+env:
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: "http://{{ otel.endpoint_http }}"
+```
 
 Templates are resolved after all ports are assigned (Phase 4 of startup).
 Unresolved references produce an error with a "did you mean?" suggestion

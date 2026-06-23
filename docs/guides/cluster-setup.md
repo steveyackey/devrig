@@ -161,12 +161,44 @@ container name.
 | From       | To         | How                                           | Example                                  |
 |------------|------------|-----------------------------------------------|------------------------------------------|
 | Pod        | Docker     | Docker container name on shared network       | `postgres://devrig:devrig@devrig-myapp-a1b2c3d4-postgres:5432` |
+| Pod        | Host       | `host.k3d.internal` DNS entry                 | `http://host.k3d.internal:4318`          |
 | Docker     | Pod        | Via cluster load balancer on Docker network   | `http://k3d-myapp-dev-serverlb:80`       |
 | Host       | Pod        | Via port mappings in `cluster.ports`          | `http://localhost:8080`                  |
 | Host       | Docker     | Via docker port mappings                      | `postgres://localhost:5432`              |
 
 Pods should use the Docker container name (not `localhost`) when connecting
 to docker services, since `localhost` inside a pod refers to the pod itself.
+
+### Accessing the host OTEL collector from pods
+
+devrig runs an in-process OTLP collector on the host machine. In-cluster
+services can send telemetry to it using the `host.k3d.internal` DNS entry
+that k3d automatically provides:
+
+```yaml
+# Example: Configure OpenTelemetry SDK in a pod
+env:
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: "http://host.k3d.internal:4318"  # HTTP
+# Or for gRPC:
+# value: "http://host.k3d.internal:4317"
+```
+
+You can also use template variables in your manifests:
+
+```yaml
+env:
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: "http://{{ otel.endpoint_http }}"
+```
+
+The `{{ otel.endpoint_http }}` and `{{ otel.endpoint_grpc }}` variables
+automatically resolve to `host.k3d.internal:<port>` where `<port>` is the
+OTLP HTTP (4318) or gRPC (4317) port from your `[dashboard.otel]` config.
+
+**Note**: The built-in Fluent Bit log collector (when `[cluster.logs]`
+collector is enabled) automatically uses this mechanism to forward container
+logs to the devrig dashboard.
 
 ## CLI commands
 
