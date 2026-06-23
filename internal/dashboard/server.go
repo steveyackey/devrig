@@ -11,17 +11,19 @@ import (
 	"sync"
 	"time"
 
+	"github.com/steveyackey/devrig/internal/cluster"
 	"github.com/steveyackey/devrig/internal/otel"
 	"github.com/steveyackey/devrig/internal/state"
 )
 
 // ServerConfig configures the dashboard server.
 type ServerConfig struct {
-	Port      uint16
-	ConfigPath string
-	StateDir   string
-	Store     *otel.Store
-	Events    <-chan otel.WSEvent
+	Port           uint16
+	ConfigPath     string
+	StateDir       string
+	Store          *otel.Store
+	Events         <-chan otel.WSEvent
+	ClusterManager *cluster.Manager
 }
 
 // Server is the dashboard HTTP + WS server.

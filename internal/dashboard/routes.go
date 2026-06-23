@@ -214,7 +214,34 @@ func (s *Server) handleCluster(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, nil)
 		return
 	}
-	writeJSON(w, st.Cluster)
+
+	// Build response with cluster state
+	resp := map[string]any{
+		"cluster_name":      st.Cluster.ClusterName,
+		"kubeconfig_path":   st.Cluster.KubeconfigPath,
+		"deployed_services": st.Cluster.DeployedServices,
+		"installed_addons":  st.Cluster.InstalledAddons,
+		"k3d_version":       st.Cluster.K3dVersion,
+	}
+
+	if st.Cluster.RegistryName != nil {
+		resp["registry_name"] = *st.Cluster.RegistryName
+	}
+	if st.Cluster.RegistryPort != nil {
+		resp["registry_port"] = *st.Cluster.RegistryPort
+	}
+
+	// Fetch live pod information
+	if s.cfg.ClusterManager != nil {
+		ctx := r.Context()
+		pods, err := s.cfg.ClusterManager.ListPods(ctx, st.Cluster.KubeconfigPath)
+		if err == nil {
+			resp["pods"] = pods
+		}
+		// Silently ignore errors — pods field will be absent if kubectl fails
+	}
+
+	writeJSON(w, resp)
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {

@@ -14,6 +14,7 @@ const services = computed(() =>
 const addons = computed(() =>
   Object.entries(cluster.value?.installed_addons ?? {}).map(([name, a]) => ({ name, ...a })),
 );
+const pods = computed(() => cluster.value?.pods ?? []);
 
 onMounted(async () => {
   try {
@@ -134,6 +135,49 @@ onMounted(async () => {
                 </td>
                 <td class="px-4 py-2.5 text-text-muted">{{ addon.addon_type }}</td>
                 <td class="px-4 py-2.5 font-mono text-text-muted">{{ addon.namespace }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pods -->
+        <div v-if="pods.length > 0" class="border-2 border-border bg-surface-1">
+          <div class="px-6 py-3 border-b border-border">
+            <h3 class="font-display text-[18px] text-accent tracking-[0.1em] uppercase">Pods</h3>
+          </div>
+          <table class="w-full text-xs">
+            <thead>
+              <tr
+                class="border-b border-border text-[9px] font-label text-text-muted uppercase tracking-[0.1em]"
+              >
+                <th class="px-6 py-2 text-left font-normal">Name</th>
+                <th class="px-4 py-2 text-left font-normal">Namespace</th>
+                <th class="px-4 py-2 text-left font-normal">Status</th>
+                <th class="px-4 py-2 text-left font-normal">Ready</th>
+                <th class="px-4 py-2 text-left font-normal">Restarts</th>
+                <th class="px-4 py-2 text-left font-normal">Age</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="pod in pods" :key="`${pod.namespace}/${pod.name}`" class="border-b border-border">
+                <td class="px-6 py-2.5 font-mono text-sm text-text-primary">
+                  {{ pod.name }}
+                </td>
+                <td class="px-4 py-2.5 font-mono text-text-muted">{{ pod.namespace }}</td>
+                <td class="px-4 py-2.5 text-text-muted">
+                  <span
+                    :class="{
+                      'text-success': pod.phase === 'Running',
+                      'text-warning': pod.phase === 'Pending',
+                      'text-error': pod.phase === 'Failed' || pod.phase === 'Unknown',
+                    }"
+                  >
+                    {{ pod.phase }}
+                  </span>
+                </td>
+                <td class="px-4 py-2.5 font-mono text-text-muted">{{ pod.ready }}</td>
+                <td class="px-4 py-2.5 text-text-muted">{{ pod.restarts }}</td>
+                <td class="px-4 py-2.5 text-text-muted">{{ pod.age }}</td>
               </tr>
             </tbody>
           </table>
