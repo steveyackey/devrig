@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.39.1](https://github.com/steveyackey/devrig/compare/v0.39.0...v0.39.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **web:** match the cluster API shape on the /cluster page ([#91](https://github.com/steveyackey/devrig/issues/91)) ([318fbd1](https://github.com/steveyackey/devrig/commit/318fbd1f27c89bacf945c5674537b27f25c4fccc))
+
 ## [0.39.0](https://github.com/steveyackey/devrig/compare/v0.38.4...v0.39.0) (2026-06-23)
 
 
