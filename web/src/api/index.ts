@@ -122,6 +122,7 @@ export interface PodInfo {
   ready: string;
   restarts: number;
   age: string;
+  labels?: Record<string, string>;
 }
 
 export interface ClusterResponse {

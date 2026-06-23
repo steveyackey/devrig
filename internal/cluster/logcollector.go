@@ -124,7 +124,7 @@ spec:
         effect: NoSchedule
       containers:
       - name: fluent-bit
-        image: fluent/fluent-bit:3
+        image: fluent/fluent-bit:3.2
         resources:
           limits:
             memory: 128Mi

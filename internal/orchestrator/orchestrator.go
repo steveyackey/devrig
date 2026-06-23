@@ -154,6 +154,18 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 	printBanner(o.id.Slug, o.cfg, launchOrder)
 
 	// ================================================================
+	// Phase 0.4: Create cluster manager (if cluster config exists)
+	// ================================================================
+	// Create the cluster manager early so the dashboard can use it to query pods.
+	// The network field will be empty at this point, but that's OK - ListPods()
+	// doesn't need it. The manager will be recreated with the proper network in
+	// Phase 3.5 when we actually set up the cluster.
+	if o.cfg.Cluster != nil {
+		resolver := tools.ResolverFromConfig(o.cfg.Tools, true)
+		o.clusterMgr = cluster.NewManager(o.cfg.Cluster, resolver, o.id.Slug, o.stateDir, filepath.Dir(o.cfgPath), "")
+	}
+
+	// ================================================================
 	// Phase 0.5: Dashboard + OTel receiver
 	// ================================================================
 	allocated := make(map[uint16]bool)
@@ -451,7 +463,11 @@ func (o *Orchestrator) Start(filter []string, devMode bool) error {
 		if o.cfg.Cluster.Logs != nil && o.cfg.Cluster.Logs.Enabled && o.cfg.Cluster.Logs.Collector {
 			// Use host.k3d.internal so pods can reach the host's OTEL collector.
 			// k3d automatically creates this DNS entry pointing to the Docker host gateway.
-			otlpEndpoint := fmt.Sprintf("host.k3d.internal:%d", o.cfg.Dashboard.OTel.HTTPPort.AsFixed())
+			otelCfg := o.cfg.Dashboard.OTel
+			if otelCfg == nil {
+				otelCfg = config.DefaultOTelConfig()
+			}
+			otlpEndpoint := fmt.Sprintf("host.k3d.internal:%d", otelCfg.HTTPPort.AsFixed())
 			manifestPath, err := cluster.WriteLogCollectorManifest(otlpEndpoint, o.cfg.Cluster.Logs, o.stateDir)
 			if err != nil {
 				return fmt.Errorf("cluster log collector: %w", err)
