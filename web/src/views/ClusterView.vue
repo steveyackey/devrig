@@ -1,10 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { ref, computed, onMounted } from "vue";
 import { fetchCluster, type ClusterResponse } from "@/api";
 
 const cluster = ref<ClusterResponse | null>(null);
 const loading = ref(true);
 const error = ref<string | null>(null);
+
+// The API returns deployed_services / installed_addons as maps keyed by name
+// (and they can be null when empty). Normalize to arrays for the table.
+const services = computed(() =>
+  Object.entries(cluster.value?.deployed_services ?? {}).map(([name, s]) => ({ name, ...s })),
+);
+const addons = computed(() =>
+  Object.entries(cluster.value?.installed_addons ?? {}).map(([name, a]) => ({ name, ...a })),
+);
 
 onMounted(async () => {
   try {
@@ -59,22 +68,19 @@ onMounted(async () => {
               </div>
               <div class="font-mono text-text-muted truncate">{{ cluster.kubeconfig_path }}</div>
             </div>
-            <div v-if="cluster.registry">
+            <div v-if="cluster.registry_name">
               <div class="font-label text-[9px] text-text-muted uppercase tracking-[0.1em] mb-1">
                 Registry
               </div>
               <div class="font-mono text-text-primary">
-                {{ cluster.registry.name }}:{{ cluster.registry.port }}
+                {{ cluster.registry_name }}:{{ cluster.registry_port }}
               </div>
             </div>
           </div>
         </div>
 
         <!-- Deployed services -->
-        <div
-          v-if="cluster.deployed_services.length > 0"
-          class="border-2 border-border bg-surface-1"
-        >
+        <div v-if="services.length > 0" class="border-2 border-border bg-surface-1">
           <div class="px-6 py-3 border-b border-border">
             <h3 class="font-display text-[18px] text-accent tracking-[0.1em] uppercase">
               Deployed Services
@@ -91,11 +97,7 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr
-                v-for="svc in cluster.deployed_services"
-                :key="svc.name"
-                class="border-b border-border"
-              >
+              <tr v-for="svc in services" :key="svc.name" class="border-b border-border">
                 <td
                   class="px-6 py-2.5 font-display text-lg text-text-primary tracking-[0.06em] uppercase"
                 >
@@ -109,7 +111,7 @@ onMounted(async () => {
         </div>
 
         <!-- Addons -->
-        <div v-if="cluster.addons.length > 0" class="border-2 border-border bg-surface-1">
+        <div v-if="addons.length > 0" class="border-2 border-border bg-surface-1">
           <div class="px-6 py-3 border-b border-border">
             <h3 class="font-display text-[18px] text-accent tracking-[0.1em] uppercase">Addons</h3>
           </div>
@@ -124,7 +126,7 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="addon in cluster.addons" :key="addon.name" class="border-b border-border">
+              <tr v-for="addon in addons" :key="addon.name" class="border-b border-border">
                 <td
                   class="px-6 py-2.5 font-display text-lg text-text-primary tracking-[0.06em] uppercase"
                 >
