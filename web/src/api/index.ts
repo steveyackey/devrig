@@ -122,7 +122,10 @@ export interface ClusterResponse {
   registry_port?: number;
   // Maps keyed by name (matches the Go ClusterState shape). May be null when empty.
   deployed_services: Record<string, { image_tag: string; last_deployed: string }> | null;
-  installed_addons: Record<string, { addon_type: string; namespace: string; installed_at: string }> | null;
+  installed_addons: Record<
+    string,
+    { addon_type: string; namespace: string; installed_at: string }
+  > | null;
   k3d_version?: string;
 }
 
