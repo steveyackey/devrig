@@ -159,7 +159,11 @@ onMounted(async () => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="pod in pods" :key="`${pod.namespace}/${pod.name}`" class="border-b border-border">
+              <tr
+                v-for="pod in pods"
+                :key="`${pod.namespace}/${pod.name}`"
+                class="border-b border-border"
+              >
                 <td class="px-6 py-2.5 font-mono text-sm text-text-primary">
                   {{ pod.name }}
                 </td>
