@@ -680,12 +680,13 @@ func KubectlPortForward(ctx context.Context, r *tools.Resolver, kubeconfig, name
 
 // PodInfo represents a Kubernetes pod in the cluster.
 type PodInfo struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Phase     string `json:"phase"`
-	Ready     string `json:"ready"`
-	Restarts  int    `json:"restarts"`
-	Age       string `json:"age"`
+	Name      string            `json:"name"`
+	Namespace string            `json:"namespace"`
+	Phase     string            `json:"phase"`
+	Ready     string            `json:"ready"`
+	Restarts  int               `json:"restarts"`
+	Age       string            `json:"age"`
+	Labels    map[string]string `json:"labels,omitempty"`
 }
 
 // ListPods returns all pods across all namespaces in the cluster.
@@ -711,9 +712,10 @@ func parsePods(jsonOutput string) ([]PodInfo, error) {
 	var result struct {
 		Items []struct {
 			Metadata struct {
-				Name              string    `json:"name"`
-				Namespace         string    `json:"namespace"`
-				CreationTimestamp time.Time `json:"creationTimestamp"`
+				Name              string            `json:"name"`
+				Namespace         string            `json:"namespace"`
+				CreationTimestamp time.Time         `json:"creationTimestamp"`
+				Labels            map[string]string `json:"labels"`
 			} `json:"metadata"`
 			Status struct {
 				Phase             string `json:"phase"`
@@ -752,6 +754,7 @@ func parsePods(jsonOutput string) ([]PodInfo, error) {
 			Ready:     readyStr,
 			Restarts:  restarts,
 			Age:       age,
+			Labels:    item.Metadata.Labels,
 		})
 	}
 
